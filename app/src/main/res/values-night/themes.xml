@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Thème dark — aligné sur Theme.JDRCompagnon, Compose Material 3 gère la palette via JdrCompagnonTheme. -->
+    <style name="Theme.JDRCompagnon" parent="android:Theme.DeviceDefault.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>
