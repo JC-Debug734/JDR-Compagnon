@@ -4,7 +4,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-// AUTO-VERSION: 1.0.7
+// AUTO-VERSION: 1.0.8
 // ── Auto-incrémentation de version à chaque compilation ──────────────────
 // Format X.Y.Z : Z va de 0 à 9 puis repasse à 0 en incrémentant Y ; Y suit
 // la même règle sur X ; X n'a pas de limite.

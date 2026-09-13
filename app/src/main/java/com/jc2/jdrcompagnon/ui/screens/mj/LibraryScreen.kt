@@ -1461,7 +1461,7 @@ private fun LibraryBookshelf(
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(contentPaddingH),
+            contentPadding = PaddingValues(vertical = contentPaddingH),
             verticalArrangement = Arrangement.spacedBy(28.dp),
         ) {
             itemsIndexed(shelves, key = { index, _ -> "shelf_$index" }) { shelfIndex, shelfBooks ->
@@ -1469,6 +1469,8 @@ private fun LibraryBookshelf(
                     // Superposition explicite dans un Box : la planche est dessinée en
                     // premier, la rangée de livres en second, donc les livres restent
                     // au-dessus de l'étagère (et non l'inverse) sur leur zone de recouvrement.
+                    // La planche n'a pas de padding horizontal (elle va bord à bord), alors
+                    // que la rangée de livres garde son retrait habituel via son propre padding.
                     val rowHeight = 260.dp
                     val shelfHeight = 32.dp
                     val overlap = 10.dp
@@ -1489,6 +1491,7 @@ private fun LibraryBookshelf(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .padding(horizontal = contentPaddingH)
                                 .height(rowHeight)
                                 .align(Alignment.TopStart)
                                 .offset(y = (-5).dp),
