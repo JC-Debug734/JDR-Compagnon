@@ -23,10 +23,10 @@ sealed interface UpdateUiState {
 
 /**
  * Source unique de vérité pour les mises à jour : lit version.txt (GitHub),
- * compare à la version installée, et ouvre la page Drive dans le navigateur
+ * compare à la version installée, et ouvre le lien de téléchargement dans le navigateur
  * pour un téléchargement + installation entièrement manuels par
  * l'utilisateur. L'app ne télécharge jamais l'APK elle-même — ça évite
- * tout risque de blocage lié au téléchargement d'un gros fichier Drive.
+ * tout risque de blocage lié au téléchargement d'un gros fichier.
  */
 object UpdateManager {
     private const val PERIODIC_WORK_NAME = "update_check_worker"
@@ -62,7 +62,7 @@ object UpdateManager {
 
     /** Ouvre la page Drive dans le navigateur pour un téléchargement manuel. */
     fun openDownloadPage(context: Context, release: ReleaseInfo) {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(release.driveViewUrl))
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(release.downloadUrl))
         context.startActivity(intent)
         _state.value = UpdateUiState.Idle
     }

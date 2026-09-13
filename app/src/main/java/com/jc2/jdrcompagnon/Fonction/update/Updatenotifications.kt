@@ -15,7 +15,7 @@ import com.jc2.jdrcompagnon.R
 
 /**
  * Notification affichée quand le worker en arrière-plan détecte une nouvelle
- * version. Tapoter la notification ouvre la page Drive dans le navigateur
+ * version. Tapoter la notification ouvre le lien de téléchargement dans le navigateur
  * pour un téléchargement manuel — l'app ne télécharge jamais l'APK elle-même.
  */
 object UpdateNotifications {
@@ -36,7 +36,7 @@ object UpdateNotifications {
     fun showUpdateAvailableNotification(context: Context, release: ReleaseInfo) {
         ensureChannel(context)
 
-        val openIntent = Intent(Intent.ACTION_VIEW, Uri.parse(release.driveViewUrl))
+        val openIntent = Intent(Intent.ACTION_VIEW, Uri.parse(release.downloadUrl))
         val pendingIntent = PendingIntent.getActivity(
             context, 0, openIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,

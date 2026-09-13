@@ -5,8 +5,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.URL
 
-/** [driveViewUrl] est la page Drive à ouvrir dans le navigateur pour un téléchargement manuel. */
-data class ReleaseInfo(val versionName: String, val driveViewUrl: String)
+/** [downloadUrl] est l'URL à ouvrir dans le navigateur pour télécharger l'APK. */
+data class ReleaseInfo(val versionName: String, val downloadUrl: String)
 
 object UpdateChecker {
     // Le numéro de version vit directement dans app/build.gradle.kts (ligne
@@ -18,12 +18,12 @@ object UpdateChecker {
 
     private val VERSION_REGEX = Regex("""AUTO-VERSION: (\d+\.\d+\.\d+)""")
 
-    // Lien fixe vers l'APK sur Google Drive (mets à jour le fichier via
-    // "Gérer les versions" sur Drive, ou en changeant cet ID si tu changes
-    // de fichier — ce lien s'ouvre dans le navigateur pour un téléchargement
-    // manuel classique, pas de récupération automatique du binaire.
-    private const val DRIVE_FILE_ID = "1cGy1pgsXCYWLO9A8kHlig2EH7DB93y0c"
-    private const val DRIVE_VIEW_URL = "https://drive.google.com/file/d/$DRIVE_FILE_ID/view?usp=sharing"
+    // L'APK signé est committé directement dans le repo (app/release/app-release.apk),
+    // remplacé à chaque nouvelle build — pas de service externe (Drive, etc.)
+    // à gérer en plus. raw.githubusercontent.com sert le fichier brut sans
+    // page d'avertissement intermédiaire, contrairement à Drive.
+    private const val APK_URL =
+        "https://raw.githubusercontent.com/JC-Debug734/JDR-Compagnon/main/app/release/app-release.apk"
 
     private const val TAG = "UpdateChecker"
 
@@ -37,7 +37,7 @@ object UpdateChecker {
                 }
 
             Log.d(TAG, "Version distante (build.gradle.kts) : $versionName")
-            ReleaseInfo(versionName, DRIVE_VIEW_URL)
+            ReleaseInfo(versionName, APK_URL)
         } catch (e: Exception) {
             Log.e(TAG, "Erreur lors de la lecture de build.gradle.kts", e)
             null

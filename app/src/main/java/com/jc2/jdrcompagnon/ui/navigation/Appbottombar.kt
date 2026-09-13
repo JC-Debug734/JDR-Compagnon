@@ -45,10 +45,9 @@ import kotlinx.coroutines.launch
  *
  * - Connexion : outils LAN (héberger si MJ, rejoindre si Joueur)
  * - Bibliothèque : Route.Library
- * - Home : tap = retour à l'écran d'accueil du rôle courant (MJ/Joueur) ;
- *   appui long de 3 secondes = retour à l'écran de choix des rôles — c'est
- *   le SEUL moyen d'y retourner (le retour arrière système est bloqué
- *   côté NavGraph pour ce trajet).
+ * - Home : tap = retour à l'écran d'accueil du rôle courant (MJ/Joueur).
+ *   Le retour au choix de rôle se fait désormais via "Changer de rôle"
+ *   dans le menu latéral (AppDrawer), plus par appui long ici.
  * - Dé : lance directement les dés au tap, appui long = réglages avancés.
  */
 // Palette de la barre du bas — source unique de vérité : ForcedDarkPalette
@@ -61,7 +60,6 @@ fun AppBottomBar(
     onNavigateConnection: () -> Unit,
     onNavigateLibrary: () -> Unit,
     onHomeTap: () -> Unit,
-    onHomeLongPress: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val diceState by GameState.diceState.collectAsState()
@@ -121,38 +119,11 @@ fun AppBottomBar(
     ) {
         NavigationBarItem(
             selected = false,
-            onClick = {}, // Le tap/appui long est géré manuellement ci-dessous
+            onClick = onHomeTap,
             icon = {
                 Icon(
                     Icons.Default.Home,
-                    contentDescription = "Accueil (appui long : choix du rôle)",
-                    modifier = Modifier
-                        // Tap = accueil du rôle courant ; appui maintenu 1,5s = choix des rôles.
-                        // Détection manuelle (pas de long-press système par défaut,
-                        // qui ne dure qu'environ 500ms) via une coroutine minutée
-                        // qu'on annule si le doigt est relâché avant la fin.
-                        .pointerInput(Unit) {
-                            detectTapGestures(
-                                onPress = {
-                                    var longPressTriggered = false
-                                    val longPressJob = coroutineScope.launch {
-                                        delay(1500)
-                                        longPressTriggered = true
-                                        try {
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        } catch (_: Exception) {
-                                            // Ignore les erreurs haptiques
-                                        }
-                                        onHomeLongPress()
-                                    }
-                                    val released = tryAwaitRelease()
-                                    longPressJob.cancel()
-                                    if (released && !longPressTriggered) {
-                                        onHomeTap()
-                                    }
-                                }
-                            )
-                        }
+                    contentDescription = "Accueil",
                 )
             },
             label = { Text("Accueil") },

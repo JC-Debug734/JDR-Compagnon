@@ -35,9 +35,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.WorldState
+import com.jc2.jdrcompagnon.ui.components.AppDrawer
 import com.jc2.jdrcompagnon.ui.screens.mj.scenario.ScenarioReaderContent
 import com.jc2.jdrcompagnon.network.NetworkSessionManager
 import com.jc2.jdrcompagnon.network.SessionRole
+import com.jc2.jdrcompagnon.ui.theme.ForcedDarkPalette
 import kotlinx.coroutines.launch
 
 data class MjTool(
@@ -172,203 +174,167 @@ fun MjHomeScreen(
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            ModalDrawerSheet {
-                Column(
+            AppDrawer(subtitle = currentWorld?.name?.let { "Univers : $it" }) {
+                // --- CAMPAGNES (filtre les scénarios disponibles ci-dessous) ---
+                Row(
                     modifier = Modifier
-                        .fillMaxHeight()
-                        .verticalScroll(rememberScrollState())
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "MENU MJ",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Black,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    currentWorld?.name?.let { worldName ->
-                        Text(
-                            text = "Univers : $worldName",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    // --- CAMPAGNES (filtre les scénarios disponibles ci-dessous) ---
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(modifier = Modifier.weight(1f)) {
-                            Row(
-                                modifier = Modifier
-                                    .clickable { showCampaignPickerMenu = true },
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(Icons.Default.Checklist, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "CAMPAGNE",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.Black,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                            DropdownMenu(
-                                expanded = showCampaignPickerMenu,
-                                onDismissRequest = { showCampaignPickerMenu = false }
-                            ) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        Row(
+                            modifier = Modifier
+                                .clickable { showCampaignPickerMenu = true },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Checklist, contentDescription = null, tint = ForcedDarkPalette.AccentGold, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "CAMPAGNE",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Black,
+                                color = ForcedDarkPalette.AccentGold
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showCampaignPickerMenu,
+                            onDismissRequest = { showCampaignPickerMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Toutes (aucun filtre)") },
+                                onClick = {
+                                    showCampaignPickerMenu = false
+                                    selectedCampaignId = null
+                                },
+                                leadingIcon = if (selectedCampaignId == null) {
+                                    { Icon(Icons.Default.Check, contentDescription = null) }
+                                } else null
+                            )
+                            mjCampaigns.forEach { campaign ->
                                 DropdownMenuItem(
-                                    text = { Text("Toutes (aucun filtre)") },
+                                    text = { Text(campaign.title) },
                                     onClick = {
                                         showCampaignPickerMenu = false
-                                        selectedCampaignId = null
+                                        selectedCampaignId = campaign.id
                                     },
-                                    leadingIcon = if (selectedCampaignId == null) {
+                                    leadingIcon = if (selectedCampaignId == campaign.id) {
                                         { Icon(Icons.Default.Check, contentDescription = null) }
                                     } else null
                                 )
-                                mjCampaigns.forEach { campaign ->
-                                    DropdownMenuItem(
-                                        text = { Text(campaign.title) },
-                                        onClick = {
-                                            showCampaignPickerMenu = false
-                                            selectedCampaignId = campaign.id
-                                        },
-                                        leadingIcon = if (selectedCampaignId == campaign.id) {
-                                            { Icon(Icons.Default.Check, contentDescription = null) }
-                                        } else null
-                                    )
-                                }
                             }
                         }
-                        IconButton(onClick = { onOpenCampaigns() }) {
-                            Icon(Icons.Default.Add, contentDescription = "Gérer les campagnes")
-                        }
                     }
-                    Text(
-                        text = selectedCampaign?.title ?: "Toutes les campagnes",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    IconButton(onClick = { onOpenCampaigns() }) {
+                        Icon(Icons.Default.Add, contentDescription = "Gérer les campagnes")
+                    }
+                }
+                Text(
+                    text = selectedCampaign?.title ?: "Toutes les campagnes",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ForcedDarkPalette.Content
+                )
 
-                    // --- SCÉNARIOS ---
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(modifier = Modifier.weight(1f)) {
-                            Row(
-                                modifier = Modifier
-                                    .clickable(enabled = visibleScenarios.isNotEmpty()) { showScenarioPickerMenu = true },
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(Icons.Default.Description, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "SCÉNARIOS",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.Black,
-                                    color = MaterialTheme.colorScheme.primary
+                // --- SCÉNARIOS ---
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        Row(
+                            modifier = Modifier
+                                .clickable(enabled = visibleScenarios.isNotEmpty()) { showScenarioPickerMenu = true },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Description, contentDescription = null, tint = ForcedDarkPalette.AccentGold, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "SCÉNARIOS",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Black,
+                                color = ForcedDarkPalette.AccentGold
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showScenarioPickerMenu,
+                            onDismissRequest = { showScenarioPickerMenu = false }
+                        ) {
+                            visibleScenarios.forEach { scenario ->
+                                DropdownMenuItem(
+                                    text = { Text(scenario.title) },
+                                    onClick = {
+                                        showScenarioPickerMenu = false
+                                        selectedScenarioId = scenario.id
+                                        GameState.setLastScenarioId(scenario.id)
+                                        coroutineScope.launch { drawerState.close() }
+                                    },
+                                    leadingIcon = if (selectedScenarioId == scenario.id) {
+                                        { Icon(Icons.Default.Check, contentDescription = null) }
+                                    } else null
                                 )
                             }
-                            DropdownMenu(
-                                expanded = showScenarioPickerMenu,
-                                onDismissRequest = { showScenarioPickerMenu = false }
-                            ) {
-                                visibleScenarios.forEach { scenario ->
-                                    DropdownMenuItem(
-                                        text = { Text(scenario.title) },
-                                        onClick = {
-                                            showScenarioPickerMenu = false
-                                            selectedScenarioId = scenario.id
-                                            GameState.setLastScenarioId(scenario.id)
-                                            coroutineScope.launch { drawerState.close() }
-                                        },
-                                        leadingIcon = if (selectedScenarioId == scenario.id) {
-                                            { Icon(Icons.Default.Check, contentDescription = null) }
-                                        } else null
-                                    )
-                                }
-                            }
-                        }
-                        IconButton(onClick = { showScenarioFilesPanel = true }) {
-                            Icon(Icons.Default.Folder, contentDescription = "Explorer les fichiers .md sur le téléphone")
-                        }
-                        IconButton(onClick = { onOpenScenarioEditor(null) }) {
-                            Icon(Icons.Default.Add, contentDescription = "Nouveau scénario")
                         }
                     }
-                    if (visibleScenarios.isEmpty()) {
-                        Text(
-                            text = if (selectedCampaign != null) "Aucun scénario dans cette campagne" else "Aucun scénario",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else {
-                        visibleScenarios.forEach { scenario ->
-                            val selected = selectedScenarioId == scenario.id
-                            Box(modifier = Modifier.fillMaxWidth()) {
-                                DrawerSelectableItem(
-                                    label = scenario.title,
-                                    selected = selected,
+                    IconButton(onClick = { showScenarioFilesPanel = true }) {
+                        Icon(Icons.Default.Folder, contentDescription = "Explorer les fichiers .md sur le téléphone")
+                    }
+                    IconButton(onClick = { onOpenScenarioEditor(null) }) {
+                        Icon(Icons.Default.Add, contentDescription = "Nouveau scénario")
+                    }
+                }
+                if (visibleScenarios.isEmpty()) {
+                    Text(
+                        text = if (selectedCampaign != null) "Aucun scénario dans cette campagne" else "Aucun scénario",
+                        color = ForcedDarkPalette.Content
+                    )
+                } else {
+                    visibleScenarios.forEach { scenario ->
+                        val selected = selectedScenarioId == scenario.id
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            DrawerSelectableItem(
+                                label = scenario.title,
+                                selected = selected,
+                                onClick = {
+                                    coroutineScope.launch { drawerState.close() }
+                                    onOpenScenarioEditor(scenario.id)
+                                },
+                                onLongClick = { scenarioMenuForId = scenario.id }
+                            )
+                            DropdownMenu(
+                                expanded = scenarioMenuForId == scenario.id,
+                                onDismissRequest = { scenarioMenuForId = null }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Sélectionner") },
                                     onClick = {
+                                        scenarioMenuForId = null
+                                        selectedScenarioId = scenario.id
+                                        GameState.setLastScenarioId(scenario.id)
+                                        coroutineScope.launch { drawerState.close() }
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.Check, contentDescription = null) }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Modifier") },
+                                    onClick = {
+                                        scenarioMenuForId = null
                                         coroutineScope.launch { drawerState.close() }
                                         onOpenScenarioEditor(scenario.id)
                                     },
-                                    onLongClick = { scenarioMenuForId = scenario.id }
+                                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
                                 )
-                                DropdownMenu(
-                                    expanded = scenarioMenuForId == scenario.id,
-                                    onDismissRequest = { scenarioMenuForId = null }
-                                ) {
-                                    DropdownMenuItem(
-                                        text = { Text("Sélectionner") },
-                                        onClick = {
-                                            scenarioMenuForId = null
-                                            selectedScenarioId = scenario.id
-                                            GameState.setLastScenarioId(scenario.id)
-                                            coroutineScope.launch { drawerState.close() }
-                                        },
-                                        leadingIcon = { Icon(Icons.Default.Check, contentDescription = null) }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Modifier") },
-                                        onClick = {
-                                            scenarioMenuForId = null
-                                            coroutineScope.launch { drawerState.close() }
-                                            onOpenScenarioEditor(scenario.id)
-                                        },
-                                        leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Supprimer") },
-                                        onClick = {
-                                            scenarioMenuForId = null
-                                            itemToDelete = DeleteTarget.Scenario(scenario.id, scenario.title)
-                                        },
-                                        leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) }
-                                    )
-                                }
+                                DropdownMenuItem(
+                                    text = { Text("Supprimer") },
+                                    onClick = {
+                                        scenarioMenuForId = null
+                                        itemToDelete = DeleteTarget.Scenario(scenario.id, scenario.title)
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) }
+                                )
                             }
                         }
-                    }
-
-                    HorizontalDivider()
-
-                    // --- OUTILS ---
-                    DrawerSectionTitle("OUTILS", Icons.Default.Construction)
-                    tools.forEach { tool ->
-                        DrawerToolItem(
-                            tool = tool,
-                            onClick = {
-                                coroutineScope.launch { drawerState.close() }
-                                handleToolClick(tool.id)
-                            }
-                        )
                     }
                 }
             }
@@ -854,23 +820,6 @@ fun MjHomeScreen(
 }
 
 @Composable
-private fun DrawerSectionTitle(title: String, icon: ImageVector) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(vertical = 4.dp)
-    ) {
-        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = title,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Black,
-            color = MaterialTheme.colorScheme.primary
-        )
-    }
-}
-
-@Composable
 @OptIn(ExperimentalFoundationApi::class)
 private fun DrawerSelectableItem(
     label: String,
@@ -886,7 +835,7 @@ private fun DrawerSelectableItem(
                 onLongClick = onLongClick
             ),
         shape = RoundedCornerShape(16.dp),
-        color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surface,
+        color = if (selected) ForcedDarkPalette.Indicator else ForcedDarkPalette.Surface,
         tonalElevation = if (selected) 4.dp else 0.dp
     ) {
         Row(
@@ -897,7 +846,7 @@ private fun DrawerSelectableItem(
                 text = label,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = if (selected) FontWeight.Black else FontWeight.Medium,
-                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                color = if (selected) ForcedDarkPalette.AccentGold else ForcedDarkPalette.Content
             )
         }
     }
@@ -938,50 +887,6 @@ private fun DashboardToolCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2
             )
-        }
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun DrawerToolItem(
-    tool: MjTool,
-    onClick: () -> Unit
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 0.dp
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .background(tool.color.copy(alpha = 0.1f), RoundedCornerShape(12.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(tool.icon, contentDescription = null, tint = tool.color, modifier = Modifier.size(20.dp))
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            Column {
-                Text(
-                    text = tool.label,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = tool.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
         }
     }
 }

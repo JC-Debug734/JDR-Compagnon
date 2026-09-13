@@ -1,16 +1,10 @@
 package com.jc2.jdrcompagnon.ui.components
 
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.OutlinedTextField
@@ -22,9 +16,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.theme.ForcedDarkPalette
 
@@ -49,44 +40,32 @@ fun JoueurDrawer(
 ) {
     var showSettingsDialog by remember { mutableStateOf(false) }
 
-    ModalDrawerSheet(
-        drawerContainerColor = ForcedDarkPalette.Surface,
-        drawerContentColor = ForcedDarkPalette.Content
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                "MENU",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
+    AppDrawer {
+        NavigationDrawerItem(
+            icon = { Icon(Icons.Default.Group, null, tint = ForcedDarkPalette.Content) },
+            label = { Text("Choisir un personnage", color = ForcedDarkPalette.Content) },
+            selected = false,
+            onClick = {
+                onClose()
+                onChooseCharacter()
+            },
+            colors = NavigationDrawerItemDefaults.colors(
+                unselectedContainerColor = ForcedDarkPalette.Surface,
+                unselectedIconColor = ForcedDarkPalette.Content,
+                unselectedTextColor = ForcedDarkPalette.Content
             )
-            Spacer(modifier = Modifier.height(8.dp))
-            NavigationDrawerItem(
-                icon = { Icon(Icons.Default.Group, null, tint = ForcedDarkPalette.Content) },
-                label = { Text("Choisir un personnage", color = ForcedDarkPalette.Content) },
-                selected = false,
-                onClick = {
-                    onClose()
-                    onChooseCharacter()
-                },
-                colors = NavigationDrawerItemDefaults.colors(
-                    unselectedContainerColor = ForcedDarkPalette.Surface,
-                    unselectedIconColor = ForcedDarkPalette.Content,
-                    unselectedTextColor = ForcedDarkPalette.Content
-                )
+        )
+        NavigationDrawerItem(
+            icon = { Icon(Icons.Default.Settings, null, tint = ForcedDarkPalette.Content) },
+            label = { Text("Configuration", color = ForcedDarkPalette.Content) },
+            selected = false,
+            onClick = { showSettingsDialog = true },
+            colors = NavigationDrawerItemDefaults.colors(
+                unselectedContainerColor = ForcedDarkPalette.Surface,
+                unselectedIconColor = ForcedDarkPalette.Content,
+                unselectedTextColor = ForcedDarkPalette.Content
             )
-            NavigationDrawerItem(
-                icon = { Icon(Icons.Default.Settings, null, tint = ForcedDarkPalette.Content) },
-                label = { Text("Configuration", color = ForcedDarkPalette.Content) },
-                selected = false,
-                onClick = { showSettingsDialog = true },
-                colors = NavigationDrawerItemDefaults.colors(
-                    unselectedContainerColor = ForcedDarkPalette.Surface,
-                    unselectedIconColor = ForcedDarkPalette.Content,
-                    unselectedTextColor = ForcedDarkPalette.Content
-                )
-            )
-        }
+        )
     }
 
     if (showSettingsDialog) {

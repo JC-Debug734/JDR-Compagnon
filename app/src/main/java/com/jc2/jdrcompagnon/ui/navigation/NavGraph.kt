@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -48,6 +49,18 @@ fun JdrNavGraph(overrideStartDestination: String = Route.RoleSelection.path) {
     val currentWorld by GameState.currentWorld.collectAsState()
     val appRole by GameState.appRole.collectAsState()
     val playerName by GameState.playerName.collectAsState()
+    val roleChangeRequested by GameState.roleChangeRequested.collectAsState()
+
+    LaunchedEffect(roleChangeRequested) {
+        if (roleChangeRequested) {
+            // Seul chemin de retour vers le choix de rôle : on vide toute la
+            // pile pour repartir sur une base propre.
+            navController.navigate(Route.RoleSelection.path) {
+                popUpTo(0) { inclusive = true }
+            }
+            GameState.consumeRoleChangeRequest()
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         NavHost(
@@ -493,13 +506,6 @@ fun JdrNavGraph(overrideStartDestination: String = Route.RoleSelection.path) {
                 navController.navigate(homeRoute) {
                     launchSingleTop = true
                     popUpTo(homeRoute) { inclusive = false }
-                }
-            },
-            onHomeLongPress = {
-                // Seul chemin de retour vers le choix de rôle : on vide toute la
-                // pile pour repartir sur une base propre.
-                navController.navigate(Route.RoleSelection.path) {
-                    popUpTo(0) { inclusive = true }
                 }
             },
             modifier = Modifier.align(Alignment.BottomCenter)

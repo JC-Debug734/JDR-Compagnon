@@ -694,6 +694,22 @@ object GameState {
         saveAppRole(role)
     }
 
+    // Demande de retour au choix de rôle, déclenchée depuis le menu latéral
+    // (AppDrawer, commun MJ/Joueur). Même principe que l'overlay du dé
+    // (setDiceOverlayVisible) : un flag global que NavGraph observe, pour
+    // éviter de faire remonter un callback à travers tous les écrans qui
+    // affichent le drawer.
+    private val _roleChangeRequested = MutableStateFlow(false)
+    val roleChangeRequested: StateFlow<Boolean> = _roleChangeRequested.asStateFlow()
+
+    fun requestRoleChange() {
+        _roleChangeRequested.value = true
+    }
+
+    fun consumeRoleChangeRequest() {
+        _roleChangeRequested.value = false
+    }
+
     // === PERSONNAGE SÉLECTIONNÉ ===
     // Dernier personnage consulté/joué — persiste à la fermeture de l'app,
     // pour le retrouver directement au prochain lancement.
