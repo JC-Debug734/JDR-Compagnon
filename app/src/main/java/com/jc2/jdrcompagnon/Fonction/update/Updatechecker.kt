@@ -14,7 +14,7 @@ object UpdateChecker {
     // compilation — un simple commit+push de build.gradle.kts suffit à
     // publier la nouvelle version, pas de fichier séparé à gérer.
     private const val VERSION_URL =
-        "https://raw.githubusercontent.com/JC-Debug734/JDR-Compagnon/master/app/build.gradle.kts"
+        "https://raw.githubusercontent.com/JC-Debug734/JDR-Compagnon/main/app/build.gradle.kts"
 
     private val VERSION_REGEX = Regex("""AUTO-VERSION: (\d+\.\d+\.\d+)""")
 

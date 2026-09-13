@@ -580,8 +580,13 @@ private val characterPortraitOptions = listOf(
     PortraitOption("goliath_m", "Goliath (H)", R.drawable.av_goliath_m),
     PortraitOption("halfling_f", "Halfelin (F)", R.drawable.av_halfling_f),
     PortraitOption("halfling_m", "Halfelin (H)", R.drawable.av_halfling_m),
-    PortraitOption("nain", "Nain", R.drawable.av_nain),
+    PortraitOption("nain_f", "Nain (F)", R.drawable.av_nain_f),
+    PortraitOption("nain_h", "Nain (H)", R.drawable.av_nain_h),
+    PortraitOption("nain2_h", "Nain (H) 2", R.drawable.av_nain2_h),
+    PortraitOption("orc_f", "Orc (F)", R.drawable.av_orc_f),
     PortraitOption("orc_m", "Orc (H)", R.drawable.av_orc_m),
+    PortraitOption("tieffelin_f", "Tieffelin (F)", R.drawable.av_tieffelin_f),
+    PortraitOption("tieffelin_h", "Tieffelin (H)", R.drawable.av_tieffelin_h),
 )
 
 @OptIn(ExperimentalLayoutApi::class)

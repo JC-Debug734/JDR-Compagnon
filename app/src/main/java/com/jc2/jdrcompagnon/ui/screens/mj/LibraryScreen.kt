@@ -1441,11 +1441,15 @@ private fun LibraryBookshelf(
     onBookClick: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // Cycle des 3 skins de couverture de livre fournis en drawable.
+    // Cycle des skins de couverture de livre fournis en drawable.
     val bookSkins = listOf(
         R.drawable.livre_1,
         R.drawable.livre_2,
         R.drawable.livre_3,
+        R.drawable.livre_4,
+        R.drawable.livre_5,
+        R.drawable.livre_6,
+        R.drawable.livre_7,
     )
     val shelves = books.chunked(4)
     val booksPerShelf = 4
