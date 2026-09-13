@@ -18,18 +18,23 @@ object UpdateChecker {
 
     private val VERSION_REGEX = Regex("""AUTO-VERSION: (\d+\.\d+\.\d+)""")
 
-    // L'APK signé est committé directement dans le repo (app/release/app-release.apk),
-    // remplacé à chaque nouvelle build — pas de service externe (Drive, etc.)
-    // à gérer en plus. raw.githubusercontent.com sert le fichier brut sans
-    // page d'avertissement intermédiaire, contrairement à Drive.
-    private const val APK_URL =
-        "https://raw.githubusercontent.com/JC-Debug734/JDR-Compagnon/main/app/release/app-release.apk"
+    // Lien fixe vers l'APK sur Google Drive (mets à jour le fichier via
+    // "Gérer les versions" sur Drive, ou en changeant cet ID si tu changes
+    // de fichier — ce lien s'ouvre dans le navigateur pour un téléchargement
+    // manuel classique, pas de récupération automatique du binaire).
+    // Repassé sur Drive : GitHub refuse les fichiers trop volumineux.
+    private const val DRIVE_FILE_ID = "1cGy1pgsXCYWLO9A8kHlig2EH7DB93y0c"
+    private const val APK_URL = "https://drive.google.com/file/d/$DRIVE_FILE_ID/view?usp=sharing"
 
     private const val TAG = "UpdateChecker"
 
     suspend fun getLatestRelease(): ReleaseInfo? = withContext(Dispatchers.IO) {
         try {
-            val text = URL(VERSION_URL).readText()
+            // Paramètre unique pour contourner le cache CDN de
+            // raw.githubusercontent.com (sinon un push récent peut mettre
+            // plusieurs minutes à être visible côté app).
+            val cacheBustedUrl = "$VERSION_URL?t=${System.currentTimeMillis()}"
+            val text = URL(cacheBustedUrl).readText()
             val versionName = VERSION_REGEX.find(text)?.groupValues?.get(1)
                 ?: run {
                     Log.w(TAG, "Marqueur AUTO-VERSION introuvable dans build.gradle.kts")
