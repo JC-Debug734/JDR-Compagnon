@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">JDR Compagnon</string>
+
+    <!-- WorldSelectionScreen -->
+    <string name="world_selection_title">CHOISIR SON UNIVERS</string>
+    <string name="world_selection_hero_copy">Sélectionnez l\'univers qui accueillera vos aventures. Votre choix définit la palette de couleurs et les règles disponibles.</string>
+    <string name="world_selection_active_label">Univers actuel : %1$s</string>
+    <string name="world_dnd_label">Donjons \u0026 Dragons</string>
+    <string name="world_dnd_description">L\'héroïque fantasy par excellence. Dragons, donjons et légendes à écrire.</string>
+    <string name="world_dnd_metadata">Thème : Rouge \u0026 Or | Règles : D\u0026D 5e</string>
+    <string name="world_naheul_label">Naheulbeuk</string>
+    <string name="world_naheul_description">L\'aventure déjantée par excellence. Humour, chaos et donjons improbables.</string>
+    <string name="world_naheul_metadata">Thème : Vert \u0026 Ambre | Règles : Libre</string>
+    <string name="world_badge_selected">SÉLECTIONNÉ</string>
+    <string name="world_continue_cta">Continuer \u2192</string>
+
+    <!-- RoleSelectionScreen -->
+    <string name="role_selection_title">JDR Compagnon</string>
+    <string name="role_selection_subtitle">Comment voulez-vous jouer ?</string>
+    <string name="role_mj_label">Maître du Jeu</string>
+    <string name="role_mj_description">Animez la partie, gérez les outils et les rencontres.</string>
+    <string name="role_mj_features">Lancer de dés • Bestiaire • Notes de partie</string>
+    <string name="role_player_label">Joueur</string>
+    <string name="role_player_description">Choisissez votre personnage et vivez l\'aventure.</string>
+    <string name="role_player_features">Fiche de personnage • Inventaire • Lancer de dés</string>
+    <string name="role_lan_label">Réseau local</string>
+    <string name="role_lan_description">Connectez plusieurs appareils sur le même Wi-Fi.</string>
+    <string name="role_lan_features">Hébergement automatique • Connexion des joueurs • Sans configuration</string>
+    <string name="role_selection_footer">L\'aventure vous attend</string>
+    <string name="world_badge_choose">Choisir un monde</string>
+    <string name="cd_world_badge">Changer de monde, monde actuel : %1$s</string>
+
+    <!-- Accessibility -->
+    <string name="a11y_back_to_role_selection">Revenir au choix de rôle</string>
+    <string name="a11y_icon_decorative">Icône décorative : %1$s</string>
+    <string name="a11y_world_card_selected">%1$s, sélectionné</string>
+    <string name="a11y_world_card_unselected">%1$s, non sélectionné</string>
+    <string name="a11y_role_card">%1$s, double tap pour sélectionner</string>
+    <string name="a11y_context_card">Contexte actuel, double tap pour changer d\'univers</string>
+</resources>

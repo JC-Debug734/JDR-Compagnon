@@ -1,0 +1,31 @@
+package com.jc2.jdrcompagnon.ui.navigation
+
+// Routes de l'app — sealed pour éviter les fautes de frappe au call site.
+sealed class Route(val path: String) {
+    data object FirstLaunchWorldSelection : Route("first_launch_world_selection")
+    data object RoleSelection : Route("role_selection")
+    data object MjHome : Route("mj")
+    data object MjCharacterCreation : Route("mj_character_creation")
+    data object JoueurHome : Route("joueur")
+    data object CharacterSelection : Route("character_selection")
+    data object CharacterSheet : Route("character_sheet")
+    data object CharacterEdit : Route("character_edit/{characterId}")
+    data object CharacterCreation : Route("character_creation")
+    data object SpellManagement : Route("spell_management/{characterId}")
+    data object SrdSectionDetail : Route("srd_entry/{kind}/{entryName}")
+    data object WorldSelection : Route("world_selection")
+    data object ScenarioEditor : Route("scenario_editor/{scenarioId}")
+    data object ScenarioReader : Route("scenario_reader/{scenarioId}")
+    data object Scenarios : Route("scenarios")
+    data object CampaignEditor : Route("campaign_editor/{campaignId}")
+    data object Campaigns : Route("campaigns")
+    data object Music : Route("music")
+    data object Library : Route("library/{initialTab}")
+    data object BestiaryDetail : Route("bestiary/{monsterName}")
+    data object SpellDetail : Route("spell/{spellName}")
+    data object EquipmentDetail : Route("equipment/{equipmentName}")
+    data object RuleDetail : Route("rule/{ruleName}")
+    data object LanTools : Route("lan_tools")
+    data object LanHost : Route("lan_tools_host")
+    data object LanJoin : Route("lan_tools_join")
+}
