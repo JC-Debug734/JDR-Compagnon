@@ -1,5 +1,7 @@
-package com.jc2.jdrcompagnon.ui
+package com.jc2.jdrcompagnon.ui.screens.joueur.character
 
+import com.jc2.jdrcompagnon.ui.Character
+import com.jc2.jdrcompagnon.ui.EquipmentSlot
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.EquipmentItem
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdRepository
 
@@ -150,7 +152,7 @@ object ArmorRules {
                     lower.contains("lance") ||
                     lower.contains("marteau") ||
                     lower.contains("rapière") ||
-                    lower.contains("arbalette") ||
+                    lower.contains("arbalète") ||
                     lower.contains("masse") ||
                     lower.contains("serpe") ||
                     lower.contains("trident") ||
@@ -192,7 +194,7 @@ object ArmorRules {
 
     private fun isTwoHandedWeapon(itemName: String): Boolean {
         val lower = itemName.lowercase()
-        val twoHandedKeywords = listOf("deux mains", "2 mains", "2m", "hallebarde", "arc", "arbalette", "pique")
+        val twoHandedKeywords = listOf("deux mains", "2 mains", "2m", "hallebarde", "arc", "arbalète", "pique")
         return twoHandedKeywords.any { lower.contains(it) }
     }
 

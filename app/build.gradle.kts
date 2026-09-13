@@ -4,7 +4,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-// AUTO-VERSION: 1.1.8
+// AUTO-VERSION: 1.3.1
 // ── Auto-incrémentation de version à chaque compilation ──────────────────
 // Format X.Y.Z : Z va de 0 à 9 puis repasse à 0 en incrémentant Y ; Y suit
 // la même règle sur X ; X n'a pas de limite.
@@ -107,6 +107,10 @@ dependencies {
     implementation(libs.androidx.compose.foundation)
     implementation(libs.androidx.compose.runtime)
     debugImplementation(libs.androidx.compose.ui.tooling)
+
+    // Google Fonts téléchargeables (Playfair Display / Inter — cf. Type.kt)
+    // Pas d'entrée de version catalog existante : version alignée via le BOM Compose ci-dessus.
+    implementation("androidx.compose.ui:ui-text-google-fonts")
 
     // Activity / Navigation / Lifecycle
     implementation(libs.androidx.activity.compose)

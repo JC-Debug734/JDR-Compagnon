@@ -3,6 +3,7 @@ package com.jc2.jdrcompagnon.ui
 import android.content.Context
 import android.content.SharedPreferences
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdRepository
+import com.jc2.jdrcompagnon.ui.screens.joueur.character.ArmorRules
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

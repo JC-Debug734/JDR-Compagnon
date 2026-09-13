@@ -47,8 +47,8 @@ val NaheulOnPrimaryContainer = Color(0xFF1B5E20)
 val NaheulOnSecondaryContainer = Color(0xFFE65100)
 val NaheulOnTertiaryContainer = Color(0xFF3E2723)
 
-// Default/Mystic Palette (Violet & Cyan)
-val MysticPurple = Color(0xFF8E5AFF)
+// Default/Mystic Palette (Violet & Or) — thème par défaut de l'application
+val MysticPurple = Color(0xFF6C63FF)
 val MysticPurpleDark = Color(0xFF6A1B9A)
 val MysticPurpleLight = Color(0xFFE1BEE7)
 val MysticPurpleContainer = Color(0xFFF3E5F5)
@@ -59,6 +59,15 @@ val RadiantCyanContainer = Color(0xFFE0F7FA)
 val MysticOnPrimary = Color(0xFFFFFFFF)
 val MysticOnPrimaryContainer = Color(0xFF6A1B9A)
 val MysticOnSecondaryContainer = Color(0xFF006064)
+
+// Default palette additions (image de référence "MJ Table")
+val MysticGold = Color(0xFFF5B642)
+val MysticBackground = Color(0xFF0E1117)
+val MysticSurface = Color(0xFF1A1F2B)
+val MysticTextPrimary = Color(0xFFEDEDED)
+val MysticTextSecondary = Color(0xFFA0A7BB)
+val MysticSuccess = Color(0xFF22C55E)
+val MysticAlert = Color(0xFFEF4444)
 
 // ========================================================================
 // Semantic Color Roles for Accessibility
@@ -104,29 +113,29 @@ val DefaultDarkColors = androidx.compose.material3.darkColorScheme(
     onPrimary = MysticOnPrimary,
     primaryContainer = MysticPurpleContainer,
     onPrimaryContainer = MysticOnPrimaryContainer,
-    secondary = RadiantCyan,
+    secondary = MysticGold,
     onSecondary = Color.Black,
-    secondaryContainer = RadiantCyanContainer,
-    onSecondaryContainer = MysticOnSecondaryContainer,
-    tertiary = MysticPurple,
-    onTertiary = MysticOnPrimary,
-    tertiaryContainer = MysticPurpleContainer,
-    onTertiaryContainer = MysticOnPrimaryContainer,
-    error = ErrorDark,
+    secondaryContainer = NaheulAmberContainer,
+    onSecondaryContainer = NaheulOnSecondaryContainer,
+    tertiary = MysticSuccess,
+    onTertiary = PureWhite,
+    tertiaryContainer = NaheulGreenContainer,
+    onTertiaryContainer = NaheulOnPrimaryContainer,
+    error = MysticAlert,
     onError = OnErrorDark,
     errorContainer = ErrorContainerDark,
     onErrorContainer = OnErrorContainerDark,
-    background = DeepBlack,
-    onBackground = OffWhite,
-    surface = SurfaceDark,
-    onSurface = PureWhite,
+    background = MysticBackground,
+    onBackground = MysticTextPrimary,
+    surface = MysticSurface,
+    onSurface = MysticTextPrimary,
     surfaceVariant = SurfaceVariantDark,
-    onSurfaceVariant = OnSurfaceVariantDark,
+    onSurfaceVariant = MysticTextSecondary,
     outline = OutlineDark,
     outlineVariant = OutlineVariantDark,
     scrim = ScrimDark,
-    inverseSurface = OffWhite,
-    inverseOnSurface = DeepBlack,
+    inverseSurface = MysticTextPrimary,
+    inverseOnSurface = MysticBackground,
     inversePrimary = MysticPurpleDark
 )
 

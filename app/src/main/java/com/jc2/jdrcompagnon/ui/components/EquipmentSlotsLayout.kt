@@ -39,12 +39,12 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
-import com.jc2.jdrcompagnon.ui.ArmorRules
 import com.jc2.jdrcompagnon.ui.Character
 import com.jc2.jdrcompagnon.ui.EquipmentSlot
 import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdRepository
 import kotlin.math.roundToInt
+import com.jc2.jdrcompagnon.ui.screens.joueur.character.ArmorRules
 
 // Enlever les imports inutilisés signalés par le compilo.
 private typealias EquipmentItemSRD = com.jc2.jdrcompagnon.ui.screens.mj.library.srd.EquipmentItem

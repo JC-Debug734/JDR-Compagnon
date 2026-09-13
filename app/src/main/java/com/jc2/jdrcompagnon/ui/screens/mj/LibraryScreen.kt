@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -1451,8 +1452,8 @@ private fun LibraryBookshelf(
         R.drawable.livre_6,
         R.drawable.livre_7,
     )
-    val shelves = books.chunked(4)
-    val booksPerShelf = 4
+    val booksPerShelf = 6
+    val shelves = books.chunked(booksPerShelf)
     val bookSpacing = 10.dp
     val contentPaddingH = 20.dp
 
@@ -1461,7 +1462,11 @@ private fun LibraryBookshelf(
     // gardent la même largeur partout et l'espace restant reste vide à droite.
     BoxWithConstraints(modifier = modifier) {
         val scope = this
-        val bookWidth = (scope.maxWidth - contentPaddingH * 2 - bookSpacing * (booksPerShelf - 1)) / booksPerShelf
+        // Largeur "pleine" si 4 livres se partageaient toute la ligne, puis réduite de 40%
+        // pour des tranches moins épaisses (les rangées incomplètes ou pleines laissent donc
+        // un peu d'espace libre à droite, au lieu de forcer les livres à occuper toute la largeur).
+        val fullBookWidth = (scope.maxWidth - contentPaddingH * 2 - bookSpacing * (booksPerShelf - 1)) / booksPerShelf
+        val bookWidth = fullBookWidth * 0.6f
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -1573,9 +1578,13 @@ private fun BookSpine(
             ) {
                 // Titre écrit à la verticale, comme sur une tranche de livre : la Text est
                 // dimensionnée avant rotation (largeur = hauteur réellement disponible dans
-                // cet espace, mesurée via BoxWithConstraints — une largeur fixe en dur
-                // pouvait dépasser l'espace dispo et se faire rogner par le Surface qui
-                // clippe son contenu), hauteur = une ligne, puis pivotée de 90°.
+                // cet espace, mesurée via BoxWithConstraints), hauteur = une ligne, puis
+                // pivotée de 90°. `requiredWidth` (et non `width`) est indispensable ici :
+                // un livre étroit donne un BoxWithConstraints étroit, et un simple `width`
+                // aurait été contraint/rogné à cette largeur avant même la rotation, coupant
+                // le texte. `requiredWidth` impose la largeur voulue quelles que soient les
+                // contraintes du parent — la rotation ramène ensuite tout dans l'emprise du
+                // livre (clippée par le Surface englobant), sans troncature.
                 BoxWithConstraints(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1600,7 +1609,7 @@ private fun BookSpine(
                             ),
                         ),
                         modifier = Modifier
-                            .width(availableHeight)
+                            .requiredWidth(availableHeight)
                             .rotate(-90f),
                     )
                 }

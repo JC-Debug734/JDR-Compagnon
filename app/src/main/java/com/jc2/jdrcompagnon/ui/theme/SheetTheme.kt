@@ -15,6 +15,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.jc2.jdrcompagnon.ui.theme.MysticAlert
+import com.jc2.jdrcompagnon.ui.theme.MysticSuccess
 
 /**
  * Palette "fiche sombre" partagée entre la fiche de personnage
@@ -58,9 +60,9 @@ fun updateSheetTheme(
     SheetTextSecondary = textSecondary
 }
 
-/** Vert/rouge cohérents avec le reste de l'appli (barre de dé, connexion). */
-val SheetAccentGood = Color(0xFF2E7D32)
-val SheetAccentBad = Color(0xFFC62828)
+/** Vert/rouge cohérents avec la palette par défaut de l'appli (barre de dé, connexion). */
+val SheetAccentGood = MysticSuccess
+val SheetAccentBad = MysticAlert
 
 /**
  * Conteneur de carte réutilisé sur toute la fiche et les écrans

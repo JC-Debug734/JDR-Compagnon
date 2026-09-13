@@ -34,7 +34,6 @@ import androidx.compose.ui.unit.dp
 import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.MusicManager
 import com.jc2.jdrcompagnon.ui.availableLoopTracks
-import com.jc2.jdrcompagnon.ui.components.WorldBackground
 
 /**
  * Écran plein écran de lecture d'un scénario MJ (route Route.ScenarioReader).
@@ -52,29 +51,27 @@ fun ScenarioReaderScreen(
         mjScenarios.firstOrNull { it.id == scenarioId }
     }
 
-    WorldBackground {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = {},
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-                )
-            },
-            containerColor = Color.Transparent
-        ) { innerPadding ->
-            ScenarioReaderContent(
-                scenario = scenario,
-                onOpenInternalLink = onOpenInternalLink,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {},
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
-        }
+        },
+        containerColor = Color.Transparent
+    ) { innerPadding ->
+        ScenarioReaderContent(
+            scenario = scenario,
+            onOpenInternalLink = onOpenInternalLink,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        )
     }
 }
 
@@ -110,6 +107,8 @@ fun ScenarioReaderContent(
     var hasFocus by remember { mutableStateOf(false) }
     var showScenePanel by remember { mutableStateOf(false) }
     var showLinksPanel by remember { mutableStateOf(false) }
+    val isMusicPlaying by MusicManager.isPlaying.collectAsState()
+    val currentTrackName by MusicManager.currentTrack.collectAsState()
 
     // Auto-play musique de la scène
     LaunchedEffect(currentScene) {
@@ -152,8 +151,18 @@ fun ScenarioReaderContent(
             }
             currentScene?.musicTrackId?.let { trackId ->
                 val trackName = availableLoopTracks.firstOrNull { it.id.equals(trackId, ignoreCase = true) }?.displayName ?: trackId
-                IconButton(onClick = { playSceneMusic(context, trackId) }) {
-                    Icon(Icons.Default.MusicNote, contentDescription = "Musique : $trackName")
+                val isThisTrackPlaying = isMusicPlaying && currentTrackName == trackName
+                IconButton(onClick = {
+                    if (isThisTrackPlaying) {
+                        MusicManager.stop()
+                    } else {
+                        playSceneMusic(context, trackId)
+                    }
+                }) {
+                    Icon(
+                        imageVector = if (isThisTrackPlaying) Icons.Default.MusicOff else Icons.Default.MusicNote,
+                        contentDescription = if (isThisTrackPlaying) "Arrêter la musique : $trackName" else "Musique : $trackName"
+                    )
                 }
             }
             if (scenes.size > 1) {

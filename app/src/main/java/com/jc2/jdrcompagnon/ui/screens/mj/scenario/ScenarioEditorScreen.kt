@@ -25,7 +25,6 @@ import androidx.compose.ui.unit.dp
 import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.MusicManager
 import com.jc2.jdrcompagnon.ui.availableLoopTracks
-import com.jc2.jdrcompagnon.ui.components.WorldBackground
 
 
 import kotlinx.coroutines.launch
@@ -253,206 +252,204 @@ fun ScenarioEditorScreen(
         }
     }
 
-    WorldBackground {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = { Text("Scénario", fontWeight = FontWeight.Bold) },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
-                        }
-                    },
-                    actions = {
-                        IconButton(
-                            onClick = {
-                                if (!popUndo()) {
-                                    coroutineScope.launch {
-                                        snackbarHostState.showSnackbar("Rien à annuler")
-                                    }
-                                }
-                            },
-                            enabled = undoStack.isNotEmpty()
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Annuler")
-                        }
-                        IconButton(onClick = { saveScenario() }) {
-                            Icon(Icons.Default.Save, contentDescription = "Enregistrer")
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
-                )
-            },
-            snackbarHost = { SnackbarHost(snackbarHostState) },
-            containerColor = Color.Transparent,
-        ) { innerPadding ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .verticalScroll(rememberScrollState())
-            ) {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("Titre du scénario") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    singleLine = true,
-                )
-
-                // Sélecteur de scènes avec réordonnancement et suppression
-                LazyRow(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    items(scenes.size, key = { "scene-chip-$it" }) { index ->
-                        val scene = scenes[index]
-                        FilterChip(
-                            selected = selectedSceneIndex == index,
-                            onClick = { selectedSceneIndex = index },
-                            label = { Text(scene.title) },
-                            leadingIcon = if (selectedSceneIndex == index) {
-                                @Composable {
-                                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                                }
-                            } else null,
-                            trailingIcon = if (selectedSceneIndex == index && scenes.size > 1) {
-                                @Composable {
-                                    IconButton(
-                                        onClick = { showDeleteSceneDialog = true },
-                                        modifier = Modifier.size(20.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Close,
-                                            contentDescription = "Supprimer la scène",
-                                            modifier = Modifier.size(16.dp),
-                                            tint = MaterialTheme.colorScheme.error
-                                        )
-                                    }
-                                }
-                            } else null
-                        )
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Scénario", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
                     }
-                    item {
-                        IconButton(onClick = { addScene() }) {
-                            Icon(Icons.Default.Add, contentDescription = "Ajouter une scène")
-                        }
+                },
+                actions = {
+                    IconButton(
+                        onClick = {
+                            if (!popUndo()) {
+                                coroutineScope.launch {
+                                    snackbarHostState.showSnackbar("Rien à annuler")
+                                }
+                            }
+                        },
+                        enabled = undoStack.isNotEmpty()
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Annuler")
+                    }
+                    IconButton(onClick = { saveScenario() }) {
+                        Icon(Icons.Default.Save, contentDescription = "Enregistrer")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+            )
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        containerColor = Color.Transparent,
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
+        ) {
+            OutlinedTextField(
+                value = title,
+                onValueChange = { title = it },
+                label = { Text("Titre du scénario") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                singleLine = true,
+            )
+
+            // Sélecteur de scènes avec réordonnancement et suppression
+            LazyRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                items(scenes.size, key = { "scene-chip-$it" }) { index ->
+                    val scene = scenes[index]
+                    FilterChip(
+                        selected = selectedSceneIndex == index,
+                        onClick = { selectedSceneIndex = index },
+                        label = { Text(scene.title) },
+                        leadingIcon = if (selectedSceneIndex == index) {
+                            @Composable {
+                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                            }
+                        } else null,
+                        trailingIcon = if (selectedSceneIndex == index && scenes.size > 1) {
+                            @Composable {
+                                IconButton(
+                                    onClick = { showDeleteSceneDialog = true },
+                                    modifier = Modifier.size(20.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Close,
+                                        contentDescription = "Supprimer la scène",
+                                        modifier = Modifier.size(16.dp),
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
+                        } else null
+                    )
+                }
+                item {
+                    IconButton(onClick = { addScene() }) {
+                        Icon(Icons.Default.Add, contentDescription = "Ajouter une scène")
                     }
                 }
+            }
 
-                // Contrôles de réordonnancement de la scène active
-                Row(
+            // Contrôles de réordonnancement de la scène active
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Scène ${selectedSceneIndex + 1}/${scenes.size}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(
+                    onClick = { moveScene(selectedSceneIndex, selectedSceneIndex - 1) },
+                    enabled = selectedSceneIndex > 0
+                ) {
+                    Icon(Icons.Default.KeyboardArrowLeft, contentDescription = "Déplacer à gauche")
+                }
+                IconButton(
+                    onClick = { moveScene(selectedSceneIndex, selectedSceneIndex + 1) },
+                    enabled = selectedSceneIndex < scenes.size - 1
+                ) {
+                    Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Déplacer à droite")
+                }
+            }
+
+            // Titre et musique de la scène active
+            scenes.getOrNull(selectedSceneIndex)?.let { scene ->
+                OutlinedTextField(
+                    value = scene.title,
+                    onValueChange = { newTitle ->
+                        pushUndo()
+                        scenes = scenes.mapIndexed { index, s ->
+                            if (index == selectedSceneIndex) s.copy(title = newTitle) else s
+                        }
+                    },
+                    label = { Text("Titre de la scène") },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    singleLine = true
+                )
+
+                var expanded by remember { mutableStateOf(false) }
+                ExposedDropdownMenuBox(
+                    expanded = expanded,
+                    onExpandedChange = { expanded = !expanded },
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                 ) {
-                    Text(
-                        text = "Scène ${selectedSceneIndex + 1}/${scenes.size}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f)
-                    )
-                    IconButton(
-                        onClick = { moveScene(selectedSceneIndex, selectedSceneIndex - 1) },
-                        enabled = selectedSceneIndex > 0
-                    ) {
-                        Icon(Icons.Default.KeyboardArrowLeft, contentDescription = "Déplacer à gauche")
-                    }
-                    IconButton(
-                        onClick = { moveScene(selectedSceneIndex, selectedSceneIndex + 1) },
-                        enabled = selectedSceneIndex < scenes.size - 1
-                    ) {
-                        Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Déplacer à droite")
-                    }
-                }
-
-                // Titre et musique de la scène active
-                scenes.getOrNull(selectedSceneIndex)?.let { scene ->
                     OutlinedTextField(
-                        value = scene.title,
-                        onValueChange = { newTitle ->
-                            pushUndo()
-                            scenes = scenes.mapIndexed { index, s ->
-                                if (index == selectedSceneIndex) s.copy(title = newTitle) else s
-                            }
-                        },
-                        label = { Text("Titre de la scène") },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 4.dp),
-                        singleLine = true
+                        value = MusicTracks.find { it.second == scene.musicTrackId }?.first ?: "Aucune",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Musique de la scène") },
+                        modifier = Modifier.menuAnchor().fillMaxWidth(),
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) }
                     )
-
-                    var expanded by remember { mutableStateOf(false) }
-                    ExposedDropdownMenuBox(
-                        expanded = expanded,
-                        onExpandedChange = { expanded = !expanded },
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-                    ) {
-                        OutlinedTextField(
-                            value = MusicTracks.find { it.second == scene.musicTrackId }?.first ?: "Aucune",
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Musique de la scène") },
-                            modifier = Modifier.menuAnchor().fillMaxWidth(),
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) }
-                        )
-                        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                            MusicTracks.forEach { (label, trackId) ->
-                                DropdownMenuItem(
-                                    text = { Text(label) },
-                                    onClick = {
-                                        pushUndo()
-                                        scenes = scenes.mapIndexed { index, s ->
-                                            if (index == selectedSceneIndex) s.copy(musicTrackId = trackId) else s
-                                        }
-                                        playSceneMusic(trackId)
-                                        expanded = false
+                    ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                        MusicTracks.forEach { (label, trackId) ->
+                            DropdownMenuItem(
+                                text = { Text(label) },
+                                onClick = {
+                                    pushUndo()
+                                    scenes = scenes.mapIndexed { index, s ->
+                                        if (index == selectedSceneIndex) s.copy(musicTrackId = trackId) else s
                                     }
-                                )
-                            }
+                                    playSceneMusic(trackId)
+                                    expanded = false
+                                }
+                            )
                         }
                     }
                 }
-
-                LazyRow(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    item { ToolbarTextButton("H1") { insertLinePrefix("# ") } }
-                    item { ToolbarTextButton("H2") { insertLinePrefix("## ") } }
-                    item { ToolbarTextButton("H3") { insertLinePrefix("### ") } }
-                    item { IconButton(onClick = { insertMarkdown("**") }) { Icon(Icons.Default.FormatBold, contentDescription = "Gras") } }
-                    item { IconButton(onClick = { insertMarkdown("*") }) { Icon(Icons.Default.FormatItalic, contentDescription = "Italique") } }
-                    item { IconButton(onClick = { insertMarkdown("`") }) { Icon(Icons.Default.Code, contentDescription = "Code") } }
-                    item { IconButton(onClick = { showColorPicker = true }) { Icon(Icons.Default.FormatColorFill, contentDescription = "Couleur") } }
-                    item { IconButton(onClick = { showLinkDialog = true }) { Icon(Icons.Default.Link, contentDescription = "Lien interne (monstre, équipement, PNJ...)") } }
-                    item { IconButton(onClick = { insertLinePrefix("- ") }) { Icon(Icons.AutoMirrored.Filled.FormatListBulleted, contentDescription = "Liste") } }
-                    item { IconButton(onClick = { insertLinePrefix("1. ") }) { Icon(Icons.Default.FormatListNumbered, contentDescription = "Liste numérotée") } }
-                }
-
-                OutlinedTextField(
-                    value = markdownContent,
-                    onValueChange = { updateCurrentScene(it) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 400.dp)
-                        .padding(16.dp),
-                    placeholder = { Text("Saisissez le contenu de la scène en markdown...") },
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(
-                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                    ),
-                )
             }
+
+            LazyRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                item { ToolbarTextButton("H1") { insertLinePrefix("# ") } }
+                item { ToolbarTextButton("H2") { insertLinePrefix("## ") } }
+                item { ToolbarTextButton("H3") { insertLinePrefix("### ") } }
+                item { IconButton(onClick = { insertMarkdown("**") }) { Icon(Icons.Default.FormatBold, contentDescription = "Gras") } }
+                item { IconButton(onClick = { insertMarkdown("*") }) { Icon(Icons.Default.FormatItalic, contentDescription = "Italique") } }
+                item { IconButton(onClick = { insertMarkdown("`") }) { Icon(Icons.Default.Code, contentDescription = "Code") } }
+                item { IconButton(onClick = { showColorPicker = true }) { Icon(Icons.Default.FormatColorFill, contentDescription = "Couleur") } }
+                item { IconButton(onClick = { showLinkDialog = true }) { Icon(Icons.Default.Link, contentDescription = "Lien interne (monstre, équipement, PNJ...)") } }
+                item { IconButton(onClick = { insertLinePrefix("- ") }) { Icon(Icons.AutoMirrored.Filled.FormatListBulleted, contentDescription = "Liste") } }
+                item { IconButton(onClick = { insertLinePrefix("1. ") }) { Icon(Icons.Default.FormatListNumbered, contentDescription = "Liste numérotée") } }
+            }
+
+            OutlinedTextField(
+                value = markdownContent,
+                onValueChange = { updateCurrentScene(it) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 400.dp)
+                    .padding(16.dp),
+                placeholder = { Text("Saisissez le contenu de la scène en markdown...") },
+                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                ),
+            )
         }
     }
 

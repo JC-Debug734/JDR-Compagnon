@@ -36,7 +36,6 @@ import androidx.compose.ui.unit.dp
 import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.WorldState
 import com.jc2.jdrcompagnon.ui.components.GroupCard
-import com.jc2.jdrcompagnon.ui.components.WorldBackground
 import kotlinx.coroutines.launch
 
 
@@ -61,116 +60,114 @@ fun GroupsScreen(
     var groupToRename by remember { mutableStateOf<GameState.MjGroup?>(null) }
     var itemToDelete by remember { mutableStateOf<GameState.MjGroup?>(null) }
 
-    WorldBackground {
-        Scaffold(
-            topBar = {
-                CenterAlignedTopAppBar(
-                    title = { Text("Groupes", fontWeight = FontWeight.Bold) },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
-                        }
-                    },
-                    colors = androidx.compose.material3.TopAppBarDefaults.centerAlignedTopAppBarColors(
-                        containerColor = androidx.compose.ui.graphics.Color.Transparent
-                    )
+    Scaffold(
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text("Groupes", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
+                    }
+                },
+                colors = androidx.compose.material3.TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = androidx.compose.ui.graphics.Color.Transparent
                 )
-            },
-            snackbarHost = { SnackbarHost(snackbarHostState) },
-            containerColor = androidx.compose.ui.graphics.Color.Transparent
-        ) { innerPadding ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .padding(16.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+            )
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        containerColor = androidx.compose.ui.graphics.Color.Transparent
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                tonalElevation = 2.dp,
+                color = MaterialTheme.colorScheme.surface
             ) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
-                    tonalElevation = 2.dp,
-                    color = MaterialTheme.colorScheme.surface
-                ) {
-                    Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("Créer un groupe", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Black)
-                        OutlinedTextField(
-                            value = newGroupName,
-                            onValueChange = { newGroupName = it },
-                            label = { Text("Nom du groupe") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
-                        )
-                        Button(
-                            onClick = {
-                                if (newGroupName.isNotBlank()) {
-                                    val group = GameState.MjGroup(name = newGroupName, worldId = worldId ?: "")
-                                    GameState.addMjGroup(group)
-                                    expandedGroupId = group.id
-                                    newGroupName = ""
-                                } else {
-                                    coroutineScope.launch {
-                                        snackbarHostState.showSnackbar("Veuillez saisir un nom de groupe")
-                                    }
+                Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Créer un groupe", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Black)
+                    OutlinedTextField(
+                        value = newGroupName,
+                        onValueChange = { newGroupName = it },
+                        label = { Text("Nom du groupe") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Button(
+                        onClick = {
+                            if (newGroupName.isNotBlank()) {
+                                val group = GameState.MjGroup(name = newGroupName, worldId = worldId ?: "")
+                                GameState.addMjGroup(group)
+                                expandedGroupId = group.id
+                                newGroupName = ""
+                            } else {
+                                coroutineScope.launch {
+                                    snackbarHostState.showSnackbar("Veuillez saisir un nom de groupe")
                                 }
-                            },
-                            modifier = Modifier.align(Alignment.End)
-                        ) {
-                            Text("Créer")
-                        }
+                            }
+                        },
+                        modifier = Modifier.align(Alignment.End)
+                    ) {
+                        Text("Créer")
                     }
                 }
+            }
 
-                if (groups.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                "Aucun groupe créé pour $worldName.",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.bodyLarge
-                            )
-                        }
+            if (groups.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            "Aucun groupe créé pour $worldName.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
                     }
-                } else {
-                    groups.forEach { group ->
-                        Box(modifier = Modifier.fillMaxWidth()) {
-                            GroupCard(
-                                group = group,
-                                availableCharacters = availableCharacters,
-                                expanded = expandedGroupId == group.id,
-                                onToggleExpand = { expandedGroupId = if (expandedGroupId == group.id) null else group.id },
-                                onMemberToggle = { characterId ->
-                                    val updated = if (group.memberIds.contains(characterId)) {
-                                        group.copy(memberIds = group.memberIds - characterId)
-                                    } else {
-                                        group.copy(memberIds = group.memberIds + characterId)
-                                    }
-                                    GameState.updateMjGroup(updated)
+                }
+            } else {
+                groups.forEach { group ->
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        GroupCard(
+                            group = group,
+                            availableCharacters = availableCharacters,
+                            expanded = expandedGroupId == group.id,
+                            onToggleExpand = { expandedGroupId = if (expandedGroupId == group.id) null else group.id },
+                            onMemberToggle = { characterId ->
+                                val updated = if (group.memberIds.contains(characterId)) {
+                                    group.copy(memberIds = group.memberIds - characterId)
+                                } else {
+                                    group.copy(memberIds = group.memberIds + characterId)
+                                }
+                                GameState.updateMjGroup(updated)
+                            },
+                            onLongClick = { groupMenuForId = group.id }
+                        )
+                        androidx.compose.material3.DropdownMenu(
+                            expanded = groupMenuForId == group.id,
+                            onDismissRequest = { groupMenuForId = null }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Renommer") },
+                                onClick = {
+                                    groupMenuForId = null
+                                    groupToRename = group
                                 },
-                                onLongClick = { groupMenuForId = group.id }
+                                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
                             )
-                            androidx.compose.material3.DropdownMenu(
-                                expanded = groupMenuForId == group.id,
-                                onDismissRequest = { groupMenuForId = null }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("Renommer") },
-                                    onClick = {
-                                        groupMenuForId = null
-                                        groupToRename = group
-                                    },
-                                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Supprimer") },
-                                    onClick = {
-                                        groupMenuForId = null
-                                        itemToDelete = group
-                                    },
-                                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) }
-                                )
-                            }
+                            DropdownMenuItem(
+                                text = { Text("Supprimer") },
+                                onClick = {
+                                    groupMenuForId = null
+                                    itemToDelete = group
+                                },
+                                leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) }
+                            )
                         }
                     }
                 }

@@ -30,7 +30,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.WorldState
-import com.jc2.jdrcompagnon.ui.components.WorldBackground
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -66,136 +65,134 @@ fun ScenariosScreen(
 
     val worldName = currentWorld?.name ?: "ce monde"
 
-    WorldBackground {
-        Scaffold(
-            topBar = {
-                CenterAlignedTopAppBar(
-                    title = {
-                        OutlinedTextField(
-                            value = searchQuery,
-                            onValueChange = { searchQuery = it },
-                            placeholder = { Text("Rechercher un scénario...") },
-                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Rechercher") },
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                            singleLine = true,
-                            shape = RoundedCornerShape(24.dp)
-                        )
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
-                        }
-                    },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
-                )
-            },
-            snackbarHost = { SnackbarHost(snackbarHostState) },
-            containerColor = androidx.compose.ui.graphics.Color.Transparent,
-            floatingActionButton = {
-                FloatingActionButton(onClick = { onOpenScenarioEditor(null) }) {
-                    Icon(Icons.Default.Add, contentDescription = "Nouveau scénario")
-                }
+    Scaffold(
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        placeholder = { Text("Rechercher un scénario...") },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Rechercher") },
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        singleLine = true,
+                        shape = RoundedCornerShape(24.dp)
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
+                    }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
+            )
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        containerColor = androidx.compose.ui.graphics.Color.Transparent,
+        floatingActionButton = {
+            FloatingActionButton(onClick = { onOpenScenarioEditor(null) }) {
+                Icon(Icons.Default.Add, contentDescription = "Nouveau scénario")
             }
-        ) { innerPadding ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .padding(16.dp)
-            ) {
-                if (scenarios.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                "Aucun scénario pour $worldName.",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.bodyLarge
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Button(onClick = { onOpenScenarioEditor(null) }) {
-                                Text("Créer un scénario")
-                            }
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(16.dp)
+        ) {
+            if (scenarios.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            "Aucun scénario pour $worldName.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(onClick = { onOpenScenarioEditor(null) }) {
+                            Text("Créer un scénario")
                         }
                     }
-                } else if (filtered.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                "Aucun scénario trouvé pour « $searchQuery ».",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.bodyLarge
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Button(onClick = { onOpenScenarioEditor(null) }) {
-                                Text("Créer un scénario")
-                            }
+                }
+            } else if (filtered.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            "Aucun scénario trouvé pour « $searchQuery ».",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(onClick = { onOpenScenarioEditor(null) }) {
+                            Text("Créer un scénario")
                         }
                     }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(filtered, key = { it.id }) { scenario ->
-                            Box(modifier = Modifier.fillMaxWidth()) {
-                                Surface(
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(filtered, key = { it.id }) { scenario ->
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .combinedClickable(
+                                        onClick = {
+                                            GameState.setLastScenarioId(scenario.id)
+                                            onBack()
+                                        },
+                                        onLongClick = { scenarioMenuForId = scenario.id }
+                                    ),
+                                shape = RoundedCornerShape(16.dp),
+                                color = MaterialTheme.colorScheme.surface,
+                                tonalElevation = 1.dp
+                            ) {
+                                Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .combinedClickable(
-                                            onClick = {
-                                                GameState.setLastScenarioId(scenario.id)
-                                                onBack()
-                                            },
-                                            onLongClick = { scenarioMenuForId = scenario.id }
-                                        ),
-                                    shape = RoundedCornerShape(16.dp),
-                                    color = MaterialTheme.colorScheme.surface,
-                                    tonalElevation = 1.dp
+                                        .padding(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(16.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Text(
-                                            text = scenario.title,
-                                            style = MaterialTheme.typography.bodyLarge,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                    }
-                                }
-                                DropdownMenu(
-                                    expanded = scenarioMenuForId == scenario.id,
-                                    onDismissRequest = { scenarioMenuForId = null }
-                                ) {
-                                    DropdownMenuItem(
-                                        text = { Text("Lire") },
-                                        onClick = {
-                                            scenarioMenuForId = null
-                                            GameState.setLastScenarioId(scenario.id)
-                                            onOpenScenarioReader(scenario.id)
-                                        },
-                                        leadingIcon = { Icon(Icons.Default.PlayArrow, contentDescription = null) }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Modifier") },
-                                        onClick = {
-                                            scenarioMenuForId = null
-                                            onOpenScenarioEditor(scenario.id)
-                                        },
-                                        leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Supprimer") },
-                                        onClick = {
-                                            scenarioMenuForId = null
-                                            scenarioToDelete = scenario
-                                        },
-                                        leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) }
+                                    Text(
+                                        text = scenario.title,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.SemiBold
                                     )
                                 }
+                            }
+                            DropdownMenu(
+                                expanded = scenarioMenuForId == scenario.id,
+                                onDismissRequest = { scenarioMenuForId = null }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Lire") },
+                                    onClick = {
+                                        scenarioMenuForId = null
+                                        GameState.setLastScenarioId(scenario.id)
+                                        onOpenScenarioReader(scenario.id)
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.PlayArrow, contentDescription = null) }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Modifier") },
+                                    onClick = {
+                                        scenarioMenuForId = null
+                                        onOpenScenarioEditor(scenario.id)
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Supprimer") },
+                                    onClick = {
+                                        scenarioMenuForId = null
+                                        scenarioToDelete = scenario
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) }
+                                )
                             }
                         }
                     }

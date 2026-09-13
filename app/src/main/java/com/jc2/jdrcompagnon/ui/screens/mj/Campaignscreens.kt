@@ -19,7 +19,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.WorldState
-import com.jc2.jdrcompagnon.ui.components.WorldBackground
 
 // ─────────────────────────────────────────────────────────────
 // Gestion des campagnes : liste (CampaignListScreen) + édition
@@ -44,47 +43,45 @@ fun CampaignListScreen(
     var campaignToDelete by remember { mutableStateOf<GameState.MjCampaign?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
 
-    WorldBackground {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = { Text("Campagnes", fontWeight = FontWeight.Bold) },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-                )
-            },
-            floatingActionButton = {
-                FloatingActionButton(onClick = { onOpenCampaignEditor(null) }) {
-                    Icon(Icons.Default.Add, contentDescription = "Nouvelle campagne")
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Campagnes", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+            )
+        },
+        floatingActionButton = {
+            FloatingActionButton(onClick = { onOpenCampaignEditor(null) }) {
+                Icon(Icons.Default.Add, contentDescription = "Nouvelle campagne")
+            }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        containerColor = Color.Transparent
+    ) { innerPadding ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(innerPadding),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            if (worldCampaigns.isEmpty()) {
+                item {
+                    EmptyCampaignState()
                 }
-            },
-            snackbarHost = { SnackbarHost(snackbarHostState) },
-            containerColor = Color.Transparent
-        ) { innerPadding ->
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(innerPadding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                if (worldCampaigns.isEmpty()) {
-                    item {
-                        EmptyCampaignState()
-                    }
-                } else {
-                    items(worldCampaigns, key = { it.id }) { campaign ->
-                        CampaignListItem(
-                            campaign = campaign,
-                            onClick = { onOpenCampaignEditor(campaign.id) },
-                            onMenuClick = { campaignMenuId = campaign.id },
-                            menuExpanded = campaignMenuId == campaign.id,
-                            onDismissMenu = { campaignMenuId = null },
-                            onDelete = { campaignToDelete = campaign }
-                        )
-                    }
+            } else {
+                items(worldCampaigns, key = { it.id }) { campaign ->
+                    CampaignListItem(
+                        campaign = campaign,
+                        onClick = { onOpenCampaignEditor(campaign.id) },
+                        onMenuClick = { campaignMenuId = campaign.id },
+                        menuExpanded = campaignMenuId == campaign.id,
+                        onDismissMenu = { campaignMenuId = null },
+                        onDelete = { campaignToDelete = campaign }
+                    )
                 }
             }
         }
@@ -241,164 +238,162 @@ fun CampaignEditorScreen(
     val isTitleError = hasAttemptedSave && title.isBlank()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    WorldBackground {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = { Text(if (campaignId == null) "Nouvelle campagne" else "Éditer la campagne", fontWeight = FontWeight.Bold) },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(if (campaignId == null) "Nouvelle campagne" else "Éditer la campagne", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
+                    }
+                },
+                actions = {
+                    TextButton(
+                        onClick = {
+                            hasAttemptedSave = true
+                            if (title.isBlank()) return@TextButton
+                            val updated = existing?.copy(
+                                title = title,
+                                scenarioIds = attachedIds,
+                                checklistItems = checklist
+                            ) ?: GameState.CampaignData(
+                                title = title,
+                                worldId = currentWorldId ?: "",
+                                scenarioIds = attachedIds,
+                                checklistItems = checklist
+                            ).toMjCampaign()
+                            if (existing != null) GameState.updateMjCampaign(updated)
+                            else GameState.addMjCampaign(updated)
+                            onBack()
                         }
-                    },
-                    actions = {
-                        TextButton(
-                            onClick = {
-                                hasAttemptedSave = true
-                                if (title.isBlank()) return@TextButton
-                                val updated = existing?.copy(
-                                    title = title,
-                                    scenarioIds = attachedIds,
-                                    checklistItems = checklist
-                                ) ?: GameState.CampaignData(
-                                    title = title,
-                                    worldId = currentWorldId ?: "",
-                                    scenarioIds = attachedIds,
-                                    checklistItems = checklist
-                                ).toMjCampaign()
-                                if (existing != null) GameState.updateMjCampaign(updated)
-                                else GameState.addMjCampaign(updated)
-                                onBack()
-                            }
-                        ) {
-                            Text("Enregistrer")
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-                )
-            },
-            snackbarHost = { SnackbarHost(snackbarHostState) },
-            containerColor = Color.Transparent
-        ) { innerPadding ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .padding(horizontal = 16.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Text("Enregistrer")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+            )
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        containerColor = Color.Transparent
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = title,
+                onValueChange = { title = it; hasAttemptedSave = false },
+                label = { Text("Titre de la campagne *") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                isError = isTitleError,
+                supportingText = {
+                    if (isTitleError) {
+                        Text("Le titre est obligatoire", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            )
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.large
             ) {
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it; hasAttemptedSave = false },
-                    label = { Text("Titre de la campagne *") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    isError = isTitleError,
-                    supportingText = {
-                        if (isTitleError) {
-                            Text("Le titre est obligatoire", color = MaterialTheme.colorScheme.error)
-                        }
-                    }
-                )
-
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.large
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Scénarios attachés", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        if (attachedIds.isEmpty()) {
-                            Text(
-                                "Aucun scénario attaché.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        } else {
-                            attachedIds.forEach { id ->
-                                val scenario = worldScenarios.find { it.id == id }
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(
-                                        scenario?.title ?: "Scénario inconnu",
-                                        modifier = Modifier.weight(1f),
-                                        maxLines = 1
-                                    )
-                                    IconButton(onClick = { attachedIds = attachedIds - id }) {
-                                        Icon(Icons.Default.Close, contentDescription = "Détacher")
-                                    }
-                                }
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedButton(
-                            onClick = { showAttachDialog = true },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Attacher un scénario")
-                        }
-                    }
-                }
-
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.large
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Fiche de suivi", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        if (checklist.isEmpty()) {
-                            Text(
-                                "Aucun objectif. Ajoutez des éléments à cocher pour suivre la campagne.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        } else {
-                            checklist.forEachIndexed { index, item ->
-                                ChecklistItemRow(
-                                    item = item,
-                                    onCheckedChange = { checked ->
-                                        checklist = checklist.mapIndexed { i, it ->
-                                            if (i == index) it.copy(checked = checked) else it
-                                        }
-                                    },
-                                    onLabelChange = { value ->
-                                        checklist = checklist.mapIndexed { i, it ->
-                                            if (i == index) it.copy(label = value) else it
-                                        }
-                                    },
-                                    onDelete = {
-                                        checklist = checklist.filterIndexed { i, _ -> i != index }
-                                    }
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Scénarios attachés", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    if (attachedIds.isEmpty()) {
+                        Text(
+                            "Aucun scénario attaché.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        attachedIds.forEach { id ->
+                            val scenario = worldScenarios.find { it.id == id }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    scenario?.title ?: "Scénario inconnu",
+                                    modifier = Modifier.weight(1f),
+                                    maxLines = 1
                                 )
-                                if (index < checklist.lastIndex) {
-                                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                                IconButton(onClick = { attachedIds = attachedIds - id }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Détacher")
                                 }
                             }
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedButton(
-                            onClick = {
-                                checklist = checklist + GameState.CampaignChecklistItem(label = "")
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Ajouter un suivi")
-                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = { showAttachDialog = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Attacher un scénario")
                     }
                 }
-
-                Spacer(modifier = Modifier.height(32.dp))
             }
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.large
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Fiche de suivi", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    if (checklist.isEmpty()) {
+                        Text(
+                            "Aucun objectif. Ajoutez des éléments à cocher pour suivre la campagne.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        checklist.forEachIndexed { index, item ->
+                            ChecklistItemRow(
+                                item = item,
+                                onCheckedChange = { checked ->
+                                    checklist = checklist.mapIndexed { i, it ->
+                                        if (i == index) it.copy(checked = checked) else it
+                                    }
+                                },
+                                onLabelChange = { value ->
+                                    checklist = checklist.mapIndexed { i, it ->
+                                        if (i == index) it.copy(label = value) else it
+                                    }
+                                },
+                                onDelete = {
+                                    checklist = checklist.filterIndexed { i, _ -> i != index }
+                                }
+                            )
+                            if (index < checklist.lastIndex) {
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = {
+                            checklist = checklist + GameState.CampaignChecklistItem(label = "")
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Ajouter un suivi")
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 

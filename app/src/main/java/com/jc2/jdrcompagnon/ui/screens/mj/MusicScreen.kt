@@ -22,7 +22,6 @@ import com.jc2.jdrcompagnon.ui.MusicManager
 import com.jc2.jdrcompagnon.ui.MusicSettings
 import com.jc2.jdrcompagnon.ui.WorldState
 import com.jc2.jdrcompagnon.ui.availableLoopTracks
-import com.jc2.jdrcompagnon.ui.components.WorldBackground
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -52,129 +51,127 @@ fun MusicScreen(
     val isPlaying by MusicManager.isPlaying.collectAsState()
     var selectedTrack by remember { mutableStateOf(currentTrack ?: musicTracks.first().displayName) }
 
-    WorldBackground {
-        Scaffold(
-            topBar = {
-                CenterAlignedTopAppBar(
-                    title = { Text("Musique", fontWeight = FontWeight.Bold) },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
+    Scaffold(
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text("Musique", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
+                    }
+                },
+                actions = {
+                    if (currentTrack != null) {
+                        IconButton(onClick = { if (isPlaying) MusicManager.pause() else MusicManager.resume() }) {
+                            Icon(
+                                if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = if (isPlaying) "Pause" else "Lecture"
+                            )
                         }
-                    },
-                    actions = {
-                        if (currentTrack != null) {
-                            IconButton(onClick = { if (isPlaying) MusicManager.pause() else MusicManager.resume() }) {
-                                Icon(
-                                    if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                    contentDescription = if (isPlaying) "Pause" else "Lecture"
-                                )
-                            }
-                            IconButton(onClick = { MusicManager.stop() }) {
-                                Icon(Icons.Default.Stop, contentDescription = "Arrêter la musique")
-                            }
+                        IconButton(onClick = { MusicManager.stop() }) {
+                            Icon(Icons.Default.Stop, contentDescription = "Arrêter la musique")
                         }
-                    },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
-                )
-            },
-            snackbarHost = { SnackbarHost(snackbarHostState) },
-            containerColor = Color.Transparent
-        ) { innerPadding ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .padding(16.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = "Réglages",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                    }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
+            )
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        containerColor = Color.Transparent
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "Réglages",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
 
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Volume", fontWeight = FontWeight.Bold)
-                            Text("${(volume * 100).roundToInt()} %")
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Volume", fontWeight = FontWeight.Bold)
+                        Text("${(volume * 100).roundToInt()} %")
+                    }
+                    Slider(
+                        value = volume,
+                        onValueChange = { volume = it
+                            MusicManager.setVolume(it)
+                        },
+                        valueRange = 0f..1f
+                    )
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                        OutlinedButton(onClick = { MusicManager.pause() }) {
+                            Icon(Icons.Default.Pause, null)
+                            Spacer(Modifier.width(4.dp))
+                            Text("Pause")
                         }
-                        Slider(
-                            value = volume,
-                            onValueChange = { volume = it
-                                MusicManager.setVolume(it)
-                            },
-                            valueRange = 0f..1f
-                        )
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                            OutlinedButton(onClick = { MusicManager.pause() }) {
-                                Icon(Icons.Default.Pause, null)
-                                Spacer(Modifier.width(4.dp))
-                                Text("Pause")
-                            }
-                            OutlinedButton(onClick = { MusicManager.stop() }) {
-                                Icon(Icons.Default.Stop, null)
-                                Spacer(Modifier.width(4.dp))
-                                Text("Stop")
-                            }
+                        OutlinedButton(onClick = { MusicManager.stop() }) {
+                            Icon(Icons.Default.Stop, null)
+                            Spacer(Modifier.width(4.dp))
+                            Text("Stop")
                         }
                     }
                 }
+            }
 
-                Text(
-                    text = "Playlists d'ambiance",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
+            Text(
+                text = "Playlists d'ambiance",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
 
-                musicTracks.forEach { track ->
-                    val selected = selectedTrack == track.displayName
-                    val active = currentTrack == track.displayName && isPlaying
-                    Surface(
-                        onClick = {
-                            selectedTrack = track.displayName
-                            if (active) {
-                                MusicManager.pause()
-                            } else {
-                                MusicManager.play(context, track.resId, track.displayName)
-                                MusicManager.setVolume(volume)
-                            }
-                            GameState.saveMusicSettings(musicSettings.copy(lastTrackName = track.displayName))
-                        },
-                        shape = RoundedCornerShape(16.dp),
-                        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-                        modifier = Modifier.fillMaxWidth()
+            musicTracks.forEach { track ->
+                val selected = selectedTrack == track.displayName
+                val active = currentTrack == track.displayName && isPlaying
+                Surface(
+                    onClick = {
+                        selectedTrack = track.displayName
+                        if (active) {
+                            MusicManager.pause()
+                        } else {
+                            MusicManager.play(context, track.resId, track.displayName)
+                            MusicManager.setVolume(volume)
+                        }
+                        GameState.saveMusicSettings(musicSettings.copy(lastTrackName = track.displayName))
+                    },
+                    shape = RoundedCornerShape(16.dp),
+                    color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (active) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = null,
-                                tint = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary
-                            )
+                        Icon(
+                            imageVector = if (active) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            tint = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = track.displayName,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (active) {
                             Text(
-                                text = track.displayName,
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                                color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.weight(1f)
+                                text = "LECTURE",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
                             )
-                            if (active) {
-                                Text(
-                                    text = "LECTURE",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
                         }
                     }
                 }

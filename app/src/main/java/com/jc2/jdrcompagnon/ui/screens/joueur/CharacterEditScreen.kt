@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.jc2.jdrcompagnon.ui.Character
+import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.ProficiencyLevel
 import com.jc2.jdrcompagnon.ui.theme.MysticPurple
 import com.jc2.jdrcompagnon.ui.theme.RadiantCyan
@@ -50,7 +51,7 @@ fun CharacterEditScreen(
 ) {
     var editedCharacter by remember { mutableStateOf(character) }
     var selectedTabIndex by rememberSaveable { mutableIntStateOf(0) }
-    
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -91,9 +92,9 @@ fun CharacterEditScreen(
                     )
                 }
             }
-            
+
             Spacer(modifier = Modifier.height(24.dp))
-            
+
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -115,7 +116,7 @@ fun CharacterEditScreen(
 private fun CompetenceTab(character: Character, onUpdate: (Character) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
         EditSectionTitle("CARACTÉRISTIQUES")
-        
+
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AbilityScoreField("FOR", character.strength, Modifier.weight(1f)) { onUpdate(character.copy(strength = it)) }
             AbilityScoreField("DEX", character.dexterity, Modifier.weight(1f)) { onUpdate(character.copy(dexterity = it)) }
@@ -151,14 +152,22 @@ private fun CompetenceTab(character: Character, onUpdate: (Character) -> Unit) {
 private fun CombatTab(character: Character, onUpdate: (Character) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
         EditSectionTitle("STATISTIQUES DE SURVIE")
-        
+
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             StatEditField("PV MAX", character.maxHitPoints.toString(), Modifier.weight(1f)) { onUpdate(character.copy(maxHitPoints = it.toIntOrNull() ?: character.maxHitPoints)) }
             StatEditField("PV ACTUELS", character.currentHitPoints.toString(), Modifier.weight(1f)) { onUpdate(character.copy(currentHitPoints = it.toIntOrNull() ?: character.currentHitPoints)) }
         }
-        
+
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatEditField("CA", character.armorClass.toString(), Modifier.weight(1f)) { onUpdate(character.copy(armorClass = it.toIntOrNull() ?: character.armorClass)) }
+            val acBreakdown = GameState.armorClassBreakdown(character)
+            ComputedStatField(
+                label = "CA",
+                value = acBreakdown.total.toString(),
+                detail = acBreakdown.armorName?.let { name ->
+                    if (acBreakdown.hasShield) "$name + bouclier" else name
+                },
+                modifier = Modifier.weight(1f)
+            )
             StatEditField("INIT", character.initiative.toString(), Modifier.weight(1f)) { onUpdate(character.copy(initiative = it.toIntOrNull() ?: character.initiative)) }
             StatEditField("VIT", character.speed.toString(), Modifier.weight(1f)) { onUpdate(character.copy(speed = it.toIntOrNull() ?: character.speed)) }
         }
@@ -185,17 +194,17 @@ private fun CombatTab(character: Character, onUpdate: (Character) -> Unit) {
 @Composable
 private fun InventoryTab(character: Character, onUpdate: (Character) -> Unit) {
     var newItemName by remember { mutableStateOf("") }
-    
+
     // Drag & Drop State
     var draggedItem by remember { mutableStateOf<Pair<String, Boolean>?>(null) } // Nom + isFromBackpack
     var dragOffset by remember { mutableStateOf(Offset.Zero) }
     var backpackBounds by remember { mutableStateOf(Rect.Zero) }
     var equippedBounds by remember { mutableStateOf(Rect.Zero) }
-    
+
     Box(modifier = Modifier.fillMaxSize()) {
         Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
             EditSectionTitle("GESTION DES OBJETS")
-            
+
             // Ajout d'objet
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -255,7 +264,7 @@ private fun InventoryTab(character: Character, onUpdate: (Character) -> Unit) {
                     onDragStart = { item -> draggedItem = item to false }
                 )
             }
-            
+
             Text(
                 "Appuyez longuement sur un objet pour le faire glisser vers l'autre zone.",
                 style = MaterialTheme.typography.bodySmall,
@@ -329,7 +338,7 @@ private fun InventoryZone(
             Spacer(modifier = Modifier.width(8.dp))
             Text(title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black)
         }
-        
+
         Surface(
             modifier = Modifier.fillMaxSize(),
             shape = RoundedCornerShape(20.dp),
@@ -368,8 +377,8 @@ private fun InventoryZone(
 
 @Composable
 private fun ItemCard(
-    name: String, 
-    onDelete: () -> Unit, 
+    name: String,
+    onDelete: () -> Unit,
     isDragging: Boolean = false
 ) {
     Surface(
@@ -416,12 +425,12 @@ private fun HistoryTab(character: Character, onUpdate: (Character) -> Unit) {
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp)
         )
-        
+
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             StatEditField("RACE", character.race, Modifier.weight(1f)) { onUpdate(character.copy(race = it)) }
             StatEditField("CLASSE", character.characterClass, Modifier.weight(1f)) { onUpdate(character.copy(characterClass = it)) }
         }
-        
+
         EditSectionTitle("HISTOIRE & ORIGINES")
         OutlinedTextField(
             value = character.background,
@@ -474,6 +483,26 @@ private fun StatEditField(label: String, value: String, modifier: Modifier = Mod
     )
 }
 
+/**
+ * Champ en lecture seule pour les stats dérivées de l'équipement (ex. CA),
+ * calculées via [GameState.armorClassBreakdown] (source unique de vérité :
+ * [com.jc2.jdrcompagnon.ui.ArmorRules]). Non éditable pour éviter toute
+ * désynchronisation avec la fiche de personnage.
+ */
+@Composable
+private fun ComputedStatField(label: String, value: String, detail: String? = null, modifier: Modifier = Modifier) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = {},
+        readOnly = true,
+        label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+        supportingText = detail?.let { { Text(it, style = MaterialTheme.typography.labelSmall) } },
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        singleLine = detail == null
+    )
+}
+
 @Composable
 private fun ProficiencyToggle(label: String, level: ProficiencyLevel, modifier: Modifier = Modifier, onToggle: (ProficiencyLevel) -> Unit) {
     val color = when(level) {
@@ -481,7 +510,7 @@ private fun ProficiencyToggle(label: String, level: ProficiencyLevel, modifier: 
         ProficiencyLevel.PROFICIENT -> MysticPurple
         ProficiencyLevel.EXPERTISE -> RadiantCyan
     }
-    
+
     Surface(
         onClick = {
             val next = when(level) {

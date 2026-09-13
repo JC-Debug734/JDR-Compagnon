@@ -4,21 +4,51 @@ import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.googlefonts.Font
+import androidx.compose.ui.text.googlefonts.GoogleFont
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.sp
+import com.jc2.jdrcompagnon.R
 
 /**
  * Complete JDR Compagnon typography scale with all 13 Material 3 type styles.
- * Uses Inter font family (via Google Fonts downloadable fonts) for brand consistency.
- * Falls back to system default if custom font unavailable.
+ *
+ * Polices Google Fonts (downloadable, via [GoogleFont.Provider]) :
+ * - Titres (display/headline) : Playfair Display — identité "fantasy" affirmée.
+ * - Corps de texte (title/body/label) : Inter, avec repli sur Roboto (police
+ *   système par défaut d'Android) si le téléchargement échoue.
  */
 object Type {
 
-    // Font family - using Inter as brand font (clean, readable, professional)
-    // For production: add google-fonts dependency and use FontFamily(Font(GoogleFont("Inter")))
-    // For now: use system default with proper weights
-    private val fontFamily = FontFamily.Default
+    // Fournisseur Google Fonts (Google Play Services Fonts).
+    // Nécessite la dépendance Gradle "androidx.compose.ui:ui-text-google-fonts"
+    // et le tableau de certificats res/values/font_certs.xml — voir note en bas de fichier.
+    private val fontProvider = GoogleFont.Provider(
+        providerAuthority = "com.google.android.gms.fonts",
+        providerPackage = "com.google.android.gms",
+        certificates = R.array.com_google_android_gms_fonts_certs
+    )
+
+    private val playfairDisplayGoogleFont = GoogleFont("Playfair Display")
+    private val interGoogleFont = GoogleFont("Inter")
+
+    /** Police des titres (display, headline). Repli : serif système. */
+    private val titleFontFamily = FontFamily(
+        Font(googleFont = playfairDisplayGoogleFont, fontProvider = fontProvider, weight = FontWeight.Normal),
+        Font(googleFont = playfairDisplayGoogleFont, fontProvider = fontProvider, weight = FontWeight.SemiBold),
+        Font(googleFont = playfairDisplayGoogleFont, fontProvider = fontProvider, weight = FontWeight.Bold),
+        Font(googleFont = playfairDisplayGoogleFont, fontProvider = fontProvider, weight = FontWeight.Black)
+    )
+
+    /** Police du corps de texte (title/body/label). Repli : Roboto système. */
+    private val bodyFontFamily = FontFamily(
+        Font(googleFont = interGoogleFont, fontProvider = fontProvider, weight = FontWeight.Normal),
+        Font(googleFont = interGoogleFont, fontProvider = fontProvider, weight = FontWeight.Medium),
+        Font(googleFont = interGoogleFont, fontProvider = fontProvider, weight = FontWeight.SemiBold),
+        Font(googleFont = interGoogleFont, fontProvider = fontProvider, weight = FontWeight.Bold)
+    )
+
 
     /**
      * Complete typography with all 13 Material 3 styles
@@ -26,7 +56,7 @@ object Type {
     val JdrTypography = Typography(
         // Display styles - for hero/headline content
         displayLarge = TextStyle(
-            fontFamily = fontFamily,
+            fontFamily = titleFontFamily,
             fontWeight = FontWeight.Bold,
             fontSize = 57.sp,
             lineHeight = 64.sp,
@@ -34,7 +64,7 @@ object Type {
             textAlign = TextAlign.Start
         ),
         displayMedium = TextStyle(
-            fontFamily = fontFamily,
+            fontFamily = titleFontFamily,
             fontWeight = FontWeight.Bold,
             fontSize = 45.sp,
             lineHeight = 52.sp,
@@ -42,7 +72,7 @@ object Type {
             textAlign = TextAlign.Start
         ),
         displaySmall = TextStyle(
-            fontFamily = fontFamily,
+            fontFamily = titleFontFamily,
             fontWeight = FontWeight.Bold,
             fontSize = 36.sp,
             lineHeight = 44.sp,
@@ -52,7 +82,7 @@ object Type {
 
         // Headline styles - for section headers
         headlineLarge = TextStyle(
-            fontFamily = fontFamily,
+            fontFamily = titleFontFamily,
             fontWeight = FontWeight.SemiBold,
             fontSize = 32.sp,
             lineHeight = 40.sp,
@@ -60,7 +90,7 @@ object Type {
             textAlign = TextAlign.Start
         ),
         headlineMedium = TextStyle(
-            fontFamily = fontFamily,
+            fontFamily = titleFontFamily,
             fontWeight = FontWeight.SemiBold,
             fontSize = 28.sp,
             lineHeight = 36.sp,
@@ -68,7 +98,7 @@ object Type {
             textAlign = TextAlign.Start
         ),
         headlineSmall = TextStyle(
-            fontFamily = fontFamily,
+            fontFamily = titleFontFamily,
             fontWeight = FontWeight.SemiBold,
             fontSize = 24.sp,
             lineHeight = 32.sp,
@@ -78,7 +108,7 @@ object Type {
 
         // Title styles - for cards, components
         titleLarge = TextStyle(
-            fontFamily = fontFamily,
+            fontFamily = bodyFontFamily,
             fontWeight = FontWeight.SemiBold,
             fontSize = 22.sp,
             lineHeight = 28.sp,
@@ -86,7 +116,7 @@ object Type {
             textAlign = TextAlign.Start
         ),
         titleMedium = TextStyle(
-            fontFamily = fontFamily,
+            fontFamily = bodyFontFamily,
             fontWeight = FontWeight.Medium,
             fontSize = 16.sp,
             lineHeight = 24.sp,
@@ -94,7 +124,7 @@ object Type {
             textAlign = TextAlign.Start
         ),
         titleSmall = TextStyle(
-            fontFamily = fontFamily,
+            fontFamily = bodyFontFamily,
             fontWeight = FontWeight.Medium,
             fontSize = 14.sp,
             lineHeight = 20.sp,
@@ -104,7 +134,7 @@ object Type {
 
         // Body styles - for main content
         bodyLarge = TextStyle(
-            fontFamily = fontFamily,
+            fontFamily = bodyFontFamily,
             fontWeight = FontWeight.Normal,
             fontSize = 16.sp,
             lineHeight = 24.sp,
@@ -112,7 +142,7 @@ object Type {
             textAlign = TextAlign.Start
         ),
         bodyMedium = TextStyle(
-            fontFamily = fontFamily,
+            fontFamily = bodyFontFamily,
             fontWeight = FontWeight.Normal,
             fontSize = 14.sp,
             lineHeight = 20.sp,
@@ -120,7 +150,7 @@ object Type {
             textAlign = TextAlign.Start
         ),
         bodySmall = TextStyle(
-            fontFamily = fontFamily,
+            fontFamily = bodyFontFamily,
             fontWeight = FontWeight.Normal,
             fontSize = 12.sp,
             lineHeight = 16.sp,
@@ -130,7 +160,7 @@ object Type {
 
         // Label styles - for buttons, labels, captions
         labelLarge = TextStyle(
-            fontFamily = fontFamily,
+            fontFamily = bodyFontFamily,
             fontWeight = FontWeight.Medium,
             fontSize = 14.sp,
             lineHeight = 20.sp,
@@ -138,7 +168,7 @@ object Type {
             textAlign = TextAlign.Start
         ),
         labelMedium = TextStyle(
-            fontFamily = fontFamily,
+            fontFamily = bodyFontFamily,
             fontWeight = FontWeight.Medium,
             fontSize = 12.sp,
             lineHeight = 16.sp,
@@ -146,7 +176,7 @@ object Type {
             textAlign = TextAlign.Start
         ),
         labelSmall = TextStyle(
-            fontFamily = fontFamily,
+            fontFamily = bodyFontFamily,
             fontWeight = FontWeight.Medium,
             fontSize = 11.sp,
             lineHeight = 16.sp,
