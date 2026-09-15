@@ -208,7 +208,8 @@ fun JdrNavGraph(overrideStartDestination: String = Route.RoleSelection.path) {
                         GameState.selectCharacter(character.id)
                         navController.navigate("${Route.CharacterSheet.path}/${character.id}?isMj=$isMj")
                     },
-                    onCreateCharacter = { navController.navigate(Route.MjCharacterCreation.path) },
+                    onCreateQuick = { navController.navigate(Route.MjCharacterCreation.path) },
+                    onCreateWizard = { navController.navigate(Route.CharacterCreation.path + "?isMj=true") },
                     isMjMode = isMj,
                     onBack = { navController.popBackStack() }
                 )
@@ -247,19 +248,26 @@ fun JdrNavGraph(overrideStartDestination: String = Route.RoleSelection.path) {
                         },
                         onLevelUp = { GameState.levelUpCharacter(it.id) },
                         onManageSpells = { character ->
-                            navController.navigate(Route.SpellManagement.path.replace("{characterId}", character.id))
+                            navController.navigate(
+                                Route.SpellManagement.path.replace("{characterId}", character.id) + "?isMj=$isMj"
+                            )
                         }
                     )
                 }
             }
 
             composable(
-                route = Route.SpellManagement.path,
-                arguments = listOf(navArgument("characterId") { type = NavType.StringType })
+                route = Route.SpellManagement.path + "?isMj={isMj}",
+                arguments = listOf(
+                    navArgument("characterId") { type = NavType.StringType },
+                    navArgument("isMj") { type = NavType.BoolType; defaultValue = false }
+                )
             ) { backStackEntry ->
                 val characterId = backStackEntry.arguments?.getString("characterId") ?: ""
+                val isMj = backStackEntry.arguments?.getBoolean("isMj") ?: false
                 SpellManagementScreen(
                     characterId = characterId,
+                    isMjMode = isMj,
                     onBack = { navController.popBackStack() }
                 )
             }
@@ -283,9 +291,14 @@ fun JdrNavGraph(overrideStartDestination: String = Route.RoleSelection.path) {
                 }
             }
 
-            composable(Route.CharacterCreation.path) {
+            composable(
+                route = Route.CharacterCreation.path + "?isMj={isMj}",
+                arguments = listOf(navArgument("isMj") { type = NavType.BoolType; defaultValue = false })
+            ) { backStackEntry ->
+                val isMj = backStackEntry.arguments?.getBoolean("isMj") ?: false
                 CharacterCreationScreen(
                     currentWorld = currentWorld,
+                    isMjMode = isMj,
                     onCharacterCreated = { navController.popBackStack() },
                     onBack = { navController.popBackStack() },
                 )

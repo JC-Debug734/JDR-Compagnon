@@ -313,7 +313,15 @@ object GameState {
             val existing = hiddenId?.let { id -> current.firstOrNull { it.id == id } }
 
             if (existing != null) {
-                val updated = existing.copy(title = parsed.first, scenes = parsed.second)
+                // Réutilise les ids de scènes existants par position : parseMarkdownScenario
+                // génère toujours de nouveaux ids aléatoires pour les MjScene reconstruites
+                // depuis le markdown, ce qui rendait la comparaison "changed" systématiquement
+                // vraie (et déclenchait une réécriture à chaque lancement de l'app) même sans
+                // modification réelle du contenu.
+                val mergedScenes = parsed.second.mapIndexed { index, scene ->
+                    existing.scenes.getOrNull(index)?.let { scene.copy(id = it.id) } ?: scene
+                }
+                val updated = existing.copy(title = parsed.first, scenes = mergedScenes)
                 if (updated != existing) {
                     current = current.map { if (it.id == existing.id) updated else it }
                     changed = true
@@ -962,6 +970,32 @@ object GameState {
         return true
     }
 
+    /**
+     * Ajoute un sort (choisi dans la bibliothèque SRD par le MJ) à la liste des sorts
+     * connus d'un personnage. Ne stocke que le nom : école/niveau/description restent
+     * dans le SRD, relus via SrdRepository.getSpellByName au moment de l'affichage.
+     */
+    fun addSpellToCharacter(characterId: String, spellName: String) {
+        val updated = _characters.value.map { character ->
+            if (character.id == characterId && !character.spells.contains(spellName)) {
+                character.copy(spells = character.spells + spellName)
+            } else character
+        }
+        _characters.value = updated
+        saveCharacters(updated)
+    }
+
+    /** Retire un sort de la liste des sorts connus d'un personnage. */
+    fun removeSpellFromCharacter(characterId: String, spellName: String) {
+        val updated = _characters.value.map { character ->
+            if (character.id == characterId) {
+                character.copy(spells = character.spells - spellName)
+            } else character
+        }
+        _characters.value = updated
+        saveCharacters(updated)
+    }
+
     /** Supprime définitivement un item, qu'il soit dans le sac ou équipé (corbeille). */
     fun removeItemCompletely(characterId: String, itemName: String) {
         val target = _characters.value.find { it.id == characterId } ?: return
@@ -1122,6 +1156,126 @@ object GameState {
         val updated = _characters.value.map { character ->
             if (character.id == characterId) {
                 character.copy(hitDiceUsed = (character.hitDiceUsed - amount).coerceIn(0, character.level))
+            } else character
+        }
+        _characters.value = updated
+        saveCharacters(updated)
+    }
+
+    /** Définit directement le nombre de dés de vie déjà dépensés (édition MJ). */
+    fun setHitDiceUsed(characterId: String, used: Int) {
+        val updated = _characters.value.map { character ->
+            if (character.id == characterId) {
+                character.copy(hitDiceUsed = used.coerceIn(0, character.level))
+            } else character
+        }
+        _characters.value = updated
+        saveCharacters(updated)
+    }
+
+    /** Définit directement les PV maximum et actuels d'un personnage (édition MJ). */
+    fun setCharacterHp(characterId: String, currentHitPoints: Int, maxHitPoints: Int) {
+        val updated = _characters.value.map { character ->
+            if (character.id == characterId) {
+                val newMax = maxHitPoints.coerceAtLeast(0)
+                character.copy(
+                    maxHitPoints = newMax,
+                    currentHitPoints = currentHitPoints.coerceIn(0, newMax + character.temporaryHitPoints)
+                )
+            } else character
+        }
+        _characters.value = updated
+        saveCharacters(updated)
+    }
+
+    /** Définit directement la vitesse de déplacement d'un personnage (édition MJ). */
+    fun setCharacterSpeed(characterId: String, speed: Int) {
+        val updated = _characters.value.map { character ->
+            if (character.id == characterId) {
+                character.copy(speed = speed.coerceAtLeast(0))
+            } else character
+        }
+        _characters.value = updated
+        saveCharacters(updated)
+    }
+
+    /** Définit directement la catégorie de taille d'un personnage (édition MJ). Vide = déduite de la race. */
+    fun setCharacterSize(characterId: String, size: String) {
+        val updated = _characters.value.map { character ->
+            if (character.id == characterId) {
+                character.copy(size = size.trim())
+            } else character
+        }
+        _characters.value = updated
+        saveCharacters(updated)
+    }
+
+    /**
+     * Définit directement le montant d'XP d'un personnage (édition MJ) et met à
+     * jour son niveau (et son bonus de maîtrise) en conséquence.
+     */
+    fun setExperience(characterId: String, amount: Int) {
+        val updated = _characters.value.map { character ->
+            if (character.id == characterId) {
+                val newXp = amount.coerceAtLeast(0)
+                val newLevel = CharacterProgression.levelForXp(newXp)
+                character.copy(
+                    experience = newXp,
+                    level = newLevel,
+                    proficiencyBonus = calculateProficiencyBonus(newLevel)
+                )
+            } else character
+        }
+        _characters.value = updated
+        saveCharacters(updated)
+    }
+
+    /** Définit directement la valeur d'une caractéristique (FOR/DEX/CON/INT/SAG/CHA) (édition MJ). */
+    fun setAbilityScore(characterId: String, abilityLabel: String, value: Int) {
+        val clamped = value.coerceIn(1, 30)
+        val updated = _characters.value.map { character ->
+            if (character.id == characterId) {
+                when (abilityLabel) {
+                    "FOR" -> character.copy(strength = clamped)
+                    "DEX" -> character.copy(dexterity = clamped)
+                    "CON" -> character.copy(constitution = clamped)
+                    "INT" -> character.copy(intelligence = clamped)
+                    "SAG" -> character.copy(wisdom = clamped)
+                    "CHA" -> character.copy(charisma = clamped)
+                    else -> character
+                }
+            } else character
+        }
+        _characters.value = updated
+        saveCharacters(updated)
+    }
+
+    /** Active/désactive la maîtrise d'un jet de sauvegarde (ex: "Force", "Dextérité") (édition MJ). */
+    fun toggleSavingThrowProficiency(characterId: String, save: String) {
+        val updated = _characters.value.map { character ->
+            if (character.id == characterId) {
+                val newList = if (character.savingThrowProficiencies.contains(save)) {
+                    character.savingThrowProficiencies - save
+                } else {
+                    character.savingThrowProficiencies + save
+                }
+                character.copy(savingThrowProficiencies = newList)
+            } else character
+        }
+        _characters.value = updated
+        saveCharacters(updated)
+    }
+
+    /** Active/désactive la maîtrise d'une compétence (ex: "Perception") (édition MJ). */
+    fun toggleSkillProficiency(characterId: String, skill: String) {
+        val updated = _characters.value.map { character ->
+            if (character.id == characterId) {
+                val newList = if (character.skillProficiencies.contains(skill)) {
+                    character.skillProficiencies - skill
+                } else {
+                    character.skillProficiencies + skill
+                }
+                character.copy(skillProficiencies = newList)
             } else character
         }
         _characters.value = updated
@@ -1439,16 +1593,27 @@ object GameState {
 
         state.dicePool.forEach { poolEntry ->
             if (isD20Adv && poolEntry.sides == 20) {
+                // On lance bien les 2 d20 et on les garde tous les deux dans les
+                // résultats affichés (isDiscarded marque celui qui n'est pas retenu),
+                // pour que le nombre d'icônes affichées corresponde au nombre de dés
+                // réellement lancés. Seule la valeur retenue compte dans le total.
                 val advRolls = List(2) { (1..poolEntry.sides).random() }
-                val chosenValue = if (state.advantageState == AdvantageState.ADVANTAGE) advRolls.max() else advRolls.min()
-                results.add(
-                    DiceRollResult(
-                        sides = poolEntry.sides,
-                        value = chosenValue,
-                        isCritical = chosenValue == 20,
-                        advantageState = state.advantageState
+                val keepIndex = if (state.advantageState == AdvantageState.ADVANTAGE) {
+                    if (advRolls[0] >= advRolls[1]) 0 else 1
+                } else {
+                    if (advRolls[0] <= advRolls[1]) 0 else 1
+                }
+                advRolls.forEachIndexed { index, value ->
+                    results.add(
+                        DiceRollResult(
+                            sides = poolEntry.sides,
+                            value = value,
+                            isCritical = value == 20,
+                            advantageState = state.advantageState,
+                            isDiscarded = index != keepIndex
+                        )
                     )
-                )
+                }
                 val extra = poolEntry.count - 2
                 if (extra > 0) {
                     repeat(extra) {
@@ -1464,8 +1629,8 @@ object GameState {
             }
         }
 
-        // Appliquer le modificateur au total
-        val baseTotal = results.sumOf { it.value }
+        // Appliquer le modificateur au total (le d20 écarté ne compte pas)
+        val baseTotal = results.filterNot { it.isDiscarded }.sumOf { it.value }
         val total = baseTotal + state.modifier
 
         val newState = state.copy(
@@ -1686,6 +1851,7 @@ data class Character(
     val temporaryHitPoints: Int = 0,
     val armorClass: Int = 10,
     val speed: Int = 30,
+    val size: String = "", // Catégorie de taille (ex: "Petite", "Moyenne") ; vide = déduite de la race via sizeForRace
     val initiative: Int = 10,
     val initiativeBonus: Int = 0,
     val proficiencyBonus: Int = 2,
@@ -1699,6 +1865,10 @@ data class Character(
     val backpackItems: List<String> = emptyList(),
     val equippedItems: List<String> = emptyList(),
     val equippedSlots: Map<EquipmentSlot, String> = emptyMap(),
+    // Sorts connus/préparés, référencés par leur nom exact dans la bibliothèque SRD
+    // (SrdRepository.getSpellByName) — pas de duplication des détails (école, niveau,
+    // description) sur le personnage, ils sont relus depuis le SRD à l'affichage.
+    val spells: List<String> = emptyList(),
     val weapons: List<String> = emptyList(),
     val armor: List<String> = emptyList(),
     val traits: String = "",
@@ -1762,7 +1932,9 @@ data class DiceRollResult(
     val sides: Int,
     val value: Int,
     val isCritical: Boolean = false,
-    val advantageState: AdvantageState = AdvantageState.NORMAL
+    val advantageState: AdvantageState = AdvantageState.NORMAL,
+    // true pour le d20 non retenu d'un jet avantage/désavantage (affiché mais exclu du total)
+    val isDiscarded: Boolean = false
 )
 
 /**

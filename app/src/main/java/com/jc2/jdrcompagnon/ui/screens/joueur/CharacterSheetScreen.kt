@@ -34,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Menu
@@ -43,8 +44,6 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
-import androidx.compose.material3.Button
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.Checkbox
@@ -158,6 +157,11 @@ fun CharacterSheetScreen(
                                 Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = "Gérer les sorts", tint = SheetTextPrimary)
                             }
                         }
+                        if (isMjMode && onEdit != null) {
+                            IconButton(onClick = { onEdit(currentCharacter) }) {
+                                Icon(Icons.Default.Edit, contentDescription = "Modifier", tint = SheetTextPrimary)
+                            }
+                        }
                         if (isMjMode) {
                             IconButton(onClick = { showDeleteDialog = true }) {
                                 Icon(Icons.Default.Delete, contentDescription = "Supprimer", tint = MaterialTheme.colorScheme.error)
@@ -183,7 +187,7 @@ fun CharacterSheetScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // Carte d'en-tête commune, présente sur les 4 onglets
-                CharacterStatsHeader(currentCharacter)
+                CharacterStatsHeader(currentCharacter, isMjMode)
 
                 // Tab selector, sous la carte d'en-tête
                 Surface(
@@ -292,10 +296,6 @@ private fun LevelBar(level: Int, experience: Int) {
 @Composable
 private fun OverviewTab(character: Character, isMjMode: Boolean) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        if (isMjMode) {
-            ExperienceGrantCard(character)
-        }
-
         SheetCard {
             Text(
                 "Caractéristiques",
@@ -304,7 +304,7 @@ private fun OverviewTab(character: Character, isMjMode: Boolean) {
                 color = SheetTextPrimary
             )
             Spacer(modifier = Modifier.height(12.dp))
-            AbilitiesGrid(character)
+            AbilitiesGrid(character, isMjMode)
         }
 
         SavingThrowsOverviewCard(character)
@@ -321,60 +321,11 @@ private fun OverviewTab(character: Character, isMjMode: Boolean) {
                     label = "$skill (${skillAbilityAbbreviation(skill)})",
                     level = level,
                     modifier = GameState.abilityModifierForSkill(skill, character),
-                    proficiencyBonus = character.proficiencyBonus
+                    proficiencyBonus = character.proficiencyBonus,
+                    onClick = if (isMjMode) {
+                        { GameState.toggleSkillProficiency(character.id, skill) }
+                    } else null
                 )
-            }
-        }
-    }
-}
-
-/**
- * Carte MJ pour attribuer de l'XP à un personnage — affiche le seuil du
- * prochain niveau et applique automatiquement le niveau/bonus de maîtrise
- * correspondant via GameState.addExperience.
- */
-@Composable
-private fun ExperienceGrantCard(character: Character) {
-    var xpToAdd by remember { mutableStateOf("") }
-    val nextThreshold = CharacterProgression.xpForLevel((character.level + 1).coerceAtMost(20))
-
-    SheetCard {
-        Text("Expérience (MJ)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = SheetTextPrimary)
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = if (character.level >= 20) {
-                "${character.experience} XP — niveau maximum atteint"
-            } else {
-                "${character.experience} / $nextThreshold XP avant le niveau ${character.level + 1}"
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = SheetTextSecondary
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            OutlinedTextField(
-                value = xpToAdd,
-                onValueChange = { input -> if (input.all { it.isDigit() }) xpToAdd = input },
-                label = { Text("XP à donner") },
-                modifier = Modifier.weight(1f),
-                singleLine = true,
-                colors = sheetTextFieldColors()
-            )
-            Button(
-                onClick = {
-                    val amount = xpToAdd.toIntOrNull()
-                    if (amount != null && amount > 0) {
-                        GameState.addExperience(character.id, amount)
-                        xpToAdd = ""
-                    }
-                },
-                enabled = xpToAdd.toIntOrNull()?.let { it > 0 } == true
-            ) {
-                Text("Donner")
             }
         }
     }
@@ -398,7 +349,7 @@ private fun skillAbilityAbbreviation(skill: String): String = when (skill) {
  * portrait, points de vie avec barre de progression.
  */
 @Composable
-private fun CharacterStatsHeader(character: Character) {
+private fun CharacterStatsHeader(character: Character, isMjMode: Boolean = false) {
     val init = GameState.abilityModifier(character.dexterity)
     val passivePerception = 10 + GameState.abilityModifierForSkill("Perception", character)
     val hitDieFaces = hitDieForClass(character.characterClass)
@@ -407,6 +358,11 @@ private fun CharacterStatsHeader(character: Character) {
         character.currentHitPoints.toFloat() / character.maxHitPoints.toFloat()
     } else 0f
     var showPortraitPicker by remember { mutableStateOf(false) }
+    var showHpDialog by remember { mutableStateOf(false) }
+    var showHitDiceDialog by remember { mutableStateOf(false) }
+    var showXpDialog by remember { mutableStateOf(false) }
+    var showSpeedDialog by remember { mutableStateOf(false) }
+    var showSizeDialog by remember { mutableStateOf(false) }
     // TODO: `character.heroicInspiration` doit être ajouté au data class Character
     // (Boolean, défaut false) et un GameState.setHeroicInspiration(id, value)
     // doit être créé sur le même modèle que GameState.setCharacterPortrait.
@@ -480,45 +436,64 @@ private fun CharacterStatsHeader(character: Character) {
                     modifier = Modifier.weight(1f),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(
-                        "PV",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = SheetTextSecondary,
-                        letterSpacing = 1.sp
-                    )
-                    Text(
-                        "${character.currentHitPoints}/${character.maxHitPoints}",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = SheetTextPrimary
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    LinearProgressIndicator(
-                        progress = { hpFraction.coerceIn(0f, 1f) },
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier
-                            .fillMaxWidth(0.85f)
-                            .height(4.dp)
-                            .clip(RoundedCornerShape(2.dp)),
-                        color = MaterialTheme.colorScheme.error,
-                        trackColor = SheetBorder
-                    )
-                    Spacer(modifier = Modifier.height(14.dp))
-                    Text(
-                        "DÉ DE VIE",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = SheetTextSecondary,
-                        letterSpacing = 1.sp
-                    )
-                    Text(
-                        "D$hitDieFaces $hitDiceRemaining/${character.level}",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = SheetTextPrimary
-                    )
+                            .let { if (isMjMode) it.clickable { showHpDialog = true } else it }
+                            .padding(4.dp)
+                    ) {
+                        Text(
+                            "PV",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = SheetTextSecondary,
+                            letterSpacing = 1.sp
+                        )
+                        Text(
+                            "${character.currentHitPoints}/${character.maxHitPoints}",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = SheetTextPrimary
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        LinearProgressIndicator(
+                            progress = { hpFraction.coerceIn(0f, 1f) },
+                            modifier = Modifier
+                                .fillMaxWidth(0.85f)
+                                .height(4.dp)
+                                .clip(RoundedCornerShape(2.dp)),
+                            color = MaterialTheme.colorScheme.error,
+                            trackColor = SheetBorder
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .let { if (isMjMode) it.clickable { showHitDiceDialog = true } else it }
+                            .padding(4.dp)
+                    ) {
+                        Text(
+                            "DÉ DE VIE",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = SheetTextSecondary,
+                            letterSpacing = 1.sp
+                        )
+                        Text(
+                            "D$hitDieFaces $hitDiceRemaining/${character.level}",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = SheetTextPrimary
+                        )
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .let { if (isMjMode) it.clickable { showXpDialog = true } else it },
+                contentAlignment = Alignment.Center
+            ) {
                 LevelBar(level = character.level, experience = character.experience)
             }
 
@@ -536,10 +511,12 @@ private fun CharacterStatsHeader(character: Character) {
                 StatBadge(
                     value = "${character.speed}m",
                     label = "VITESSE",
+                    onClick = if (isMjMode) { { showSpeedDialog = true } } else null
                 )
                 StatBadge(
-                    value = sizeForRace(character.race),
+                    value = character.size.ifBlank { sizeForRace(character.race) },
                     label = "TAILLE",
+                    onClick = if (isMjMode) { { showSizeDialog = true } } else null
                 )
                 StatBadge(
                     value = passivePerception.toString(),
@@ -559,6 +536,250 @@ private fun CharacterStatsHeader(character: Character) {
             onDismiss = { showPortraitPicker = false }
         )
     }
+
+    if (showHpDialog) {
+        HpEditDialog(
+            currentHp = character.currentHitPoints,
+            maxHp = character.maxHitPoints,
+            onConfirm = { current, max ->
+                GameState.setCharacterHp(character.id, current, max)
+                showHpDialog = false
+            },
+            onDismiss = { showHpDialog = false }
+        )
+    }
+
+    if (showHitDiceDialog) {
+        HitDiceEditDialog(
+            hitDieFaces = hitDieFaces,
+            level = character.level,
+            hitDiceRemaining = hitDiceRemaining,
+            onConfirm = { remaining ->
+                GameState.setHitDiceUsed(character.id, character.level - remaining)
+                showHitDiceDialog = false
+            },
+            onDismiss = { showHitDiceDialog = false }
+        )
+    }
+
+    if (showXpDialog) {
+        XpEditDialog(
+            currentXp = character.experience,
+            onConfirm = { newXp ->
+                GameState.setExperience(character.id, newXp)
+                showXpDialog = false
+            },
+            onDismiss = { showXpDialog = false }
+        )
+    }
+
+    if (showSpeedDialog) {
+        SpeedEditDialog(
+            currentSpeed = character.speed,
+            onConfirm = { newSpeed ->
+                GameState.setCharacterSpeed(character.id, newSpeed)
+                showSpeedDialog = false
+            },
+            onDismiss = { showSpeedDialog = false }
+        )
+    }
+
+    if (showSizeDialog) {
+        SizeEditDialog(
+            currentSize = character.size.ifBlank { sizeForRace(character.race) },
+            onConfirm = { newSize ->
+                GameState.setCharacterSize(character.id, newSize)
+                showSizeDialog = false
+            },
+            onDismiss = { showSizeDialog = false }
+        )
+    }
+}
+
+@Composable
+private fun HpEditDialog(
+    currentHp: Int,
+    maxHp: Int,
+    onConfirm: (current: Int, max: Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var currentText by remember { mutableStateOf(currentHp.toString()) }
+    var maxText by remember { mutableStateOf(maxHp.toString()) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Modifier les points de vie") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = maxText,
+                    onValueChange = { input -> if (input.all { it.isDigit() }) maxText = input },
+                    label = { Text("PV maximum") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = currentText,
+                    onValueChange = { input -> if (input.all { it.isDigit() }) currentText = input },
+                    label = { Text("PV actuels") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val newMax = maxText.toIntOrNull() ?: maxHp
+                val newCurrent = currentText.toIntOrNull() ?: currentHp
+                onConfirm(newCurrent, newMax)
+            }) { Text("Valider") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Annuler") }
+        }
+    )
+}
+
+@Composable
+private fun HitDiceEditDialog(
+    hitDieFaces: Int,
+    level: Int,
+    hitDiceRemaining: Int,
+    onConfirm: (remaining: Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var remainingText by remember { mutableStateOf(hitDiceRemaining.toString()) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Modifier les dés de vie (D$hitDieFaces)") },
+        text = {
+            OutlinedTextField(
+                value = remainingText,
+                onValueChange = { input -> if (input.all { it.isDigit() }) remainingText = input },
+                label = { Text("Dés restants (sur $level)") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val newRemaining = (remainingText.toIntOrNull() ?: hitDiceRemaining).coerceIn(0, level)
+                onConfirm(newRemaining)
+            }) { Text("Valider") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Annuler") }
+        }
+    )
+}
+
+@Composable
+private fun XpEditDialog(
+    currentXp: Int,
+    onConfirm: (newXp: Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var xpText by remember { mutableStateOf(currentXp.toString()) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Modifier l'expérience") },
+        text = {
+            OutlinedTextField(
+                value = xpText,
+                onValueChange = { input -> if (input.all { it.isDigit() }) xpText = input },
+                label = { Text("XP total") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                onConfirm(xpText.toIntOrNull() ?: currentXp)
+            }) { Text("Valider") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Annuler") }
+        }
+    )
+}
+
+@Composable
+private fun SpeedEditDialog(
+    currentSpeed: Int,
+    onConfirm: (newSpeed: Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var speedText by remember { mutableStateOf(currentSpeed.toString()) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Modifier la vitesse") },
+        text = {
+            OutlinedTextField(
+                value = speedText,
+                onValueChange = { input -> if (input.all { it.isDigit() }) speedText = input },
+                label = { Text("Vitesse (mètres)") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                onConfirm(speedText.toIntOrNull() ?: currentSpeed)
+            }) { Text("Valider") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Annuler") }
+        }
+    )
+}
+
+private val characterSizeOptions = listOf("Très Petite", "Petite", "Moyenne", "Grande", "Très Grande", "Gigantesque")
+
+@Composable
+private fun SizeEditDialog(
+    currentSize: String,
+    onConfirm: (newSize: String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var selected by remember { mutableStateOf(currentSize) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Modifier la taille") },
+        text = {
+            Column {
+                characterSizeOptions.forEach { option ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { selected = option }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(if (selected == option) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                .border(1.dp, SheetTextSecondary, CircleShape)
+                        )
+                        Text(option)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(selected) }) { Text("Valider") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Annuler") }
+        }
+    )
 }
 
 /** Teinte dorée du cadre de portrait — cohérente avec la couleur de l'or (Bourse). */
@@ -695,7 +916,7 @@ private fun sizeForRace(race: String): String = when (race.trim().lowercase(Loca
 }
 
 @Composable
-private fun StatBadge(value: String, label: String) {
+private fun StatBadge(value: String, label: String, onClick: (() -> Unit)? = null) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             modifier = Modifier
@@ -703,6 +924,7 @@ private fun StatBadge(value: String, label: String) {
                 .clip(RoundedCornerShape(12.dp))
                 .background(SheetSurfaceLight)
                 .border(1.dp, SheetTextSecondary.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                .let { if (onClick != null) it.clickable { onClick() } else it }
                 .padding(horizontal = 10.dp, vertical = 4.dp),
             contentAlignment = Alignment.Center
         ) {
@@ -778,7 +1000,7 @@ private fun SavingThrowsOverviewCard(character: Character) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun AbilitiesGrid(character: Character) {
+private fun AbilitiesGrid(character: Character, isMjMode: Boolean = false) {
     val abilities = listOf(
         "FOR" to character.strength,
         "DEX" to character.dexterity,
@@ -787,6 +1009,8 @@ private fun AbilitiesGrid(character: Character) {
         "SAG" to character.wisdom,
         "CHA" to character.charisma
     )
+    var editingAbility by remember { mutableStateOf<String?>(null) }
+
     FlowRow(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
@@ -795,9 +1019,80 @@ private fun AbilitiesGrid(character: Character) {
     ) {
         abilities.forEach { (label, value) ->
             val proficient = character.savingThrowProficiencies.contains(abilitySaveName(label))
-            AbilityCard(label, value, proficient)
+            AbilityCard(
+                label,
+                value,
+                proficient,
+                onClick = if (isMjMode) { { editingAbility = label } } else null
+            )
         }
     }
+
+    val abilityBeingEdited = editingAbility
+    if (abilityBeingEdited != null) {
+        val currentValue = abilities.first { it.first == abilityBeingEdited }.second
+        val saveName = abilitySaveName(abilityBeingEdited)
+        AbilityEditDialog(
+            label = abilityBeingEdited,
+            currentValue = currentValue,
+            proficient = character.savingThrowProficiencies.contains(saveName),
+            onConfirm = { newValue, newProficient ->
+                GameState.setAbilityScore(character.id, abilityBeingEdited, newValue)
+                if (newProficient != character.savingThrowProficiencies.contains(saveName)) {
+                    GameState.toggleSavingThrowProficiency(character.id, saveName)
+                }
+                editingAbility = null
+            },
+            onDismiss = { editingAbility = null }
+        )
+    }
+}
+
+@Composable
+private fun AbilityEditDialog(
+    label: String,
+    currentValue: Int,
+    proficient: Boolean,
+    onConfirm: (Int, Boolean) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var valueText by remember { mutableStateOf(currentValue.toString()) }
+    var proficientChecked by remember { mutableStateOf(proficient) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Modifier $label") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = valueText,
+                    onValueChange = { input -> if (input.all { it.isDigit() }) valueText = input },
+                    label = { Text("Valeur") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { proficientChecked = !proficientChecked }
+                ) {
+                    Checkbox(checked = proficientChecked, onCheckedChange = { proficientChecked = it })
+                    Text("Maîtrise le jet de sauvegarde")
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val newValue = valueText.toIntOrNull() ?: currentValue
+                onConfirm(newValue, proficientChecked)
+            }) { Text("Valider") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Annuler") }
+        }
+    )
 }
 
 /**
@@ -815,11 +1110,13 @@ private fun abilitySaveName(label: String): String = when (label) {
 }
 
 @Composable
-private fun AbilityCard(label: String, value: Int, proficient: Boolean = false) {
+private fun AbilityCard(label: String, value: Int, proficient: Boolean = false, onClick: (() -> Unit)? = null) {
     val modifierValue = GameState.abilityModifier(value)
     Box(modifier = Modifier.width(100.dp)) {
         Surface(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .let { if (onClick != null) it.clickable { onClick() } else it },
             shape = RoundedCornerShape(16.dp),
             color = SheetSurfaceLight,
             border = BorderStroke(1.dp, SheetBorder)
@@ -992,7 +1289,8 @@ private fun ProficiencyRow(
     label: String,
     level: ProficiencyLevel,
     modifier: Int,
-    proficiencyBonus: Int
+    proficiencyBonus: Int,
+    onClick: (() -> Unit)? = null
 ) {
     val (bgColor, labelText) = when (level) {
         ProficiencyLevel.NONE -> SheetSurfaceLight to "—"
@@ -1004,6 +1302,7 @@ private fun ProficiencyRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .background(bgColor)
+            .let { if (onClick != null) it.clickable { onClick() } else it }
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
@@ -1074,6 +1373,14 @@ private fun NotesTab(character: Character, isMjMode: Boolean) {
             Spacer(modifier = Modifier.height(8.dp))
             DetailRow(label = "Alignement", value = character.alignment.ifBlank { "—" })
             DetailRow(label = "Historique", value = character.background.ifBlank { "—" })
+        }
+
+        if (character.traits.isNotBlank()) {
+            SheetCard {
+                Text("Traits & capacités", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = SheetTextPrimary)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(character.traits, style = MaterialTheme.typography.bodyMedium, color = SheetTextPrimary)
+            }
         }
     }
 }

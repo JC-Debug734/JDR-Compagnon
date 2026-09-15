@@ -231,6 +231,12 @@ object NetworkSessionManager {
     private val _playerState = MutableStateFlow(PlayerConnectionState.DISCONNECTED)
     val playerState: StateFlow<PlayerConnectionState> = _playerState.asStateFlow()
 
+    // Dernier message d'erreur de connexion (ex. "Connection timed out",
+    // "Connection refused") pour ne plus laisser le joueur dans le noir
+    // quand la connexion échoue silencieusement en boucle.
+    private val _lastConnectionError = MutableStateFlow<String?>(null)
+    val lastConnectionError: StateFlow<String?> = _lastConnectionError.asStateFlow()
+
     // Personnages du groupe encore disponibles, envoyés par le MJ.
     private val _availableCharacters = MutableStateFlow<List<CharacterSummary>>(emptyList())
     val availableCharacters: StateFlow<List<CharacterSummary>> = _availableCharacters.asStateFlow()
@@ -261,6 +267,7 @@ object NetworkSessionManager {
         reconnectJob?.cancel()
         readJob?.cancel()
         _playerState.value = PlayerConnectionState.CONNECTING
+        _lastConnectionError.value = null
         scope.launch {
             try {
                 val socket = discovery(appContext).connect(server, playerName)
@@ -269,6 +276,7 @@ object NetworkSessionManager {
                 LanConnectionService.ensureStarted(appContext, "Connecté à la partie du MJ")
                 listenUntilDisconnected(appContext, socket, server, playerName)
             } catch (e: Exception) {
+                _lastConnectionError.value = e.message ?: e.javaClass.simpleName
                 scheduleReconnect(appContext, server, playerName, attempt = 1)
             }
         }
@@ -370,13 +378,21 @@ object NetworkSessionManager {
             val delayMs = (2_000L * attempt).coerceAtMost(15_000L)
             delay(delayMs)
             if (manualDisconnect) return@launch
+            // On retente avec la version la plus fraîche connue de ce serveur
+            // (le MJ a pu relancer son serveur entre-temps, ce qui change le
+            // port) plutôt que de rejouer indéfiniment l'IP/port d'origine,
+            // potentiellement périmés — cause probable d'un échec de
+            // reconnexion qui semble ne jamais aboutir.
+            val target = discovery(context).servers.value
+                .find { it.serviceName == server.serviceName } ?: server
             try {
-                val socket = discovery(context).connect(server, playerName)
+                val socket = discovery(context).connect(target, playerName)
                 currentSocket = socket
                 _playerState.value = PlayerConnectionState.CONNECTED
-                listenUntilDisconnected(context, socket, server, playerName)
+                listenUntilDisconnected(context, socket, target, playerName)
             } catch (e: Exception) {
-                scheduleReconnect(context, server, playerName, attempt + 1)
+                _lastConnectionError.value = e.message ?: e.javaClass.simpleName
+                scheduleReconnect(context, target, playerName, attempt + 1)
             }
         }
     }

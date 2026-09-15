@@ -92,54 +92,6 @@ private object MarkdownSectionParser {
     }
 }
 
-/**
- * Parseur dédié à l'index des sorts SRD 5.2.1 (`sorts_srd521.md`). Ce fichier liste les
- * sorts sous forme de tables Markdown groupées par niveau ("## Sorts de niveau 1" puis
- * un tableau "| Sort | École | Spécial | Classes |"), un format différent de l'ancien
- * `spells.md` (un bloc détaillé par sort) attendu par [SpellParser] — ce qui explique
- * un affichage vide si l'on tente de lire ce nouveau fichier avec l'ancien parseur.
- * Chaque ligne de tableau devient ici une [SrdSectionEntry], la catégorie étant le
- * titre de niveau ("Sorts de niveau 1", etc.).
- */
-private object SpellIndexParser {
-
-    fun parse(markdown: String): List<SrdSectionEntry> {
-        val levelHeaders = Regex("(?m)^##\\s+(.+)$").findAll(markdown).toList()
-        if (levelHeaders.isEmpty()) return emptyList()
-        return levelHeaders.flatMapIndexed { index, match ->
-            val level = match.groupValues[1].trim()
-            val start = match.range.first
-            val end = if (index + 1 < levelHeaders.size) levelHeaders[index + 1].range.first else markdown.length
-            val block = markdown.substring(start, end)
-            parseTableRows(block).mapNotNull { columns ->
-                val name = columns.getOrNull(0)?.trim().orEmpty()
-                if (name.isBlank()) return@mapNotNull null
-                val ecole = columns.getOrNull(1)?.trim().orEmpty()
-                val special = columns.getOrNull(2)?.trim().orEmpty()
-                val classes = columns.getOrNull(3)?.trim().orEmpty()
-                val detail = buildString {
-                    if (ecole.isNotBlank()) appendLine("- École : $ecole")
-                    if (special.isNotBlank() && special != "—") appendLine("- Spécial : $special")
-                    if (classes.isNotBlank()) appendLine("- Classes : $classes")
-                }
-                SrdSectionEntry(name = name, category = level, rawMarkdown = detail.trim())
-            }
-        }
-    }
-
-    /**
-     * Extrait les lignes de données d'une table Markdown "| a | b | c |", en ignorant
-     * la ligne d'en-tête et la ligne de séparation ("|---|---|---|").
-     */
-    private fun parseTableRows(block: String): List<List<String>> {
-        val lines = block.lineSequence()
-            .map { it.trim() }
-            .filter { it.startsWith("|") && it.endsWith("|") }
-            .toList()
-        if (lines.size < 2) return emptyList()
-        return lines.drop(2).map { line -> line.trim('|').split("|").map { it.trim() } }
-    }
-}
 
 /**
  * Singleton responsable du chargement, parsing et cache des fichiers SRD markdown.
@@ -159,6 +111,10 @@ private object SpellIndexParser {
 object SrdRepository {
 
     private const val FILE_MONSTERS = "dnd/monsters.md"
+    // Fichier unique pour les sorts (SRD 5.2.1) : un bloc "### Nom" par sort, avec ses
+    // champs (École, Niveau, Classes, Temps d'incantation, Portée, Composantes, Durée)
+    // et sa description — voir [SpellParser]. Sert à la fois au détail d'un sort et à
+    // l'index filtrable par niveau de l'onglet Sorts.
     private const val FILE_SPELLS = "dnd/sorts_srd521.md"
     private const val FILE_GLOSSARY = "dnd/glossary.md"
     private const val FILE_EQUIPMENT = "dnd/equipement_srd521.md"
@@ -171,6 +127,10 @@ object SrdRepository {
     private const val FILE_ESPECES = "dnd/especes_srd521.md"
     private const val FILE_HISTORIQUES = "dnd/historiques_srd521.md"
     private const val FILE_MONTURES_VEHICULES = "dnd/montures_vehicules_srd521.md"
+    // Pas de commentaires <!-- id --> dans ce fichier (juste "### Groupe" + "- Nom"),
+    // d'où un chargement brut ici plutôt qu'un passage par MarkdownSectionParser —
+    // le découpage revient à LangueParser (cf. SrdCreationParsers.kt).
+    private const val FILE_LANGUES = "dnd/langues.md"
 
     private const val NAHEULBEUK_RULES = "naheulbeuk/rules.md"
     private const val NAHEULBEUK_EQUIPMENT = "naheulbeuk/equipment.md"
@@ -184,6 +144,7 @@ object SrdRepository {
     // Cache en mémoire, indexé par identifiant de monde
     private val monstersCache = mutableMapOf<String, List<SrdEntry>>()
     private val spellsCache = mutableMapOf<String, List<SrdEntry>>()
+    private val spellsRawCache = mutableMapOf<String, String>()
     private val rulesCache = mutableMapOf<String, List<RuleSection>>()
     private val glossaryCache = mutableMapOf<String, String>()
     private val equipmentListCache = mutableMapOf<String, List<EquipmentItem>>()
@@ -197,6 +158,7 @@ object SrdRepository {
     private val armesArmuresMagiquesCache = mutableMapOf<String, List<SrdSectionEntry>>()
     private val monturesVehiculesCache = mutableMapOf<String, List<SrdDocSection>>()
     private val spellsIndexCache = mutableMapOf<String, List<SrdSectionEntry>>()
+    private val languesCache = mutableMapOf<String, String>()
 
     /**
      * Indique si le monde dispose d'une bibliothèque consultable.
@@ -218,15 +180,23 @@ object SrdRepository {
         }
 
     /**
-     * Charge la liste des sorts pour le monde donné.
+     * Lit et convertit le fichier `sorts_srd521.md` pour le monde donné, en cache — lu
+     * une seule fois quel que soit le nombre d'appels à [loadSpells]/[loadSpellsIndex].
+     */
+    private fun loadSpellsRaw(context: Context, worldId: String?): String =
+        spellsRawCache.getOrPut(worldId ?: "") {
+            HtmlTableConverter.convertAll(readAsset(context, FILE_SPELLS))
+        }
+
+    /**
+     * Charge la liste détaillée des sorts pour le monde donné, depuis `sorts_srd521.md`
+     * (voir [SpellParser.parse]).
      */
     suspend fun loadSpells(context: Context, worldId: String? = "donjon_et_dragon"): List<SrdEntry> =
         withContext(Dispatchers.IO) {
             if (worldId != "donjon_et_dragon") return@withContext emptyList()
             spellsCache[worldId]?.let { return@withContext it }
-            val rawMarkdown = readAsset(context, FILE_SPELLS)
-            val converted = HtmlTableConverter.convertAll(rawMarkdown)
-            val spells = SpellParser.parse(converted)
+            val spells = SpellParser.parse(loadSpellsRaw(context, worldId))
             spellsCache[worldId] = spells
             spells
         }
@@ -273,17 +243,17 @@ object SrdRepository {
         }
 
     /**
-     * Charge l'index des sorts pour le monde donné (D&D uniquement, SRD 5.2.1), au format
-     * table par niveau (voir [SpellIndexParser]). À utiliser à la place de [loadSpells]
-     * pour afficher `sorts_srd521.md`, qui n'est pas compatible avec [SpellParser]
-     * (conçu pour l'ancien format `spells.md` à un bloc détaillé par sort).
+     * Charge l'index des sorts pour le monde donné (D&D uniquement, SRD 5.2.1), groupé
+     * par niveau ("Sorts mineurs", "Sorts de niveau 1", ...) — utilisé pour la liste
+     * filtrable de l'onglet Sorts. Lit le même fichier `sorts_srd521.md` que [loadSpells]
+     * (voir [loadSpellsRaw]) ; pour le détail complet d'un sort, voir
+     * [loadSpells]/[getSpellByName].
      */
     suspend fun loadSpellsIndex(context: Context, worldId: String? = "donjon_et_dragon"): List<SrdSectionEntry> =
         withContext(Dispatchers.IO) {
             if (worldId != "donjon_et_dragon") return@withContext emptyList()
             spellsIndexCache[worldId]?.let { return@withContext it }
-            val raw = readAsset(context, FILE_SPELLS)
-            val entries = SpellIndexParser.parse(raw)
+            val entries = SpellParser.parseIndex(loadSpellsRaw(context, worldId))
             spellsIndexCache[worldId] = entries
             entries
         }
@@ -328,6 +298,20 @@ object SrdRepository {
             val entries = MarkdownSectionParser.parseFlat(raw, category = "Historique")
             historiquesCache[worldId] = entries
             entries
+        }
+
+    /**
+     * Charge le markdown brut du fichier des langues pour le monde donné
+     * (D&D uniquement, SRD 5.2.1). Pas de parsing ici : voir [LangueParser]
+     * (SrdCreationParsers.kt), qui gère le format "### Groupe" + "- Nom".
+     */
+    suspend fun loadLangues(context: Context, worldId: String? = "donjon_et_dragon"): String =
+        withContext(Dispatchers.IO) {
+            if (worldId != "donjon_et_dragon") return@withContext ""
+            languesCache[worldId]?.let { return@withContext it }
+            val raw = readAsset(context, FILE_LANGUES)
+            languesCache[worldId] = raw
+            raw
         }
 
     /**
@@ -594,6 +578,7 @@ object SrdRepository {
     fun clearCache() {
         monstersCache.clear()
         spellsCache.clear()
+        spellsRawCache.clear()
         rulesCache.clear()
         rulesRawCache.clear()
         glossaryCache.clear()
@@ -606,6 +591,7 @@ object SrdRepository {
         armesArmuresMagiquesCache.clear()
         monturesVehiculesCache.clear()
         spellsIndexCache.clear()
+        languesCache.clear()
     }
 
     /**

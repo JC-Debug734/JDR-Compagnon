@@ -1,9 +1,12 @@
 package com.jc2.jdrcompagnon.ui.screens.joueur
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -28,6 +31,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -38,6 +42,9 @@ import androidx.compose.ui.zIndex
 import com.jc2.jdrcompagnon.ui.Character
 import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.ProficiencyLevel
+import com.jc2.jdrcompagnon.ui.components.SrdLibraryPickerDialog
+import com.jc2.jdrcompagnon.ui.components.SrdPickerEntry
+import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdRepository
 import com.jc2.jdrcompagnon.ui.theme.MysticPurple
 import com.jc2.jdrcompagnon.ui.theme.RadiantCyan
 import kotlin.math.roundToInt
@@ -193,7 +200,8 @@ private fun CombatTab(character: Character, onUpdate: (Character) -> Unit) {
 
 @Composable
 private fun InventoryTab(character: Character, onUpdate: (Character) -> Unit) {
-    var newItemName by remember { mutableStateOf("") }
+    var showLibraryPicker by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     // Drag & Drop State
     var draggedItem by remember { mutableStateOf<Pair<String, Boolean>?>(null) } // Nom + isFromBackpack
@@ -205,31 +213,30 @@ private fun InventoryTab(character: Character, onUpdate: (Character) -> Unit) {
         Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
             EditSectionTitle("GESTION DES OBJETS")
 
-            // Ajout d'objet
-            Row(
+            // Ajout d'objet depuis la bibliothèque SRD (source unique de l'équipement existant)
+            OutlinedButton(
+                onClick = { showLibraryPicker = true },
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
+                shape = RoundedCornerShape(12.dp)
             ) {
-                OutlinedTextField(
-                    value = newItemName,
-                    onValueChange = { newItemName = it },
-                    label = { Text("Nouvel objet") },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp),
-                    singleLine = true
-                )
-                FilledTonalIconButton(
-                    onClick = {
-                        if (newItemName.isNotBlank()) {
-                            onUpdate(character.copy(backpackItems = character.backpackItems + newItemName))
-                            newItemName = ""
-                        }
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Ajouter un objet depuis la bibliothèque")
+            }
+
+            if (showLibraryPicker) {
+                SrdLibraryPickerDialog(
+                    title = "Choisir un objet",
+                    onDismiss = { showLibraryPicker = false },
+                    onSelect = { itemName ->
+                        onUpdate(character.copy(backpackItems = character.backpackItems + itemName))
                     },
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = "Ajouter")
-                }
+                    search = { query ->
+                        val items = SrdRepository.loadEquipmentList(context, character.worldId.ifBlank { "donjon_et_dragon" })
+                        val filtered = if (query.isBlank()) items else items.filter { it.name.contains(query, ignoreCase = true) }
+                        filtered.map { SrdPickerEntry(name = it.name) }
+                    }
+                )
             }
 
             Row(
@@ -381,6 +388,11 @@ private fun ItemCard(
     onDelete: () -> Unit,
     isDragging: Boolean = false
 ) {
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    val slot = remember(name) { equipmentSlotFor(name) }
+    val weightLabel = remember(name) { equipmentWeightLabel(name) }
+    val hands = remember(name) { equipmentHandsRequired(name) }
+
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = (if (isDragging) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface).copy(alpha = if (isDragging) 0.8f else 1f),
@@ -391,31 +403,75 @@ private fun ItemCard(
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Pastille = couleur de l'emplacement (arme, armure, sac...)
+            Box(
+                modifier = Modifier
+                    .size(10.dp)
+                    .background(slot.slotColor(), CircleShape)
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+
             Icon(
                 imageVector = Icons.Default.DragHandle,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
                 modifier = Modifier.size(20.dp)
             )
-            Spacer(modifier = Modifier.width(12.dp))
-            Text(
-                text = name,
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold
-            )
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = if (weightLabel != null) "${slot.slotLabel()} • $weightLabel" else slot.slotLabel(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
+
+            // Icônes de mains requises pour les armes (1 ou 2)
+            if (hands != null) {
+                HandsIcons(hands, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+
             if (!isDragging) {
-                IconButton(onClick = onDelete, modifier = Modifier.size(24.dp)) {
+                IconButton(onClick = { showDeleteConfirm = true }, modifier = Modifier.size(24.dp)) {
                     Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
                 }
             }
         }
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            icon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("Jeter cet objet ?") },
+            text = { Text("« $name » sera définitivement retiré de l'inventaire.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteConfirm = false
+                    onDelete()
+                }) { Text("Jeter", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) { Text("Annuler") }
+            }
+        )
     }
 }
 
 
 @Composable
 private fun HistoryTab(character: Character, onUpdate: (Character) -> Unit) {
+    val context = LocalContext.current
+    var showEspecePicker by remember { mutableStateOf(false) }
+    var showClassePicker by remember { mutableStateOf(false) }
+
     Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
         EditSectionTitle("IDENTITÉ")
         OutlinedTextField(
@@ -426,9 +482,46 @@ private fun HistoryTab(character: Character, onUpdate: (Character) -> Unit) {
             shape = RoundedCornerShape(16.dp)
         )
 
+        // RACE et CLASSE sont désormais choisies dans la bibliothèque SRD (especes_srd521.md /
+        // classes_srd521.md) plutôt que saisies en texte libre, sur le même principe que le
+        // sélecteur d'objets de InventoryTab : source unique de vérité = SrdRepository.
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatEditField("RACE", character.race, Modifier.weight(1f)) { onUpdate(character.copy(race = it)) }
-            StatEditField("CLASSE", character.characterClass, Modifier.weight(1f)) { onUpdate(character.copy(characterClass = it)) }
+            SrdPickerField(
+                label = "RACE",
+                value = character.race,
+                modifier = Modifier.weight(1f),
+                onClick = { showEspecePicker = true }
+            )
+            SrdPickerField(
+                label = "CLASSE",
+                value = character.characterClass,
+                modifier = Modifier.weight(1f),
+                onClick = { showClassePicker = true }
+            )
+        }
+
+        if (showEspecePicker) {
+            SrdLibraryPickerDialog(
+                title = "Choisir une espèce",
+                onDismiss = { showEspecePicker = false },
+                onSelect = { name -> onUpdate(character.copy(race = name)) },
+                search = { query ->
+                    SrdRepository.searchEspeces(context, query, character.worldId.ifBlank { "donjon_et_dragon" })
+                        .map { SrdPickerEntry(name = it.name) }
+                }
+            )
+        }
+
+        if (showClassePicker) {
+            SrdLibraryPickerDialog(
+                title = "Choisir une classe",
+                onDismiss = { showClassePicker = false },
+                onSelect = { name -> onUpdate(character.copy(characterClass = name)) },
+                search = { query ->
+                    SrdRepository.searchClasses(context, query, character.worldId.ifBlank { "donjon_et_dragon" })
+                        .map { SrdPickerEntry(name = it.name) }
+                }
+            )
         }
 
         EditSectionTitle("HISTOIRE & ORIGINES")
@@ -441,6 +534,32 @@ private fun HistoryTab(character: Character, onUpdate: (Character) -> Unit) {
         )
     }
 }
+
+/**
+ * Champ non éditable au clavier : affiche la valeur choisie et ouvre le sélecteur
+ * de bibliothèque SRD au tap, comme le bouton "Ajouter un objet" de InventoryTab
+ * mais dans un champ compact adapté à RACE/CLASSE.
+ */
+@Composable
+private fun SrdPickerField(label: String, value: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = {},
+        readOnly = true,
+        label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+        placeholder = { Text("Choisir…") },
+        modifier = modifier.clickableNoRipple(onClick),
+        shape = RoundedCornerShape(16.dp),
+        singleLine = true
+    )
+}
+
+/**
+ * Un OutlinedTextField readOnly n'intercepte pas les taps par défaut ; ce modifier
+ * ouvre le sélecteur au clic sans donner l'apparence d'un champ éditable au clavier.
+ */
+private fun Modifier.clickableNoRipple(onClick: () -> Unit): Modifier =
+    this.then(Modifier.pointerInput(Unit) { detectTapGestures(onTap = { onClick() }) })
 
 @Composable
 private fun AbilityScoreField(label: String, value: Int, modifier: Modifier = Modifier, onValueChange: (Int) -> Unit) {

@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
@@ -24,6 +25,7 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -38,16 +40,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.text.style.TextDecoration
 import com.jc2.jdrcompagnon.ui.AdvantageState
 import com.jc2.jdrcompagnon.ui.DicePoolEntry
 import com.jc2.jdrcompagnon.ui.DiceRollResult
 import com.jc2.jdrcompagnon.ui.DiceSkin
 import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.WorldState
+import com.jc2.jdrcompagnon.ui.theme.ForcedDarkPalette
 import kotlinx.coroutines.delay
 
 import kotlin.time.Duration.Companion.milliseconds
@@ -158,7 +163,7 @@ fun DiceResultDisplay(
         ) {}
 
         Row(
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment = Alignment.Top,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             if (advantageState != AdvantageState.NORMAL) {
@@ -233,9 +238,15 @@ fun DicePoolResultDisplay(
                 maxItemsInEachRow = 5
             ) {
                 results.forEach { roll ->
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.alpha(if (roll.isDiscarded) 0.4f else 1f)
+                    ) {
                         Surface(
-                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+                            color = if (roll.isDiscarded)
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            else
+                                MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
                             shape = CircleShape,
                             modifier = Modifier.padding(4.dp)
                         ) {
@@ -243,7 +254,8 @@ fun DicePoolResultDisplay(
                                 text = roll.value.toString(),
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                                 style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                textDecoration = if (roll.isDiscarded) TextDecoration.LineThrough else TextDecoration.None
                             )
                         }
                         Text(
@@ -316,7 +328,8 @@ fun DiceSettingsDialog(
                 .widthIn(max = 400.dp)
                 .wrapContentHeight(),
             shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surface,
+            color = ForcedDarkPalette.Surface,
+            contentColor = ForcedDarkPalette.Content,
             tonalElevation = 2.dp
         ) {
             Column(
@@ -338,13 +351,13 @@ fun DiceSettingsDialog(
                     IconButton(
                         onClick = onReset,
                         colors = IconButtonDefaults.filledTonalIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer
+                            containerColor = ForcedDarkPalette.Indicator
                         )
                     ) {
                         Icon(
                             Icons.Default.Refresh,
                             contentDescription = "Réinitialiser (garde 1d20 par défaut)",
-                            tint = MaterialTheme.colorScheme.onSecondaryContainer
+                            tint = ForcedDarkPalette.Content
                         )
                     }
                 }
@@ -354,7 +367,7 @@ fun DiceSettingsDialog(
                     Text(
                         "Avantage / Désavantage",
                         style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary
+                        color = ForcedDarkPalette.AccentGold
                     )
                     Spacer(modifier = Modifier.height(12.dp))
 
@@ -373,14 +386,14 @@ fun DiceSettingsDialog(
                             label = {
                                 Text(
                                     "Avantage",
-                                    color = if (advSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                                    color = if (advSelected) Color.White else ForcedDarkPalette.Content
                                 )
                             },
                             colors = SegmentedButtonDefaults.colors(
                                 activeContainerColor = Color(0xFF4CAF50).copy(alpha = 0.85f),
-                                activeContentColor = MaterialTheme.colorScheme.onPrimary,
-                                inactiveContainerColor = MaterialTheme.colorScheme.surface,
-                                inactiveContentColor = MaterialTheme.colorScheme.onSurface
+                                activeContentColor = Color.White,
+                                inactiveContainerColor = ForcedDarkPalette.Background,
+                                inactiveContentColor = ForcedDarkPalette.Content
                             )
                         )
                         SegmentedButton(
@@ -395,14 +408,14 @@ fun DiceSettingsDialog(
                             label = {
                                 Text(
                                     "Désavantage",
-                                    color = if (disSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                                    color = if (disSelected) Color.White else ForcedDarkPalette.Content
                                 )
                             },
                             colors = SegmentedButtonDefaults.colors(
                                 activeContainerColor = Color(0xFFF44336).copy(alpha = 0.85f),
-                                activeContentColor = MaterialTheme.colorScheme.onPrimary,
-                                inactiveContainerColor = MaterialTheme.colorScheme.surface,
-                                inactiveContentColor = MaterialTheme.colorScheme.onSurface
+                                activeContentColor = Color.White,
+                                inactiveContainerColor = ForcedDarkPalette.Background,
+                                inactiveContentColor = ForcedDarkPalette.Content
                             )
                         )
                     }
@@ -412,7 +425,7 @@ fun DiceSettingsDialog(
                 Text(
                     "Sons",
                     style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary
+                    color = ForcedDarkPalette.AccentGold
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(
@@ -425,12 +438,20 @@ fun DiceSettingsDialog(
                         Text(
                             "Dé qui roule + résultat",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = ForcedDarkPalette.Content.copy(alpha = 0.7f)
                         )
                     }
                     Switch(
                         checked = soundEnabled,
-                        onCheckedChange = { onToggleSound() }
+                        onCheckedChange = { onToggleSound() },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = ForcedDarkPalette.AccentGold,
+                            checkedTrackColor = ForcedDarkPalette.AccentGold.copy(alpha = 0.5f),
+                            checkedBorderColor = ForcedDarkPalette.AccentGold,
+                            uncheckedThumbColor = ForcedDarkPalette.Content,
+                            uncheckedTrackColor = ForcedDarkPalette.Indicator,
+                            uncheckedBorderColor = ForcedDarkPalette.Indicator
+                        )
                     )
                 }
 
@@ -438,7 +459,7 @@ fun DiceSettingsDialog(
                 Text(
                     "Apparence du dé",
                     style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary
+                    color = ForcedDarkPalette.AccentGold
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 FlowRow(
@@ -479,13 +500,13 @@ fun DiceSettingsDialog(
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
-                HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
+                HorizontalDivider(thickness = 0.5.dp, color = ForcedDarkPalette.Content.copy(alpha = 0.3f))
                 Spacer(modifier = Modifier.height(20.dp))
 
                 Text(
                     "Ajouter des dés",
                     style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary
+                    color = ForcedDarkPalette.AccentGold
                 )
                 Spacer(modifier = Modifier.height(12.dp))
 
@@ -509,7 +530,7 @@ fun DiceSettingsDialog(
                 Text(
                     "Modificateur",
                     style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary
+                    color = ForcedDarkPalette.AccentGold
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(
@@ -517,7 +538,13 @@ fun DiceSettingsDialog(
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    FilledTonalIconButton(onClick = onDecrementModifier) {
+                    FilledTonalIconButton(
+                        onClick = onDecrementModifier,
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = ForcedDarkPalette.Indicator,
+                            contentColor = ForcedDarkPalette.Content
+                        )
+                    ) {
                         Icon(Icons.Default.Remove, contentDescription = "Moins")
                     }
                     Text(
@@ -526,7 +553,13 @@ fun DiceSettingsDialog(
                         fontWeight = FontWeight.ExtraBold,
                         modifier = Modifier.padding(horizontal = 24.dp)
                     )
-                    FilledTonalIconButton(onClick = onIncrementModifier) {
+                    FilledTonalIconButton(
+                        onClick = onIncrementModifier,
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = ForcedDarkPalette.Indicator,
+                            contentColor = ForcedDarkPalette.Content
+                        )
+                    ) {
                         Icon(Icons.Default.Add, contentDescription = "Plus")
                     }
                 }
@@ -535,7 +568,11 @@ fun DiceSettingsDialog(
                 Button(
                     onClick = onDismiss,
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ForcedDarkPalette.AccentGold,
+                        contentColor = ForcedDarkPalette.Background
+                    )
                 ) {
                     Text("Enregistrer", style = MaterialTheme.typography.titleMedium)
                 }
@@ -585,8 +622,9 @@ fun DiceSelectionChip(
 ) {
     Surface(
         shape = RoundedCornerShape(16.dp),
-        color = if (count > 0) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-        border = if (count > 0) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
+        color = if (count > 0) ForcedDarkPalette.AccentGold.copy(alpha = 0.2f) else ForcedDarkPalette.Indicator.copy(alpha = 0.5f),
+        border = if (count > 0) BorderStroke(1.dp, ForcedDarkPalette.AccentGold) else null,
+        contentColor = if (count > 0) ForcedDarkPalette.AccentGold else ForcedDarkPalette.Content,
         modifier = Modifier.animateContentSize()
     ) {
         Row(
@@ -605,14 +643,14 @@ fun DiceSelectionChip(
             if (count > 0) {
                 Spacer(modifier = Modifier.width(8.dp))
                 Surface(
-                    color = MaterialTheme.colorScheme.primary,
+                    color = ForcedDarkPalette.AccentGold,
                     shape = CircleShape,
                     modifier = Modifier.size(24.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Text(
                             text = count.toString(),
-                            color = MaterialTheme.colorScheme.onPrimary,
+                            color = ForcedDarkPalette.Background,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
                         )

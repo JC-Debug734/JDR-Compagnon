@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -50,6 +51,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
@@ -89,7 +91,8 @@ fun CharacterSelectionScreen(
     currentWorld: WorldState?,
     onViewCharacter: (Character) -> Unit,
     onViewNaheulbeukCharacter: (NaheulbeukCharacter) -> Unit = {},
-    onCreateCharacter: () -> Unit = {},
+    onCreateQuick: () -> Unit = {},
+    onCreateWizard: () -> Unit = {},
     onBack: () -> Unit,
     isMjMode: Boolean = false,
 ) {
@@ -110,7 +113,8 @@ fun CharacterSelectionScreen(
         CharacterListWithSearchScreen(
             characters = characters,
             onCharacterSelected = onViewCharacter,
-            onCreateCharacter = if (isMjMode) onCreateCharacter else { {} },
+            onCreateQuick = if (isMjMode) onCreateQuick else { {} },
+            onCreateWizard = if (isMjMode) onCreateWizard else { {} },
             onBack = onBack,
             showCreateButton = isMjMode
         )
@@ -127,13 +131,15 @@ val characterTypes = listOf("Tous", "PJ", "PNJ", "Monstre", "Boss", "Créature",
 fun CharacterListWithSearchScreen(
     characters: List<Character>,
     onCharacterSelected: (Character) -> Unit,
-    onCreateCharacter: () -> Unit,
+    onCreateQuick: () -> Unit,
+    onCreateWizard: () -> Unit,
     onBack: () -> Unit,
     showCreateButton: Boolean = true
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var selectedTypeFilter by remember { mutableStateOf("Tous") }
     var showFilters by remember { mutableStateOf(false) }
+    var showChoixCreation by remember { mutableStateOf(false) }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val coroutineScope = rememberCoroutineScope()
 
@@ -190,7 +196,7 @@ fun CharacterListWithSearchScreen(
             floatingActionButton = {
                 if (showCreateButton) {
                     ExtendedFloatingActionButton(
-                        onClick = onCreateCharacter,
+                        onClick = { showChoixCreation = true },
                         icon = { Icon(Icons.Default.Add, contentDescription = null) },
                         text = { Text("Nouveau") }
                     )
@@ -271,6 +277,24 @@ fun CharacterListWithSearchScreen(
                 }
             }
         }
+    }
+
+    if (showChoixCreation) {
+        AlertDialog(
+            onDismissRequest = { showChoixCreation = false },
+            title = { Text("Créer un personnage") },
+            text = { Text("Comment voulez-vous créer ce personnage ?") },
+            confirmButton = {
+                TextButton(onClick = { showChoixCreation = false; onCreateWizard() }) {
+                    Text("Pas à pas (recommandé)")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showChoixCreation = false; onCreateQuick() }) {
+                    Text("Rapide")
+                }
+            }
+        )
     }
 }
 

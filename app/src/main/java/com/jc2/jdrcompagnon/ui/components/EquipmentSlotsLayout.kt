@@ -45,6 +45,10 @@ import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdRepository
 import kotlin.math.roundToInt
 import com.jc2.jdrcompagnon.ui.screens.joueur.character.ArmorRules
+import com.jc2.jdrcompagnon.ui.screens.joueur.slotColor
+import com.jc2.jdrcompagnon.ui.screens.joueur.equipmentWeightLabel
+import com.jc2.jdrcompagnon.ui.screens.joueur.equipmentHandsRequired
+import com.jc2.jdrcompagnon.ui.screens.joueur.HandsIcons
 
 // Enlever les imports inutilisés signalés par le compilo.
 private typealias EquipmentItemSRD = com.jc2.jdrcompagnon.ui.screens.mj.library.srd.EquipmentItem
@@ -70,9 +74,11 @@ private typealias EquipmentItemSRD = com.jc2.jdrcompagnon.ui.screens.mj.library.
  */
 @Composable
 fun EquipmentManagementContent(character: Character, isMjMode: Boolean = false, modifier: Modifier = Modifier) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val allCharacters by GameState.characters.collectAsState()
     val liveCharacter = allCharacters.find { it.id == character.id } ?: character
     var currentCharacter by remember { mutableStateOf(liveCharacter) }
+    var showLibraryPicker by remember { mutableStateOf(false) }
 
     LaunchedEffect(liveCharacter) {
         currentCharacter = liveCharacter
@@ -82,6 +88,7 @@ fun EquipmentManagementContent(character: Character, isMjMode: Boolean = false, 
     var dragOffset by remember { mutableStateOf(Offset.Zero) }
     var dragStart by remember { mutableStateOf(Offset.Zero) }
     var selectedItemDetail by remember { mutableStateOf<String?>(null) }
+    var pendingDeleteItem by remember { mutableStateOf<String?>(null) }
     var backpackBounds by remember { mutableStateOf(Rect.Zero) }
     var trashBounds by remember { mutableStateOf(Rect.Zero) }
     var slotBounds by remember { mutableStateOf<Map<EquipmentSlot, Rect>>(emptyMap()) }
@@ -103,8 +110,8 @@ fun EquipmentManagementContent(character: Character, isMjMode: Boolean = false, 
         val targetSlot = slotBounds.entries.firstOrNull { it.value.contains(dragOffset) }?.key
         when {
             trashBounds.contains(dragOffset) -> {
-                GameState.removeItemCompletely(currentCharacter.id, item)
-                currentCharacter = GameState.characters.value.find { it.id == currentCharacter.id } ?: currentCharacter
+                // Ne supprime pas tout de suite : on demande confirmation.
+                pendingDeleteItem = item
             }
             targetSlot != null -> {
                 val accepted = GameState.equipInSlot(currentCharacter.id, item, targetSlot)
@@ -126,6 +133,19 @@ fun EquipmentManagementContent(character: Character, isMjMode: Boolean = false, 
     ) {
         // Infos charge / poids
         WeightSummaryCard(currentCharacter, isMjMode)
+
+        // Ajout d'objet depuis la bibliothèque SRD (source unique de l'équipement existant)
+        if (isMjMode) {
+            OutlinedButton(
+                onClick = { showLibraryPicker = true },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Ajouter un objet depuis la bibliothèque")
+            }
+        }
 
         // Sac à dos draggable — surligné quand un objet équipé est glissé au-dessus
         BackpackSection(
@@ -161,6 +181,19 @@ fun EquipmentManagementContent(character: Character, isMjMode: Boolean = false, 
         )
     }
 
+    if (showLibraryPicker) {
+        SrdLibraryPickerDialog(
+            title = "Choisir un objet",
+            onDismiss = { showLibraryPicker = false },
+            onSelect = { itemName -> GameState.addItemToBackpack(currentCharacter.id, itemName) },
+            search = { query ->
+                val items = SrdRepository.loadEquipmentList(context, currentCharacter.worldId.ifBlank { "donjon_et_dragon" })
+                val filtered = if (query.isBlank()) items else items.filter { it.name.contains(query, ignoreCase = true) }
+                filtered.map { SrdPickerEntry(name = it.name) }
+            }
+        )
+    }
+
     if (draggedItem != null) {
         DraggedItemOverlay(
             itemName = draggedItem!!,
@@ -173,6 +206,25 @@ fun EquipmentManagementContent(character: Character, isMjMode: Boolean = false, 
             itemName = item,
             character = currentCharacter,
             onDismiss = { selectedItemDetail = null }
+        )
+    }
+
+    pendingDeleteItem?.let { item ->
+        AlertDialog(
+            onDismissRequest = { pendingDeleteItem = null },
+            icon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("Jeter cet objet ?") },
+            text = { Text("« $item » sera définitivement retiré de l'inventaire.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    GameState.removeItemCompletely(currentCharacter.id, item)
+                    currentCharacter = GameState.characters.value.find { it.id == currentCharacter.id } ?: currentCharacter
+                    pendingDeleteItem = null
+                }) { Text("Jeter", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteItem = null }) { Text("Annuler") }
+            }
         )
     }
 }
@@ -514,6 +566,9 @@ private fun SlotBox(
                 onDoubleClick = item?.let { { onDoubleClick(it) } }
             )
     ) {
+        val weightLabel = remember(item) { item?.let { equipmentWeightLabel(it) } }
+        val hands = remember(item) { item?.let { equipmentHandsRequired(it) } }
+
         Column(
             modifier = Modifier
                 .widthIn(min = 120.dp)
@@ -526,6 +581,11 @@ private fun SlotBox(
                 tint = if (hasItem) MaterialTheme.colorScheme.primary else SheetTextSecondary,
                 modifier = Modifier.size(24.dp)
             )
+            if (hasItem) {
+                Spacer(modifier = Modifier.height(4.dp))
+                // Pastille = couleur de l'emplacement
+                Box(modifier = Modifier.size(8.dp).background(slot.slotColor(), CircleShape))
+            }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = item ?: label,
@@ -536,6 +596,19 @@ private fun SlotBox(
                 modifier = Modifier.widthIn(min = 80.dp, max = 140.dp)
             )
             if (hasItem) {
+                if (weightLabel != null) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = weightLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = SheetTextSecondary.copy(alpha = 0.8f),
+                        textAlign = TextAlign.Center
+                    )
+                }
+                if (hands != null) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    HandsIcons(hands, SheetTextSecondary)
+                }
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = "Glisser pour retirer",
@@ -606,6 +679,9 @@ private fun DraggableItemChip(
     onDoubleClick: () -> Unit
 ) {
     var chipPosition by remember { mutableStateOf(Offset.Zero) }
+    val slot = remember(item) { ArmorRules.slotForItem(item) }
+    val weightLabel = remember(item) { equipmentWeightLabel(item) }
+    val hands = remember(item) { equipmentHandsRequired(item) }
 
     val containerColor = if (isEquipped) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f) else SheetSurfaceLight
     val contentColor = SheetTextPrimary
@@ -637,17 +713,35 @@ private fun DraggableItemChip(
         Row(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            // Pastille = couleur de l'emplacement (arme, armure, sac...)
+            Box(modifier = Modifier.size(8.dp).background(slot.slotColor(), CircleShape))
+
             if (isEquipped) {
                 Icon(Icons.Default.Check, null, tint = contentColor, modifier = Modifier.size(16.dp))
             }
-            Text(
-                text = item,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Medium,
-                color = contentColor
-            )
+
+            Column {
+                Text(
+                    text = item,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = contentColor
+                )
+                if (weightLabel != null) {
+                    Text(
+                        text = weightLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = SheetTextSecondary
+                    )
+                }
+            }
+
+            // Icônes de mains requises pour les armes (1 ou 2)
+            if (hands != null) {
+                HandsIcons(hands, SheetTextSecondary)
+            }
         }
     }
 }

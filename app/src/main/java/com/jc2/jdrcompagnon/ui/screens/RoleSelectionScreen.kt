@@ -5,8 +5,9 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,21 +21,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Castle
 import androidx.compose.material.icons.filled.Landscape
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.SportsKabaddi
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -63,6 +59,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -125,57 +122,33 @@ data class RoleCardData(
     val label: String,
     val description: String,
     val features: String,
-    val icon: ImageVector,
+    val iconRes: Int,
     val color: Color,
     val onClick: () -> Unit,
 )
 
 /**
- * Role selection card: clickable Card M3 with a centered icon and title.
+ * Role selection card: grande icône cliquable, sans carte ni texte.
  */
 @Composable
 fun RoleCard(
     data: RoleCardData,
     modifier: Modifier = Modifier,
 ) {
-    Card(
-        onClick = data.onClick,
-        modifier = modifier.fillMaxWidth().heightIn(min = 180.dp),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 180.dp)
+            .clickable(onClick = data.onClick),
+        contentAlignment = Alignment.Center,
     ) {
-        Column(
-            modifier = Modifier.padding(20.dp).fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            // Icon in Surface container
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = data.color.copy(alpha = 0.10f),
-                modifier = Modifier.size(40.dp),
-                border = BorderStroke(1.dp, data.color.copy(alpha = 0.2f)),
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = data.icon,
-                        contentDescription = null,
-                        tint = data.color,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Title
-            Text(
-                text = data.label,
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Center,
-            )
-        }
+        Image(
+            painter = painterResource(id = data.iconRes),
+            // Le nom du rôle reste porté par contentDescription pour
+            // l'accessibilité, même s'il n'est plus affiché en texte.
+            contentDescription = data.label,
+            modifier = Modifier.size(168.dp),
+        )
     }
 }
 
@@ -310,7 +283,7 @@ fun RoleSelectionScreen(
             label = stringResource(R.string.role_mj_label),
             description = stringResource(R.string.role_mj_description),
             features = stringResource(R.string.role_mj_features),
-            icon = Icons.Filled.Castle,
+            iconRes = R.drawable.ic_mj,
             color = MaterialTheme.colorScheme.primary,
             onClick = onSelectMj,
         ),
@@ -318,7 +291,7 @@ fun RoleSelectionScreen(
             label = stringResource(R.string.role_player_label),
             description = stringResource(R.string.role_player_description),
             features = stringResource(R.string.role_player_features),
-            icon = Icons.Filled.SportsKabaddi,
+            iconRes = R.drawable.ic_joueur,
             color = MaterialTheme.colorScheme.secondary,
             onClick = onSelectJoueur,
         ),
@@ -539,21 +512,6 @@ fun RoleSelectionScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // ── Footer (delay 500ms, 150ms) ──
-            AnimatedVisibility(
-                visible = visible,
-                enter = fadeIn(animationSpec = tween(durationMillis = 150, delayMillis = 500)),
-            ) {
-                Text(
-                    text = stringResource(R.string.role_selection_footer),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 24.dp),
-                )
-            }
         }
     }
 }

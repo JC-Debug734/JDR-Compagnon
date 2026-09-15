@@ -284,7 +284,7 @@ private fun EquipmentStatsGrid(
                 modifier = Modifier.weight(1f),
                 colors = CardDefaults.elevatedCardColors(
                     containerColor = if (isPrice) Color(0xFFFFD700).copy(alpha = 0.2f)
-                    else MaterialTheme.colorScheme.secondaryContainer
+                    else MaterialTheme.colorScheme.surfaceVariant
                 )
             ) {
                 Column(
@@ -295,14 +295,14 @@ private fun EquipmentStatsGrid(
                         text = label,
                         style = MaterialTheme.typography.labelMedium,
                         color = if (isPrice) Color(0xFFFFD700)
-                        else MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                     )
                     Text(
                         text = value,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = if (isPrice) Color(0xFFFFD700)
-                        else MaterialTheme.colorScheme.onSecondaryContainer,
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = if (isPrice) TextAlign.End else TextAlign.Start,
                         modifier = if (isPrice) Modifier.fillMaxWidth()
                         else Modifier

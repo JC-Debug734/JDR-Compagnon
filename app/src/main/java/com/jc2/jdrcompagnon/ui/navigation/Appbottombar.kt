@@ -3,7 +3,6 @@ package com.jc2.jdrcompagnon.ui.components
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Casino
@@ -23,7 +22,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
@@ -153,14 +151,12 @@ fun AppBottomBar(
             selected = false,
             onClick = { rollDice() },
             icon = {
-                // La zone de détection de l'appui long est volontairement plus
-                // grande que l'icône elle-même (56dp au lieu de 32dp) : avant,
-                // le geste n'était posé que sur l'icône, ce qui rendait la
-                // zone d'appui beaucoup plus petite que celle des 3 autres
-                // items (qui bénéficient de toute la surface de l'item).
-                Box(
+                Icon(
+                    imageVector = if (isRolling) Icons.Default.Refresh else Icons.Default.Casino,
+                    contentDescription = "Lancer les dés (appui long : réglages)",
                     modifier = Modifier
-                        .size(56.dp)
+                        .size(32.dp)
+                        .rotate(animatedRotation)
                         .pointerInput(Unit) {
                             detectTapGestures(
                                 onLongPress = {
@@ -175,16 +171,7 @@ fun AppBottomBar(
                                 }
                             )
                         },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = if (isRolling) Icons.Default.Refresh else Icons.Default.Casino,
-                        contentDescription = "Lancer les dés (appui long : réglages)",
-                        modifier = Modifier
-                            .size(32.dp)
-                            .rotate(animatedRotation)
-                    )
-                }
+                )
             },
             label = { Text("Dé") },
             colors = itemColors,

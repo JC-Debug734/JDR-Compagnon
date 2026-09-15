@@ -31,6 +31,7 @@ import androidx.core.content.ContextCompat
 import com.jc2.jdrcompagnon.network.DiscoveredServer
 import com.jc2.jdrcompagnon.network.NetworkSessionManager
 import com.jc2.jdrcompagnon.network.PlayerConnectionState
+import com.jc2.jdrcompagnon.network.SessionRole
 
 private enum class LanMode { CHOIX, HOTE, JOUEUR }
 
@@ -86,10 +87,19 @@ fun LanToolsScreen(
         )
 
         LanMode.HOTE -> {
+            // Le serveur ne démarre plus automatiquement à l'ouverture de
+            // cet écran : seule la permission est demandée ici. Le MJ doit
+            // appuyer sur "Démarrer le serveur" (bouton dans HostScreen).
             LaunchedEffect(hasPermissions) {
                 if (!hasPermissions) {
                     permissionLauncher.launch(requiredPermissions.toTypedArray())
-                } else {
+                }
+            }
+            val role by NetworkSessionManager.role.collectAsState()
+            HostScreen(
+                hasPermissions = hasPermissions,
+                isHosting = role == SessionRole.HOST,
+                onStartServer = {
                     val hostDisplayName = com.jc2.jdrcompagnon.ui.GameState.playerName.value
                         ?: com.jc2.jdrcompagnon.ui.GameState.assignRandomPlayerName()
                     NetworkSessionManager.startHosting(
@@ -98,10 +108,7 @@ fun LanToolsScreen(
                         groupId = groupId,
                         campaignTitle = campaignTitle
                     )
-                }
-            }
-            HostScreen(
-                hasPermissions = hasPermissions,
+                },
                 onRequestPermissions = { permissionLauncher.launch(requiredPermissions.toTypedArray()) },
                 onNavigateBack = { if (onExit != null) onExit() else mode = LanMode.CHOIX },
                 onStopServer = {
@@ -248,12 +255,53 @@ private fun GroupSelector() {
 @Composable
 private fun HostScreen(
     hasPermissions: Boolean,
+    isHosting: Boolean,
+    onStartServer: () -> Unit,
     onRequestPermissions: () -> Unit,
     onNavigateBack: () -> Unit,
     onStopServer: () -> Unit,
 ) {
     if (!hasPermissions) {
         PermissionRequiredScreen(onRequestPermissions, onNavigateBack)
+        return
+    }
+    if (!isHosting) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Serveur réseau local") },
+                    navigationIcon = {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
+                        }
+                    }
+                )
+            }
+        ) { innerPadding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    "Le serveur n'est pas encore démarré.",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Les joueurs sur le même Wi-Fi pourront rejoindre la partie une fois le serveur lancé.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(24.dp))
+                Button(onClick = onStartServer) {
+                    Text("Démarrer le serveur")
+                }
+            }
+        }
         return
     }
     val clients by NetworkSessionManager.connectedClients.collectAsState()
@@ -481,6 +529,7 @@ private fun ClientRow(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun JoinScreen(
     hasPermissions: Boolean,
@@ -497,56 +546,112 @@ private fun JoinScreen(
     val isScanning by discovery.isScanning.collectAsState()
     val playerState by NetworkSessionManager.playerState.collectAsState()
 
-    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Recherche de parties…", style = MaterialTheme.typography.headlineSmall)
-            if (isScanning) {
-                Spacer(Modifier.width(12.dp))
-                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-            }
+    // Même structure que HostScreen (Scaffold + TopAppBar) pour un calage
+    // cohérent entre les deux écrans réseau : zone de retour standard,
+    // padding système géré automatiquement au lieu d'un simple bouton en bas.
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Rejoindre une partie") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
+                    }
+                }
+            )
         }
-        Spacer(Modifier.height(16.dp))
-
-        when (playerState) {
-            PlayerConnectionState.CONNECTED -> {
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 24.dp, vertical = 16.dp)
+        ) {
+            if (playerState == PlayerConnectionState.CONNECTED) {
                 CharacterClaimSection(onBack = onBack)
                 return@Column
             }
-            PlayerConnectionState.RECONNECTING -> {
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Recherche de parties…", style = MaterialTheme.typography.titleMedium)
+                if (isScanning) {
+                    Spacer(Modifier.width(12.dp))
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                }
+                Spacer(Modifier.weight(1f))
+                IconButton(onClick = { discovery.stopDiscovery(); discovery.startDiscovery() }) {
+                    Icon(Icons.Default.Sync, contentDescription = "Relancer la recherche")
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Assurez-vous d'être sur le même réseau Wi-Fi que le MJ (et coupez les données mobiles si la partie ne se trouve pas).",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(16.dp))
+
+            if (playerState == PlayerConnectionState.RECONNECTING) {
+                val lastError by NetworkSessionManager.lastConnectionError.collectAsState()
                 Text(
                     "Connexion perdue, nouvelle tentative en cours…",
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodyMedium
                 )
+                lastError?.let {
+                    Text(
+                        "Détail : $it",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
                 Spacer(Modifier.height(16.dp))
             }
-            else -> Unit
-        }
 
-        if (servers.isEmpty() && playerState != PlayerConnectionState.RECONNECTING) {
-            Text("Aucune partie trouvée pour l'instant sur ce réseau Wi-Fi.")
-        }
-        LazyColumn(modifier = Modifier.weight(1f)) {
-            items(servers) { server: DiscoveredServer ->
-                ListItem(
-                    headlineContent = { Text(server.serviceName) },
-                    supportingContent = {
-                        Text(
-                            if (playerState == PlayerConnectionState.CONNECTING) "Connexion en cours…"
-                            else "${server.host}:${server.port}"
-                        )
-                    },
-                    modifier = Modifier.clickable(enabled = playerState != PlayerConnectionState.CONNECTING) {
-                        val playerName = com.jc2.jdrcompagnon.ui.GameState.playerName.value
-                            ?: com.jc2.jdrcompagnon.ui.GameState.assignRandomPlayerName()
-                        NetworkSessionManager.connectToServer(context, server, playerName = playerName)
+            if (servers.isEmpty()) {
+                Column(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        "Aucune partie trouvée pour l'instant sur ce réseau Wi-Fi.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                LazyColumn(modifier = Modifier.weight(1f)) {
+                    items(servers) { server: DiscoveredServer ->
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                        ) {
+                            ListItem(
+                                headlineContent = { Text(server.serviceName) },
+                                supportingContent = {
+                                    Text(
+                                        if (playerState == PlayerConnectionState.CONNECTING) "Connexion en cours…"
+                                        else "${server.host}:${server.port}"
+                                    )
+                                },
+                                trailingContent = {
+                                    if (playerState == PlayerConnectionState.CONNECTING) {
+                                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                    }
+                                },
+                                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                                modifier = Modifier.clickable(enabled = playerState != PlayerConnectionState.CONNECTING) {
+                                    val playerName = com.jc2.jdrcompagnon.ui.GameState.playerName.value
+                                        ?: com.jc2.jdrcompagnon.ui.GameState.assignRandomPlayerName()
+                                    NetworkSessionManager.connectToServer(context, server, playerName = playerName)
+                                }
+                            )
+                        }
                     }
-                )
+                }
             }
-        }
-        Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
-            Text("Retour")
         }
     }
 }
