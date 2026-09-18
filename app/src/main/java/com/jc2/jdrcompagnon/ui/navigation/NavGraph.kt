@@ -772,40 +772,43 @@ fun JdrNavGraph(overrideStartDestination: String = Route.RoleSelection.path) {
         DiceOverlay(currentWorld = currentWorld)
 
         // Barre de menu globale accessible depuis n'importe quel écran
-        AppBottomBar(
-            onNavigateConnection = {
-                // Sans popUpTo/launchSingleTop, chaque tap (y compris depuis l'écran
-                // de connexion lui-même) empilait un nouvel écran LanHost/LanJoin par
-                // dessus le précédent : la navigation semblait "bloquée" dessus car le
-                // retour arrière ne faisait que dépiler des doublons.
-                val destination = when (appRole) {
-                    AppRole.MJ -> Route.LanHost.path
-                    AppRole.JOUEUR -> Route.LanJoin.path
-                    null -> Route.LanTools.path
-                }
-                navController.navigate(destination) {
-                    popUpTo(currentHomeRoute(appRole)) { inclusive = false; saveState = true }
-                    launchSingleTop = true
-                    restoreState = true
-                }
-            },
-            onNavigateLibrary = {
-                navController.navigate(Route.Library.path.replace("{initialTab}", "monsters")) {
-                    popUpTo(currentHomeRoute(appRole)) { inclusive = false; saveState = true }
-                    launchSingleTop = true
-                    restoreState = true
-                }
-            },
-            onHomeTap = {
-                val homeRoute = currentHomeRoute(appRole)
-                navController.navigate(homeRoute) {
-                    popUpTo(homeRoute) { inclusive = false; saveState = true }
-                    launchSingleTop = true
-                    restoreState = true
-                }
-            },
-            modifier = Modifier.align(Alignment.BottomCenter)
-        )
+        // (sauf sur l'écran de sélection de rôle)
+        if (appRole != null) {
+            AppBottomBar(
+                onNavigateConnection = {
+                    // Sans popUpTo/launchSingleTop, chaque tap (y compris depuis l'écran
+                    // de connexion lui-même) empilait un nouvel écran LanHost/LanJoin par
+                    // dessus le précédent : la navigation semblait "bloquée" dessus car le
+                    // retour arrière ne faisait que dépiler des doublons.
+                    val destination = when (appRole) {
+                        AppRole.MJ -> Route.LanHost.path
+                        AppRole.JOUEUR -> Route.LanJoin.path
+                        null -> Route.LanTools.path
+                    }
+                    navController.navigate(destination) {
+                        popUpTo(currentHomeRoute(appRole)) { inclusive = false; saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+                onNavigateLibrary = {
+                    navController.navigate(Route.Library.path.replace("{initialTab}", "monsters")) {
+                        popUpTo(currentHomeRoute(appRole)) { inclusive = false; saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+                onHomeTap = {
+                    val homeRoute = currentHomeRoute(appRole)
+                    navController.navigate(homeRoute) {
+                        popUpTo(homeRoute) { inclusive = false; saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
+        }
     }
     }
 }

@@ -1,6 +1,5 @@
 package com.jc2.jdrcompagnon.ui.screens
 
-import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -24,35 +23,24 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Landscape
-import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,60 +49,15 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
-import com.jc2.jdrcompagnon.BuildConfig
 import com.jc2.jdrcompagnon.R
 import com.jc2.jdrcompagnon.ui.WorldState
 import com.jc2.jdrcompagnon.ui.theme.Breakpoints
-import com.jc2.jdrcompagnon.update.UpdateManager
-import com.jc2.jdrcompagnon.update.UpdateUiState
-import kotlinx.coroutines.launch
-
-// ========================================================================
-// WorldBadge — AssistChip M3 for the TopAppBar
-// ========================================================================
-
-/**
- * World badge displayed in the TopAppBar as a clickable AssistChip.
- * Shows the current world name + icon, or "Choisir un monde" if null.
- */
-@Composable
-fun WorldBadge(
-    world: WorldState?,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val icon: ImageVector = when (world?.id) {
-        "donjon_et_dragon" -> Icons.Filled.Shield
-        "naheulbeuk" -> Icons.Filled.Landscape
-        else -> Icons.Filled.Public
-    }
-    val label = world?.name ?: stringResource(R.string.world_badge_choose)
-
-    AssistChip(
-        onClick = onClick,
-        label = { Text(text = label) },
-        leadingIcon = {
-            Icon(
-                imageVector = icon,
-                contentDescription = "${label} badge",
-                modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.primary,
-            )
-        },
-        colors = AssistChipDefaults.assistChipColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        ),
-        modifier = modifier,
-    )
-}
 
 // ========================================================================
 // RoleCard — clickable M3 Card, no CTA button, arrow in bottom-right
@@ -139,16 +82,16 @@ fun RoleSelectionButton(
 ) {
     Surface(
         modifier = modifier
-            .height(80.dp)
+            .height(100.dp)
             .border(2.dp, color, MaterialTheme.shapes.medium)
             .clickable(onClick = onClick),
         shape = MaterialTheme.shapes.medium,
-        color = color.copy(alpha = 0.15f),
+        color = color.copy(alpha = 0.1f),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(8.dp),
+                .padding(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
@@ -156,12 +99,12 @@ fun RoleSelectionButton(
                 imageVector = icon,
                 contentDescription = label,
                 tint = color,
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(32.dp),
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelLarge,
                 color = color,
                 textAlign = TextAlign.Center,
                 maxLines = 2,
@@ -308,19 +251,6 @@ fun RoleSelectionScreen(
     LaunchedEffect(Unit) { visible = true }
 
     val isCompact = Breakpoints.isCompactWidth()
-
-    // ── Mises à jour (version.txt sur GitHub, téléchargement manuel sur Drive) ──
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val updateState by UpdateManager.state.collectAsState()
-    val lastRemoteVersion by UpdateManager.lastRemoteVersion.collectAsState()
-
-    // Vérification automatique et silencieuse au lancement de l'écran.
-    LaunchedEffect(Unit) {
-        if (updateState is UpdateUiState.Idle) {
-            UpdateManager.checkForUpdate(context)
-        }
-    }
 
     val roleCards = listOf(
         RoleCardData(
@@ -494,113 +424,36 @@ fun RoleSelectionScreen(
                 Spacer(modifier = Modifier.height(32.dp))
             }
 
-            // ── Bottom bar with rectangles for roles and settings ──
+            // ── Bottom bar with stacked rectangles for roles and settings ──
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surface)
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                // World badge and version info at top
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    WorldBadge(
-                        world = currentWorld,
-                        onClick = onSelectContext,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                text = "v${BuildConfig.VERSION_NAME}",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Text(
-                                text = if (lastRemoteVersion != null) "v$lastRemoteVersion" else "—",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                            )
-                        }
-                        IconButton(
-                            onClick = {
-                                val current = updateState
-                                if (current is UpdateUiState.UpdateAvailable) {
-                                    UpdateManager.openDownloadPage(context, current.release)
-                                } else {
-                                    scope.launch {
-                                        val found = UpdateManager.checkForUpdate(context)
-                                        if (!found) {
-                                            Toast.makeText(context, "Aucune mise à jour disponible", Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                }
-                            },
-                            enabled = updateState is UpdateUiState.Idle || updateState is UpdateUiState.UpdateAvailable,
-                            modifier = Modifier.size(32.dp),
-                        ) {
-                            when (updateState) {
-                                is UpdateUiState.Checking -> {
-                                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                                }
-                                is UpdateUiState.UpdateAvailable -> {
-                                    Icon(
-                                        imageVector = Icons.Filled.SystemUpdate,
-                                        contentDescription = "Télécharger la mise à jour",
-                                        tint = MaterialTheme.colorScheme.primary,
-                                    )
-                                }
-                                else -> {
-                                    Icon(
-                                        imageVector = Icons.Filled.Refresh,
-                                        contentDescription = "Vérifier les mises à jour",
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                HorizontalDivider()
-
-                // Role selection rectangles
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    RoleSelectionButton(
-                        label = "Maître du Jeu",
-                        icon = Icons.Default.Shield,
-                        color = MaterialTheme.colorScheme.primary,
-                        onClick = onSelectMj,
-                        modifier = Modifier.weight(1f),
-                    )
-                    RoleSelectionButton(
-                        label = "Joueur",
-                        icon = Icons.Default.Public,
-                        color = MaterialTheme.colorScheme.secondary,
-                        onClick = onSelectJoueur,
-                        modifier = Modifier.weight(1f),
-                    )
-                    RoleSelectionButton(
-                        label = "Réglages",
-                        icon = Icons.Default.Settings,
-                        color = MaterialTheme.colorScheme.tertiary,
-                        onClick = onSelectSettings,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
+                // Role selection stacked rectangles
+                RoleSelectionButton(
+                    label = "Maître du Jeu",
+                    icon = Icons.Default.Shield,
+                    color = MaterialTheme.colorScheme.primary,
+                    onClick = onSelectMj,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                RoleSelectionButton(
+                    label = "Joueur",
+                    icon = Icons.Default.Public,
+                    color = MaterialTheme.colorScheme.secondary,
+                    onClick = onSelectJoueur,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                RoleSelectionButton(
+                    label = "Réglages",
+                    icon = Icons.Default.Settings,
+                    color = MaterialTheme.colorScheme.tertiary,
+                    onClick = onSelectSettings,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
     }
