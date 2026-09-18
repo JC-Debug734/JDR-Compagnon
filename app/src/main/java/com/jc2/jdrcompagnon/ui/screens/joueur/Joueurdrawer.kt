@@ -84,7 +84,10 @@ fun JoueurDrawer(
             ) {
                 // Role icon (clickable to return to role selection)
                 IconButton(
-                    onClick = { GameState.requestRoleChange() },
+                    onClick = {
+                        onClose()
+                        GameState.requestRoleChange()
+                    },
                     modifier = Modifier.size(40.dp),
                 ) {
                     Icon(

@@ -119,7 +119,10 @@ fun MjDrawer(
             ) {
                 // Role icon (clickable to return to role selection)
                 IconButton(
-                    onClick = { GameState.requestRoleChange() },
+                    onClick = {
+                        onCloseDrawer()
+                        GameState.requestRoleChange()
+                    },
                     modifier = Modifier.size(40.dp),
                 ) {
                     Icon(

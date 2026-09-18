@@ -772,8 +772,8 @@ fun JdrNavGraph(overrideStartDestination: String = Route.RoleSelection.path) {
         DiceOverlay(currentWorld = currentWorld)
 
         // Barre de menu globale accessible depuis n'importe quel écran
-        // (sauf sur l'écran de sélection de rôle)
-        if (appRole != null) {
+        // (sauf sur l'écran de sélection de rôle qui affiche ses propres boutons)
+        if (appRole != null && navController.currentDestination?.route != Route.RoleSelection.path) {
             AppBottomBar(
                 onNavigateConnection = {
                     // Sans popUpTo/launchSingleTop, chaque tap (y compris depuis l'écran
