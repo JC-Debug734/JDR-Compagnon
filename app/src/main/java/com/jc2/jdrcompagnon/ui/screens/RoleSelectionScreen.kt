@@ -63,15 +63,6 @@ import com.jc2.jdrcompagnon.ui.theme.Breakpoints
 // RoleCard — clickable M3 Card, no CTA button, arrow in bottom-right
 // ========================================================================
 
-data class RoleCardData(
-    val label: String,
-    val description: String,
-    val features: String,
-    val iconRes: Int,
-    val color: Color,
-    val onClick: () -> Unit,
-)
-
 @Composable
 fun RoleSelectionButton(
     label: String,
@@ -113,31 +104,6 @@ fun RoleSelectionButton(
     }
 }
 
-/**
- * Role selection card: grande icône cliquable, sans carte ni texte.
- */
-@Composable
-fun RoleCard(
-    data: RoleCardData,
-    modifier: Modifier = Modifier,
-) {
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .heightIn(min = 180.dp)
-            .clickable(onClick = data.onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Image(
-            painter = painterResource(id = data.iconRes),
-            // Le nom du rôle reste porté par contentDescription pour
-            // l'accessibilité, même s'il n'est plus affiché en texte.
-            contentDescription = data.label,
-            modifier = Modifier.size(168.dp),
-        )
-    }
-}
-
 // ========================================================================
 // HeroSection — title (HeroTitle/primary) + optional subtitle
 // ========================================================================
@@ -159,7 +125,7 @@ fun HeroSection(
         Text(
             text = title,
             style = MaterialTheme.typography.headlineLarge.copy(
-                color = MaterialTheme.colorScheme.primary,
+                color = Color.White,
             ),
             textAlign = TextAlign.Center,
         )
@@ -168,7 +134,7 @@ fun HeroSection(
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = Color.White,
                 textAlign = TextAlign.Center,
             )
         }
@@ -250,27 +216,6 @@ fun RoleSelectionScreen(
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { visible = true }
 
-    val isCompact = Breakpoints.isCompactWidth()
-
-    val roleCards = listOf(
-        RoleCardData(
-            label = stringResource(R.string.role_mj_label),
-            description = stringResource(R.string.role_mj_description),
-            features = stringResource(R.string.role_mj_features),
-            iconRes = R.drawable.ic_mj,
-            color = MaterialTheme.colorScheme.primary,
-            onClick = onSelectMj,
-        ),
-        RoleCardData(
-            label = stringResource(R.string.role_player_label),
-            description = stringResource(R.string.role_player_description),
-            features = stringResource(R.string.role_player_features),
-            iconRes = R.drawable.ic_joueur,
-            color = MaterialTheme.colorScheme.secondary,
-            onClick = onSelectJoueur,
-        ),
-    )
-
     Scaffold(
         containerColor = Color.Transparent
     ) { innerPadding ->
@@ -295,7 +240,7 @@ fun RoleSelectionScreen(
                     Text(
                         text = "Bienvenue, $playerName !",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.primary,
+                        color = Color.White,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -359,64 +304,6 @@ fun RoleSelectionScreen(
                                 title = stringResource(R.string.role_selection_title),
                                 subtitle = "",
                             )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // ── Role cards (delay 300ms / 380ms, 250ms each) ──
-                if (isCompact) {
-                    // Compact: vertical Column
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                    ) {
-                        roleCards.forEachIndexed { index, roleData ->
-                            AnimatedVisibility(
-                                visible = visible,
-                                enter = fadeIn(
-                                    animationSpec = tween(
-                                        durationMillis = 250,
-                                        delayMillis = 300 + index * 80,
-                                    )
-                                ) + slideInVertically(
-                                    animationSpec = tween(
-                                        durationMillis = 250,
-                                        delayMillis = 300 + index * 80,
-                                    ),
-                                    initialOffsetY = { it / 4 },
-                                ),
-                            ) {
-                                RoleCard(data = roleData)
-                            }
-                        }
-                    }
-                } else {
-                    // Expanded: horizontal Row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    ) {
-                        roleCards.forEachIndexed { index, roleData ->
-                            AnimatedVisibility(
-                                visible = visible,
-                                modifier = Modifier.weight(1f),
-                                enter = fadeIn(
-                                    animationSpec = tween(
-                                        durationMillis = 250,
-                                        delayMillis = 300 + index * 80,
-                                    )
-                                ) + slideInVertically(
-                                    animationSpec = tween(
-                                        durationMillis = 250,
-                                        delayMillis = 300 + index * 80,
-                                    ),
-                                    initialOffsetY = { it / 4 },
-                                ),
-                            ) {
-                                RoleCard(data = roleData)
-                            }
                         }
                     }
                 }
