@@ -18,6 +18,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -107,7 +109,7 @@ fun MjDrawer(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // ── Header with icon and settings button ──
+            // ── Header with role icon (clickable to change role) and settings ──
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -115,18 +117,35 @@ fun MjDrawer(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                // Role icon (clickable to return to role selection)
+                IconButton(
+                    onClick = { GameState.requestRoleChange() },
+                    modifier = Modifier.size(40.dp),
+                ) {
+                    Icon(
+                        Icons.Default.Shield,
+                        contentDescription = "Maître du Jeu",
+                        tint = ForcedDarkPalette.AccentGold,
+                        modifier = Modifier.size(28.dp),
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
                 Text(
                     text = "MENU MJ",
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
                     color = ForcedDarkPalette.AccentGold,
+                    modifier = Modifier.weight(1f),
                 )
+
                 IconButton(
                     onClick = {
                         onCloseDrawer()
                         onOpenSettings()
                     },
-                    modifier = Modifier.size(28.dp),
+                    modifier = Modifier.size(40.dp),
                 ) {
                     Icon(
                         Icons.Default.Settings,
@@ -204,6 +223,52 @@ fun MjDrawer(
             style = MaterialTheme.typography.bodySmall,
             color = ForcedDarkPalette.Content
         )
+
+        // --- CAMPAIGN ITEMS (visible only if campaign is selected) ---
+        if (selectedCampaign != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Fiche de suivi
+            NavigationDrawerItem(
+                icon = { Icon(Icons.Default.Checklist, contentDescription = null, tint = ForcedDarkPalette.Content) },
+                label = { Text("Fiche de suivi", color = ForcedDarkPalette.Content) },
+                selected = false,
+                onClick = { /* TODO: Open campaign tracking */ },
+                colors = NavigationDrawerItemDefaults.colors(
+                    unselectedContainerColor = ForcedDarkPalette.Surface,
+                    unselectedIconColor = ForcedDarkPalette.Content,
+                    unselectedTextColor = ForcedDarkPalette.Content,
+                ),
+            )
+
+            // Lieux
+            NavigationDrawerItem(
+                icon = { Icon(Icons.Default.Place, contentDescription = null, tint = ForcedDarkPalette.Content) },
+                label = { Text("Lieux", color = ForcedDarkPalette.Content) },
+                selected = false,
+                onClick = { /* TODO: Open locations */ },
+                colors = NavigationDrawerItemDefaults.colors(
+                    unselectedContainerColor = ForcedDarkPalette.Surface,
+                    unselectedIconColor = ForcedDarkPalette.Content,
+                    unselectedTextColor = ForcedDarkPalette.Content,
+                ),
+            )
+
+            // Cartes
+            NavigationDrawerItem(
+                icon = { Icon(Icons.Default.Map, contentDescription = null, tint = ForcedDarkPalette.Content) },
+                label = { Text("Cartes", color = ForcedDarkPalette.Content) },
+                selected = false,
+                onClick = { /* TODO: Open maps */ },
+                colors = NavigationDrawerItemDefaults.colors(
+                    unselectedContainerColor = ForcedDarkPalette.Surface,
+                    unselectedIconColor = ForcedDarkPalette.Content,
+                    unselectedTextColor = ForcedDarkPalette.Content,
+                ),
+            )
+
+            HorizontalDivider(color = ForcedDarkPalette.Indicator)
+        }
 
         // --- SCÉNARIOS ---
         Row(

@@ -3,15 +3,18 @@ package com.jc2.jdrcompagnon.ui.components
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.AlertDialog
@@ -70,7 +73,7 @@ fun JoueurDrawer(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // ── Header with settings button ──
+            // ── Header with role icon (clickable to change role) and settings ──
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -78,18 +81,35 @@ fun JoueurDrawer(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                // Role icon (clickable to return to role selection)
+                IconButton(
+                    onClick = { GameState.requestRoleChange() },
+                    modifier = Modifier.size(40.dp),
+                ) {
+                    Icon(
+                        Icons.Default.Public,
+                        contentDescription = "Joueur",
+                        tint = ForcedDarkPalette.AccentGold,
+                        modifier = Modifier.size(28.dp),
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
                 Text(
                     text = "MENU",
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
                     color = ForcedDarkPalette.AccentGold,
+                    modifier = Modifier.weight(1f),
                 )
+
                 IconButton(
                     onClick = {
                         onClose()
                         onOpenSettings()
                     },
-                    modifier = Modifier.size(28.dp),
+                    modifier = Modifier.size(40.dp),
                 ) {
                     Icon(
                         Icons.Default.Settings,
