@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -48,6 +48,7 @@ fun BestiaryDetailScreen(
     monsterName: String?,
     currentWorld: WorldState? = null,
     onBack: () -> Unit,
+    onOpenMenu: () -> Unit = {},
 ) {
     val context = LocalContext.current
     var monster by remember { mutableStateOf<SrdEntry?>(null) }
@@ -83,8 +84,8 @@ fun BestiaryDetailScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
+                    IconButton(onClick = onOpenMenu) {
+                        Icon(Icons.Default.Menu, contentDescription = "Menu")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),

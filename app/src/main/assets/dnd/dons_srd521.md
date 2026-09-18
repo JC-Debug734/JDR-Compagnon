@@ -1,215 +1,399 @@
 # Dons — SRD 5.2.1
 
-Ce fichier recense les 17 dons du Document de Référence du Système (D&D 5e, SRD 5.2.1), répartis en 4 catégories : Origines, Général, Style de combat, Faveur épique.
-
-Un don ne peut être sélectionné qu'une seule fois, sauf mention « Répétable ». Les dons de Style de combat nécessitent l'aptitude de classe Style de combat. Les dons de Faveur épique nécessitent le niveau de personnage 19 ou supérieur.
+**Univers** D&D 5e SRD 5.2.1
 
 ---
 
-## Dons d'origines
-
 ### Doué
 
-<!-- id: doue -->
-
-- Catégorie : Origines
-- Prérequis : aucun
-
-Vous recevez la maîtrise d'une combinaison au choix de trois compétences ou outils.
-
-**Répétable.** Vous pouvez sélectionner ce don plus d'une fois.
+**Type** Don
+**Prérequis** -
+**Répétable** Oui
+**Augmentation de caractéristique** -
+**Compétences** 3 compétences ou outils au choix
+**Icône** 🎖️
 
 ---
 
 ### Initié à la magie
 
-<!-- id: initie-a-la-magie -->
+**Type** Don
+**Prérequis** -
+**Répétable** Oui
+**Augmentation de caractéristique** -
+**Compétences** -
+**Icône** 📖
 
-- Catégorie : Origines
-- Prérequis : aucun
+#### Deux sorts mineurs
 
-Vous recevez les bénéfices suivants.
+**Catégorie** Passive
+**Coût** -
+**Condition** -
+**Limitation** -
+**Récupération** -
+**Effet** Vous apprenez deux sorts mineurs de votre choix issus de la liste de sorts du Clerc, du Druide ou du Magicien. L'Intelligence, la Sagesse ou le Charisme est votre caractéristique d'incantation pour les sorts de ce don (décidez laquelle à l'acquisition du don).
 
-**Deux sorts mineurs.** Vous apprenez deux sorts mineurs de votre choix issus de la liste de sorts du Clerc, du Druide ou du Magicien. L'Intelligence, la Sagesse ou le Charisme est votre caractéristique d'incantation pour les sorts de ce don (décidez laquelle à l'acquisition du don).
+#### Sort du 1er niveau
 
-**Sort du 1er niveau.** Choisissez un sort du 1er niveau dans la même liste de sorts où vous avez choisi les sorts mineurs de ce don. Ce sort est toujours considéré comme préparé pour vous. Vous pouvez le lancer une fois sans dépenser d'emplacement de sort et récupérez cette aptitude en terminant un Repos long. Vous pouvez aussi lancer ce même sort avec vos éventuels emplacements de sort.
+**Catégorie** Actif
+**Coût** Emplacement de sort ou usage gratuit
+**Condition** -
+**Limitation** Une fois
+**Récupération** Repos long
+**Effet** Choisissez un sort du 1er niveau dans la même liste de sorts. Vous pouvez le lancer une fois sans dépenser d'emplacement de sort, ou avec un emplacement de sort si vous en disposez.
 
-**Changement de sort.** Chaque fois que vous gagnez un niveau, vous pouvez remplacer l'un des sorts choisis dans le cadre de ce don par un autre sort du même niveau figurant dans la liste de sorts choisie.
+#### Changement de sort
 
-**Répétable.** Vous pouvez sélectionner ce don plus d'une fois, mais devez choisir une liste de sorts différente à chaque fois.
+**Catégorie** Passive
+**Coût** -
+**Condition** Vous gagnez un niveau
+**Limitation** -
+**Récupération** -
+**Effet** Vous pouvez remplacer l'un des sorts choisis dans le cadre de ce don par un autre sort du même niveau figurant dans la liste de sorts choisie.
 
 ---
 
 ### Sauvagerie martiale
 
-<!-- id: sauvagerie-martiale -->
+**Type** Don
+**Prérequis** -
+**Répétable** Non
+**Augmentation de caractéristique** -
+**Compétences** -
+**Icône** 🩸
 
-- Catégorie : Origines
-- Prérequis : aucun
+#### Sauvagerie martiale
 
-Vous êtes formé à porter des coups dévastateurs. Une fois par tour, lorsque vous touchez une cible avec une arme, vous pouvez lancer deux fois les dés de dégâts de l'arme et utiliser l'un ou l'autre résultat contre la cible.
+**Catégorie** Actif
+**Coût** Aucun
+**Condition** Vous touchez une cible avec une arme
+**Limitation** Une fois par tour
+**Récupération** Début de votre tour suivant
+**Effet** Vous pouvez lancer deux fois les dés de dégâts de l'arme et utiliser l'un ou l'autre résultat contre la cible.
 
 ---
 
 ### Vigilant
 
-<!-- id: vigilant -->
+**Type** Don
+**Prérequis** -
+**Répétable** Non
+**Augmentation de caractéristique** -
+**Compétences** -
+**Icône** 👁️
 
-- Catégorie : Origines
-- Prérequis : aucun
+#### Maîtrise de l'Initiative
 
-Vous recevez les bénéfices suivants.
+**Catégorie** Passive
+**Coût** -
+**Condition** Vous jouez l'Initiative
+**Limitation** -
+**Récupération** -
+**Effet** Ajoutez votre bonus de maîtrise au jet d'Initiative.
 
-**Maîtrise de l'Initiative.** Lorsque vous jouez l'Initiative, ajoutez votre bonus de maîtrise au jet.
+#### Échange d'Initiative
 
-**Échange d'Initiative.** Aussitôt après avoir joué l'Initiative, vous pouvez échanger votre Initiative avec celle d'un allié volontaire pour le combat à venir. Un tel échange est impossible si vous-même ou l'allié désigné subissez l'état Neutralisé.
+**Catégorie** Actif
+**Coût** Aucun
+**Condition** Aussitôt après avoir joué l'Initiative
+**Limitation** -
+**Récupération** -
+**Effet** Vous pouvez échanger votre Initiative avec celle d'un allié volontaire pour le combat à venir. Impossible si vous-même ou l'allié désigné subissez l'état Neutralisé.
 
 ---
 
-## Dons généraux
-
 ### Amélioration de caractéristique
 
-<!-- id: amelioration-de-caracteristique -->
+**Type** Don
+**Prérequis** Niveau 4 ou supérieur
+**Répétable** Oui
+**Augmentation de caractéristique** 2 en une caractéristique au choix, ou 1 en deux caractéristiques au choix (max 20)
+**Compétences** -
+**Icône** 💪
 
-- Catégorie : Général
-- Prérequis : niveau 4 ou supérieur
+#### Amélioration de caractéristique
 
-Augmentez de 2 la valeur de caractéristique de votre choix, ou augmentez de 1 deux valeurs de caractéristique de votre choix. Ce don ne peut pas porter une valeur de caractéristique au-delà de 20.
-
-**Répétable.** Vous pouvez sélectionner ce don plus d'une fois.
+**Catégorie** Passive
+**Coût** -
+**Condition** -
+**Limitation** -
+**Récupération** -
+**Effet** Augmentez de 2 la valeur de caractéristique de votre choix, ou augmentez de 1 deux valeurs de caractéristique de votre choix. Ce don ne peut pas porter une valeur de caractéristique au-delà de 20.
 
 ---
 
 ### Empoigneur
 
-<!-- id: empoigneur -->
+**Type** Don
+**Prérequis** Niveau 4 ou supérieur, Force ou Dextérité 13 ou plus
+**Répétable** Non
+**Augmentation de caractéristique** Force ou Dextérité +1 (max 20)
+**Compétences** -
+**Icône** 🤼
 
-- Catégorie : Général
-- Prérequis : niveau 4 ou supérieur, Force ou Dextérité 13 ou plus
+#### Frappe et empoignade
 
-Vous recevez les bénéfices suivants.
+**Catégorie** Actif
+**Coût** Aucun
+**Condition** Vous touchez une créature avec une attaque à mains nues dans le cadre de l'action Attaque
+**Limitation** Une fois par tour
+**Récupération** Début de votre tour suivant
+**Effet** Vous pouvez recourir simultanément aux options Dégâts et Lutte.
 
-**Augmentation de caractéristique.** Votre valeur de Force ou de Dextérité augmente de 1, jusqu'à un maximum de 20.
+#### Attaque avec avantage
 
-**Frappe et empoignade.** Lorsque vous touchez une créature avec une attaque à mains nues dans le cadre de l'action Attaque à votre tour, vous pouvez recourir simultanément aux options Dégâts et Lutte. Vous ne pouvez recourir à ce bénéfice qu'une seule fois par tour.
+**Catégorie** Passive
+**Coût** -
+**Condition** Vous attaquez une créature à laquelle vous imposez l'état Agrippé
+**Limitation** -
+**Récupération** -
+**Effet** Vous avez l'Avantage aux jets d'attaque.
 
-**Attaque avec avantage.** Vous avez l'Avantage aux jets d'attaque contre une créature à laquelle vous imposez l'état Agrippé.
+#### Lutteur rapide
 
-**Lutteur rapide.** Votre Vitesse n'est pas réduite de moitié lorsque vous déplacez une créature à laquelle vous imposez l'état Agrippé, à condition que cette créature soit de votre taille ou d'une catégorie inférieure.
+**Catégorie** Passive
+**Coût** -
+**Condition** Vous déplacez une créature agrippée de votre taille ou d'une catégorie inférieure
+**Limitation** -
+**Récupération** -
+**Effet** Votre Vitesse n'est pas réduite de moitié.
 
 ---
 
-## Dons de Style de combat
-
-*Prérequis commun : aptitude de classe Style de combat.*
-
 ### Archerie
 
-<!-- id: archerie -->
+**Type** Don
+**Prérequis** Aptitude Style de combat
+**Répétable** Non
+**Augmentation de caractéristique** -
+**Compétences** -
+**Icône** 🏹
 
-Vous recevez un bonus de +2 aux jets d'attaque effectués avec des armes à distance.
+#### Archerie
+
+**Catégorie** Passive
+**Coût** -
+**Condition** Vous effectuez une attaque avec une arme à distance
+**Limitation** -
+**Récupération** -
+**Effet** Vous recevez un bonus de +2 aux jets d'attaque effectués avec des armes à distance.
 
 ---
 
 ### Armes à deux mains
 
-<!-- id: armes-a-deux-mains -->
+**Type** Don
+**Prérequis** Aptitude Style de combat
+**Répétable** Non
+**Augmentation de caractéristique** -
+**Compétences** -
+**Icône** 🪓
 
-Lorsque vous lancez les dégâts d'une attaque effectuée avec une arme de corps à corps tenue à deux mains, vous pouvez considérer tous les 1 et 2 obtenus aux dés de dégâts comme des 3. Pour que vous puissiez recevoir ce bénéfice, l'arme doit afficher la propriété Deux mains ou Polyvalente.
+#### Armes à deux mains
+
+**Catégorie** Passive
+**Coût** -
+**Condition** Vous lancez les dégâts d'une attaque avec une arme de corps à corps tenue à deux mains, dotée de la propriété Deux mains ou Polyvalente
+**Limitation** -
+**Récupération** -
+**Effet** Vous pouvez considérer tous les 1 et 2 obtenus aux dés de dégâts comme des 3.
 
 ---
 
 ### Combat à deux armes
 
-<!-- id: combat-a-deux-armes -->
+**Type** Don
+**Prérequis** Aptitude Style de combat
+**Répétable** Non
+**Augmentation de caractéristique** -
+**Compétences** -
+**Icône** 🗡️
 
-Lorsque vous effectuez une attaque supplémentaire résultant de l'emploi d'une arme avec la propriété Légère, vous pouvez ajouter votre modificateur de caractéristique aux dégâts de cette attaque si vous ne l'ajoutiez pas déjà.
+#### Combat à deux armes
+
+**Catégorie** Passive
+**Coût** -
+**Condition** Vous effectuez une attaque supplémentaire résultant de l'emploi d'une arme avec la propriété Légère
+**Limitation** -
+**Récupération** -
+**Effet** Vous pouvez ajouter votre modificateur de caractéristique aux dégâts de cette attaque si vous ne l'ajoutiez pas déjà.
 
 ---
 
 ### Défense
 
-<!-- id: defense -->
+**Type** Don
+**Prérequis** Aptitude Style de combat
+**Répétable** Non
+**Augmentation de caractéristique** -
+**Compétences** -
+**Icône** 🛡️
 
-Tant que vous portez une armure légère, intermédiaire ou lourde, vous recevez un bonus de +1 à la Classe d'armure.
+#### Défense
+
+**Catégorie** Passive
+**Coût** -
+**Condition** Vous portez une armure légère, intermédiaire ou lourde
+**Limitation** -
+**Récupération** -
+**Effet** Vous recevez un bonus de +1 à la Classe d'armure.
 
 ---
 
-## Dons de Faveur épique
-
-*Prérequis commun : niveau 19 ou supérieur.*
-
 ### Faveur d'attaque irrésistible
 
-<!-- id: faveur-attaque-irresistible -->
+**Type** Don
+**Prérequis** Niveau 19 ou supérieur
+**Répétable** Non
+**Augmentation de caractéristique** Force ou Dextérité +1 (max 30)
+**Compétences** -
+**Icône** 👑
 
-**Augmentation de caractéristique.** Votre valeur de Force ou de Dextérité augmente de 1, jusqu'à un maximum de 30.
+#### Défenses surmontées
 
-**Défenses surmontées.** Les dégâts contondants, perforants et tranchants que vous infligez ne sont pas affectés par la Résistance.
+**Catégorie** Passive
+**Coût** -
+**Condition** -
+**Limitation** -
+**Récupération** -
+**Effet** Les dégâts contondants, perforants et tranchants que vous infligez ne sont pas affectés par la Résistance.
 
-**Frappe écrasante.** Lorsque vous obtenez un 20 au d20 d'un jet d'attaque, vous pouvez infliger des dégâts supplémentaires à la cible à hauteur de la valeur de caractéristique augmentée par ce don. Ces dégâts supplémentaires sont du même type que celui de l'attaque.
+#### Frappe écrasante
+
+**Catégorie** Actif
+**Coût** Aucun
+**Condition** Vous obtenez un 20 au d20 d'un jet d'attaque
+**Limitation** -
+**Récupération** -
+**Effet** Vous pouvez infliger des dégâts supplémentaires à la cible à hauteur de la valeur de caractéristique augmentée par ce don. Ces dégâts sont du même type que celui de l'attaque.
 
 ---
 
 ### Faveur de déplacement dimensionnel
 
-<!-- id: faveur-deplacement-dimensionnel -->
+**Type** Don
+**Prérequis** Niveau 19 ou supérieur
+**Répétable** Non
+**Augmentation de caractéristique** 1 caractéristique au choix (max 30)
+**Compétences** -
+**Icône** 🌀
 
-**Augmentation de caractéristique.** Une valeur de caractéristique de votre choix augmente de 1, jusqu'à un maximum de 30.
+#### Entrechats dimensionnels
 
-**Entrechats dimensionnels.** Aussitôt après avoir effectué l'action Attaque ou Magie, vous pouvez vous téléporter d'un maximum de 9 m dans un espace inoccupé que vous voyez.
+**Catégorie** Actif
+**Coût** Aucun
+**Condition** Aussitôt après avoir effectué l'action Attaque ou Magie
+**Limitation** -
+**Récupération** -
+**Effet** Vous pouvez vous téléporter d'un maximum de 9 m dans un espace inoccupé que vous voyez.
 
 ---
 
 ### Faveur de l'esprit nocturne
 
-<!-- id: faveur-esprit-nocturne -->
+**Type** Don
+**Prérequis** Niveau 19 ou supérieur
+**Répétable** Non
+**Augmentation de caractéristique** 1 caractéristique au choix (max 30)
+**Compétences** -
+**Icône** 🌑
 
-**Augmentation de caractéristique.** Une valeur de caractéristique de votre choix augmente de 1, jusqu'à un maximum de 30.
+#### Fusion avec l'ombre
 
-**Fusion avec l'ombre.** Tant que vous êtes dans une zone de Lumière faible ou de Ténèbres, vous pouvez vous octroyer l'état Invisible par une action Bonus. Cet état prend fin aussitôt après que vous avez entrepris une action, une action Bonus ou joué votre Réaction.
+**Catégorie** Actif
+**Coût** Action Bonus
+**Condition** Vous êtes dans une zone de Lumière faible ou de Ténèbres
+**Limitation** -
+**Récupération** -
+**Effet** Vous pouvez vous octroyer l'état Invisible. Cet état prend fin aussitôt après que vous avez entrepris une action, une action Bonus ou joué votre Réaction.
 
-**Forme ombreuse.** Tant que vous êtes dans une zone de Lumière faible ou de Ténèbres, vous avez la Résistance à tous les dégâts hormis les dégâts psychiques et radiants.
+#### Forme ombreuse
 
----
-
-### Faveur de mémoire magique
-
-<!-- id: faveur-memoire-magique -->
-
-- Prérequis supplémentaire : aptitude Sorts
-
-**Augmentation de caractéristique.** Votre valeur d'Intelligence, de Sagesse ou de Charisme augmente de 1, jusqu'à un maximum de 30.
-
-**Incantation gratuite.** Chaque fois que vous lancez un sort avec un emplacement de sort du 1er au 4e niveau, lancez 1d4. Si le résultat obtenu est égal au niveau de l'emplacement, celui-ci n'est pas dépensé.
+**Catégorie** Passive
+**Coût** -
+**Condition** Vous êtes dans une zone de Lumière faible ou de Ténèbres
+**Limitation** -
+**Récupération** -
+**Effet** Vous avez la Résistance à tous les dégâts hormis les dégâts psychiques et radiants.
 
 ---
 
 ### Faveur de prouesse martiale
 
-<!-- id: faveur-prouesse-martiale -->
+**Type** Don
+**Prérequis** Niveau 19 ou supérieur
+**Répétable** Non
+**Augmentation de caractéristique** 1 caractéristique au choix (max 30)
+**Compétences** -
+**Icône** ⚔️
 
-**Augmentation de caractéristique.** Une valeur de caractéristique de votre choix augmente de 1, jusqu'à un maximum de 30.
+#### Visée infaillible
 
-**Visée infaillible.** Lorsque vous échouez à un jet d'attaque, vous pouvez décider que cette attaque touche. Une fois ce bénéfice utilisé, vous ne pouvez plus y recourir jusqu'au début de votre tour suivant.
+**Catégorie** Actif
+**Coût** Aucun
+**Condition** Vous échouez à un jet d'attaque
+**Limitation** Une fois
+**Récupération** Début de votre tour suivant
+**Effet** Vous pouvez décider que cette attaque touche.
+
+---
+
+### Faveur de mémoire magique
+
+**Type** Don
+**Prérequis** Niveau 19 ou supérieur, aptitude Sorts
+**Répétable** Non
+**Augmentation de caractéristique** Intelligence, Sagesse ou Charisme +1 (max 30)
+**Compétences** -
+**Icône** 🔮
+
+#### Incantation gratuite
+
+**Catégorie** Passive
+**Coût** -
+**Condition** Vous lancez un sort avec un emplacement de sort du 1er au 4e niveau
+**Limitation** -
+**Récupération** -
+**Effet** Lancez 1d4. Si le résultat obtenu est égal au niveau de l'emplacement, celui-ci n'est pas dépensé.
 
 ---
 
 ### Faveur de Vision lucide
 
-<!-- id: faveur-vision-lucide -->
+**Type** Don
+**Prérequis** Niveau 19 ou supérieur
+**Répétable** Non
+**Augmentation de caractéristique** 1 caractéristique au choix (max 30)
+**Compétences** -
+**Icône** 👁️‍🗨️
 
-**Augmentation de caractéristique.** Une valeur de caractéristique de votre choix augmente de 1, jusqu'à un maximum de 30.
+#### Vision lucide
 
-**Vision lucide.** Vous disposez de la Vision lucide sur 18 m.
+**Catégorie** Passive
+**Coût** -
+**Condition** -
+**Limitation** -
+**Récupération** -
+**Effet** Vous disposez de la Vision lucide sur 18 m.
 
 ---
 
 ### Faveur du destin
 
-<!-- id: faveur-du-destin -->
+**Type** Don
+**Prérequis** Niveau 19 ou supérieur
+**Répétable** Non
+**Augmentation de caractéristique** 1 caractéristique au choix (max 30)
+**Compétences** -
+**Icône** 🍀
 
-**Augmentation de caractéristique.** Une valeur de caractéristique de votre choix augmente de 1, jusqu'à un maximum de 30.
+#### Destin aiguillé
 
-**Destin aiguillé.** Lorsque vous-même ou une autre créature dans un rayon de 18 m réussissez ou échouez à un Test d20, vous pouvez lancer 2d4 et appliquer le total obtenu comme bonus ou malus au résultat du d20. Une fois ce bénéfice utilisé, vous devez jouer l'Initiative ou terminer un Repos court ou long pour pouvoir y recourir de nouveau.
+**Catégorie** Actif
+**Coût** Aucun
+**Condition** Vous-même ou une autre créature dans un rayon de 18 m réussissez ou échouez à un Test d20
+**Limitation** Une fois
+**Récupération** Jouer l'Initiative, ou terminer un Repos court ou long
+**Effet** Vous pouvez lancer 2d4 et appliquer le total obtenu comme bonus ou malus au résultat du d20.
+
+---

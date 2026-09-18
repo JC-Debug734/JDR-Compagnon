@@ -101,6 +101,60 @@ fun extraireOr(texte: String): Int =
 val CLASSES_LANCEUSES_NIVEAU_1 = setOf("Barde", "Clerc", "Druide", "Ensorceleur", "Magicien", "Occultiste")
 
 // ---------------------------------------------------------------------------
+// Sous-choix d'espèce (ascendance draconique, lignage elfique/gnome, héritage
+// fiélon, don "Polyvalent" de l'Humain) — détectés par nom de trait et extraits
+// des tableaux/listes markdown déjà présents dans especes_srd521.md, sans rien
+// coder en dur : si le SRD change les options d'une table, elles suivent.
+// ---------------------------------------------------------------------------
+
+data class ChoixEspece(val nomTrait: String, val options: List<String>)
+
+/** Extrait la première colonne d'un tableau markdown "| Col1 | ... |", en-tête exclu. */
+private fun extraireColonneTable(texte: String): List<String> {
+    val cellules = texte.lineSequence()
+        .map { it.trim() }
+        .filter { it.startsWith("|") }
+        .mapNotNull { ligne ->
+            val premiere = ligne.removePrefix("|").substringBefore("|").trim()
+            premiere.takeIf { it.isNotBlank() && it.any { c -> c != '-' && c != ':' } }
+        }
+        .toList()
+    return cellules.drop(1) // la première ligne restante est l'en-tête de colonne
+}
+
+/**
+ * Détecte si l'espèce impose un sous-choix à la création (ex. type de dragon pour
+ * le Drakéide) et retourne le nom du trait concerné + ses options. `donsOrigines`
+ * sert uniquement au trait "Polyvalent" de l'Humain (don d'origines au choix).
+ */
+fun detecterChoixEspece(espece: Espece, donsOrigines: List<String>): ChoixEspece? {
+    espece.traits.firstOrNull { it.nom.startsWith("Ascendance draconique") }?.let { t ->
+        val dragons = Regex("""^\|\s*([\p{L}]+)\s*\|\s*[\p{L}]+\s*\|\s*([\p{L}]+)\s*\|\s*[\p{L}]+\s*\|$""", RegexOption.MULTILINE)
+            .findAll(t.description)
+            .flatMap { listOf(it.groupValues[1], it.groupValues[2]) }
+            .filter { it != "Dragon" }
+            .toList()
+        if (dragons.isNotEmpty()) return ChoixEspece(t.nom, dragons)
+    }
+    espece.traits.firstOrNull { it.nom.startsWith("Lignage elfique") }?.let { t ->
+        val lignages = extraireColonneTable(t.description)
+        if (lignages.isNotEmpty()) return ChoixEspece(t.nom, lignages)
+    }
+    espece.traits.firstOrNull { it.nom.startsWith("Lignage gnome") }?.let { t ->
+        val options = Regex("""-\s*\*\*([^*]+?)\.\*\*""").findAll(t.description).map { it.groupValues[1] }.toList()
+        if (options.isNotEmpty()) return ChoixEspece(t.nom, options)
+    }
+    espece.traits.firstOrNull { it.nom.startsWith("Héritage fiélon") }?.let { t ->
+        val heritages = extraireColonneTable(t.description)
+        if (heritages.isNotEmpty()) return ChoixEspece(t.nom, heritages)
+    }
+    espece.traits.firstOrNull { it.nom.startsWith("Polyvalent") }?.let { t ->
+        if (donsOrigines.isNotEmpty()) return ChoixEspece(t.nom, donsOrigines)
+    }
+    return null
+}
+
+// ---------------------------------------------------------------------------
 // Classes — classes_srd521.md
 // ---------------------------------------------------------------------------
 
@@ -109,6 +163,7 @@ data class AptitudeClasse(val nom: String, val description: String)
 data class Classe(
     val id: String?,
     val nom: String,
+    val description: String,
     val caracteristiquePrincipale: List<Caracteristique>,
     val deDeVie: String, // ex. "d12"
     val maitriseJetsSauvegarde: List<Caracteristique>,
@@ -152,6 +207,7 @@ object ClasseParser {
                 Classe(
                     id = extraireId(section.corps),
                     nom = section.titre,
+                    description = champs["Description"].orEmpty(),
                     caracteristiquePrincipale = champs["Caractéristique principale"]
                         ?.let { decouperListe(it).mapNotNull(::nomVersCaracteristique) } ?: emptyList(),
                     deDeVie = Regex("d\\d+").find(champs["Dé de vie"].orEmpty())?.value ?: "",

@@ -1,12 +1,17 @@
 package com.jc2.jdrcompagnon.ui.navigation
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -19,7 +24,11 @@ import com.jc2.jdrcompagnon.ui.AppRole
 import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.components.AppBottomBar
 import com.jc2.jdrcompagnon.ui.components.DiceOverlay
+import com.jc2.jdrcompagnon.ui.components.JoueurDrawer
+import com.jc2.jdrcompagnon.ui.components.MjDrawer
 import com.jc2.jdrcompagnon.ui.screens.RoleSelectionScreen
+import com.jc2.jdrcompagnon.ui.screens.SettingsScreen
+import kotlinx.coroutines.launch
 import com.jc2.jdrcompagnon.ui.tools.LanToolsScreen
 import com.jc2.jdrcompagnon.ui.screens.joueur.CharacterSheetScreen
 import com.jc2.jdrcompagnon.ui.screens.joueur.CharacterSelectionScreen
@@ -32,8 +41,9 @@ import com.jc2.jdrcompagnon.ui.screens.mj.MjCharacterCreationScreen
 import com.jc2.jdrcompagnon.ui.screens.mj.ScenariosScreen
 import com.jc2.jdrcompagnon.ui.screens.mj.CampaignListScreen
 import com.jc2.jdrcompagnon.ui.screens.mj.CampaignEditorScreen
+import com.jc2.jdrcompagnon.feature_group.ui.GroupsScreen
 import com.jc2.jdrcompagnon.ui.screens.mj.MusicScreen
-import com.jc2.jdrcompagnon.ui.screens.world.WorldSelectionScreen
+import com.jc2.jdrcompagnon.ui.screens.WorldSelectionScreen
 import com.jc2.jdrcompagnon.ui.screens.mj.library.BestiaryDetailScreen
 import com.jc2.jdrcompagnon.ui.screens.mj.library.EquipmentDetailScreen
 import com.jc2.jdrcompagnon.ui.screens.mj.LibraryScreen
@@ -42,6 +52,34 @@ import com.jc2.jdrcompagnon.ui.screens.mj.scenario.ScenarioReaderScreen
 import com.jc2.jdrcompagnon.ui.screens.mj.library.SpellDetailScreen
 import com.jc2.jdrcompagnon.ui.screens.mj.library.SrdSectionDetailScreen
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.EquipmentItem
+import com.jc2.jdrcompagnon.di.BoutiqueDetailViewModelFactory
+import com.jc2.jdrcompagnon.di.BoutiqueViewModelFactory
+import com.jc2.jdrcompagnon.feature_boutique.presentation.BoutiqueDetailViewModel
+import com.jc2.jdrcompagnon.feature_boutique.presentation.BoutiqueViewModel
+import com.jc2.jdrcompagnon.feature_boutique.ui.BoutiqueDetailScreen
+import com.jc2.jdrcompagnon.feature_boutique.ui.BoutiqueListScreen
+import com.jc2.jdrcompagnon.feature_carte.ui.CarteCampagneScreen
+import com.jc2.jdrcompagnon.feature_carte.ui.EvenementsAleatoiresScreen
+import com.jc2.jdrcompagnon.feature_carte.ui.VilleDetailScreen
+import com.jc2.jdrcompagnon.feature_carte.ui.VillesListScreen
+import androidx.lifecycle.viewmodel.compose.viewModel
+
+/**
+ * Route "maison" courante selon le rôle actif : point d'ancrage utilisé pour que les
+ * écrans persistants (bibliothèque, musique, campagnes, groupes) retrouvent leur état
+ * (onglet, scroll, position dans un livre...) quand on les quitte puis qu'on y revient,
+ * quel que soit l'écran par lequel on est passé entre-temps.
+ */
+private fun currentHomeRoute(appRole: AppRole?): String = when (appRole) {
+    AppRole.MJ -> Route.MjHome.path
+    AppRole.JOUEUR -> {
+        val lastCharacterId = GameState.selectedCharacterId.value
+        val hasLastCharacter = lastCharacterId != null &&
+                GameState.characters.value.any { it.id == lastCharacterId }
+        if (hasLastCharacter) "${Route.CharacterSheet.path}/$lastCharacterId?isMj=false" else Route.JoueurHome.path
+    }
+    null -> Route.RoleSelection.path
+}
 
 @Composable
 fun JdrNavGraph(overrideStartDestination: String = Route.RoleSelection.path) {
@@ -50,18 +88,107 @@ fun JdrNavGraph(overrideStartDestination: String = Route.RoleSelection.path) {
     val appRole by GameState.appRole.collectAsState()
     val playerName by GameState.playerName.collectAsState()
     val roleChangeRequested by GameState.roleChangeRequested.collectAsState()
+    // Tiroir latéral global : câblé une seule fois ici (comme AppBottomBar et
+    // DiceOverlay) plutôt que réimplémenté par chaque écran, pour que le menu
+    // (hamburger, pas de flèche retour) et son contenu MJ/Joueur soient
+    // strictement identiques quel que soit l'écran d'où on l'ouvre.
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val drawerScope = rememberCoroutineScope()
 
     LaunchedEffect(roleChangeRequested) {
         if (roleChangeRequested) {
             // Seul chemin de retour vers le choix de rôle : on vide toute la
             // pile pour repartir sur une base propre.
             navController.navigate(Route.RoleSelection.path) {
-                popUpTo(0) { inclusive = true }
+                // popUpTo(0) ne correspond à aucune destination réelle en Navigation
+                // Compose (les ids sont dérivés d'un hash de route) : le pop était un
+                // no-op silencieux qui laissait les anciens écrans (dont un éventuel
+                // écran de connexion réseau) empilés sous RoleSelectionScreen, prêts à
+                // ressurgir au retour arrière. On vide la pile jusqu'à la racine du graphe.
+                popUpTo(navController.graph.id) { inclusive = true }
             }
             GameState.consumeRoleChangeRequest()
         }
     }
 
+    BackHandler(enabled = drawerState.isOpen) {
+        drawerScope.launch { drawerState.close() }
+    }
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            when (appRole) {
+                AppRole.MJ -> MjDrawer(
+                    currentWorld = currentWorld,
+                    onOpenAccueil = {
+                        drawerScope.launch { drawerState.close() }
+                        navController.navigate(Route.MjHome.path) {
+                            popUpTo(Route.MjHome.path) { inclusive = false; saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    onOpenCampaigns = {
+                        drawerScope.launch { drawerState.close() }
+                        navController.navigate(Route.Campaigns.path) {
+                            popUpTo(currentHomeRoute(appRole)) { inclusive = false; saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    onOpenScenarioEditor = { scenarioId ->
+                        drawerScope.launch { drawerState.close() }
+                        navController.navigate(Route.ScenarioEditor.path.replace("{scenarioId}", scenarioId ?: "new"))
+                    },
+                    onOpenBoutiques = {
+                        drawerScope.launch { drawerState.close() }
+                        navController.navigate(Route.Boutiques.path) {
+                            popUpTo(currentHomeRoute(appRole)) { inclusive = false; saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    onOpenSettings = {
+                        drawerScope.launch { drawerState.close() }
+                        navController.navigate(Route.Settings.path) {
+                            popUpTo(currentHomeRoute(appRole)) { inclusive = false; saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    onCloseDrawer = { drawerScope.launch { drawerState.close() } },
+                )
+                AppRole.JOUEUR -> JoueurDrawer(
+                    onOpenAccueil = {
+                        drawerScope.launch { drawerState.close() }
+                        val homeRoute = currentHomeRoute(appRole)
+                        navController.navigate(homeRoute) {
+                            popUpTo(homeRoute) { inclusive = false; saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    onChooseCharacter = {
+                        drawerScope.launch { drawerState.close() }
+                        navController.navigate(Route.CharacterSelection.path + "?isMj=false") {
+                            launchSingleTop = true
+                        }
+                    },
+                    onOpenSettings = {
+                        drawerScope.launch { drawerState.close() }
+                        navController.navigate(Route.Settings.path) {
+                            popUpTo(currentHomeRoute(appRole)) { inclusive = false; saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    onClose = { drawerScope.launch { drawerState.close() } },
+                )
+                null -> Unit // Pas de rôle choisi : pas de tiroir pertinent (choix de rôle, sélection de monde).
+            }
+        }
+    ) {
     Box(modifier = Modifier.fillMaxSize()) {
         NavHost(
             navController = navController,
@@ -84,7 +211,8 @@ fun JdrNavGraph(overrideStartDestination: String = Route.RoleSelection.path) {
                             popUpTo(Route.FirstLaunchWorldSelection.path) { inclusive = true }
                         }
                     },
-                    onBack = { /* Pas de retour possible au premier lancement */ }
+                    onBack = { /* Pas de retour possible au premier lancement */ },
+                    onOpenMenu = { drawerScope.launch { drawerState.open() } },
                 )
             }
 
@@ -116,7 +244,8 @@ fun JdrNavGraph(overrideStartDestination: String = Route.RoleSelection.path) {
                             popUpTo(Route.RoleSelection.path) { inclusive = true }
                         }
                     },
-                    onSelectContext = { navController.navigate(Route.WorldSelection.path) }
+                    onSelectContext = { navController.navigate(Route.WorldSelection.path) },
+                    onSelectSettings = { navController.navigate(Route.Settings.path) }
                 )
             }
 
@@ -136,24 +265,42 @@ fun JdrNavGraph(overrideStartDestination: String = Route.RoleSelection.path) {
                     currentWorld = currentWorld,
                     onCreateCharacter = { navController.navigate(Route.MjCharacterCreation.path) },
                     onViewCharacters = { navController.navigate(Route.CharacterSelection.path + "?isMj=true") },
-                    onOpenLibrary = { navController.navigate(Route.Library.path.replace("{initialTab}", "monsters")) },
                     onOpenScenarioEditor = { scenarioId ->
                         navController.navigate(Route.ScenarioEditor.path.replace("{scenarioId}", scenarioId ?: "new"))
                     },
-                    onOpenCampaigns = { navController.navigate(Route.Campaigns.path) },
-                    onOpenMusic = { navController.navigate(Route.Music.path) },
-                    onOpenLanHost = { groupId, campaignTitle ->
-                        val params = buildList {
-                            if (groupId != null) add("groupId=${java.net.URLEncoder.encode(groupId, "UTF-8")}")
-                            if (campaignTitle != null) add("campaignTitle=${java.net.URLEncoder.encode(campaignTitle, "UTF-8")}")
+                    onOpenCampaigns = {
+                        navController.navigate(Route.Campaigns.path) {
+                            popUpTo(currentHomeRoute(appRole)) { inclusive = false; saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
                         }
-                        val destination = if (params.isEmpty()) Route.LanHost.path else "${Route.LanHost.path}?${params.joinToString("&")}"
-                        navController.navigate(destination)
+                    },
+                    onOpenGroups = {
+                        navController.navigate(Route.Groups.path) {
+                            popUpTo(currentHomeRoute(appRole)) { inclusive = false; saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    onOpenBoutiques = {
+                        navController.navigate(Route.Boutiques.path) {
+                            popUpTo(currentHomeRoute(appRole)) { inclusive = false; saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    onOpenMusic = {
+                        navController.navigate(Route.Music.path) {
+                            popUpTo(currentHomeRoute(appRole)) { inclusive = false; saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
                     },
                     onOpenInternalLink = { type, name ->
                         navigateToInternalLink(navController, type, name)
                     },
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onOpenMenu = { drawerScope.launch { drawerState.open() } },
                 )
             }
 
@@ -179,20 +326,30 @@ fun JdrNavGraph(overrideStartDestination: String = Route.RoleSelection.path) {
                     currentWorld = currentWorld,
                     onCharacterCreated = { navController.popBackStack() },
                     onBack = { navController.popBackStack() },
+                    onOpenMenu = { drawerScope.launch { drawerState.open() } },
                 )
             }
 
             composable(Route.JoueurHome.path) {
                 JoueurHomeScreen(
                     currentWorld = currentWorld,
-                    onChooseCharacter = { navController.navigate(Route.CharacterSelection.path) },
+                    onChooseCharacter = { navController.navigate(Route.CharacterSelection.path + "?isMj=false") },
                     onCreateCharacter = { navController.navigate(Route.CharacterCreation.path) },
                     onBack = { navController.popBackStack() },
                     onViewCharacter = { character ->
-                        navController.navigate("${Route.CharacterSheet.path}/${character.id}")
+                        navController.navigate("${Route.CharacterSheet.path}/${character.id}") {
+                            launchSingleTop = true
+                        }
                     },
-                    onOpenMusic = { navController.navigate(Route.Music.path) },
-                    onSelectWorld = { navController.navigate(Route.WorldSelection.path) }
+                    onOpenMusic = {
+                        navController.navigate(Route.Music.path) {
+                            popUpTo(currentHomeRoute(appRole)) { inclusive = false; saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    onSelectWorld = { navController.navigate(Route.WorldSelection.path) },
+                    onOpenMenu = { drawerScope.launch { drawerState.open() } },
                 )
             }
 
@@ -205,25 +362,20 @@ fun JdrNavGraph(overrideStartDestination: String = Route.RoleSelection.path) {
                 CharacterSelectionScreen(
                     currentWorld = currentWorld,
                     onViewCharacter = { character ->
-                        GameState.selectCharacter(character.id)
-                        navController.navigate("${Route.CharacterSheet.path}/${character.id}?isMj=$isMj")
+                        // Ne mémoriser "le personnage à reprendre" que côté Joueur : en
+                        // mode MJ, consulter une fiche (PJ, PNJ, boss...) ne doit pas
+                        // écraser le dernier personnage réellement joué, sinon un passage
+                        // en rôle Joueur juste après rouvre la mauvaise fiche.
+                        if (!isMj) GameState.selectCharacter(character.id)
+                        navController.navigate("${Route.CharacterSheet.path}/${character.id}?isMj=$isMj") {
+                            launchSingleTop = true
+                        }
                     },
                     onCreateQuick = { navController.navigate(Route.MjCharacterCreation.path) },
                     onCreateWizard = { navController.navigate(Route.CharacterCreation.path + "?isMj=true") },
                     isMjMode = isMj,
-                    onBack = { navController.popBackStack() }
-                )
-            }
-
-            composable(Route.CharacterSelection.path) {
-                val currentWorld by GameState.currentWorld.collectAsState()
-                CharacterSelectionScreen(
-                    currentWorld = currentWorld,
-                    onViewCharacter = { character ->
-                        GameState.selectCharacter(character.id)
-                        navController.navigate("${Route.CharacterSheet.path}/${character.id}")
-                    },
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onOpenMenu = { drawerScope.launch { drawerState.open() } },
                 )
             }
 
@@ -251,7 +403,11 @@ fun JdrNavGraph(overrideStartDestination: String = Route.RoleSelection.path) {
                             navController.navigate(
                                 Route.SpellManagement.path.replace("{characterId}", character.id) + "?isMj=$isMj"
                             )
-                        }
+                        },
+                        onChooseCharacter = {
+                            navController.navigate(Route.CharacterSelection.path + "?isMj=false")
+                        },
+                        onOpenMenu = { drawerScope.launch { drawerState.open() } },
                     )
                 }
             }
@@ -268,7 +424,8 @@ fun JdrNavGraph(overrideStartDestination: String = Route.RoleSelection.path) {
                 SpellManagementScreen(
                     characterId = characterId,
                     isMjMode = isMj,
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onOpenMenu = { drawerScope.launch { drawerState.open() } },
                 )
             }
 
@@ -286,7 +443,8 @@ fun JdrNavGraph(overrideStartDestination: String = Route.RoleSelection.path) {
                             GameState.updateCharacter(updated)
                             navController.popBackStack()
                         },
-                        onCancel = { navController.popBackStack() }
+                        onCancel = { navController.popBackStack() },
+                        onOpenMenu = { drawerScope.launch { drawerState.open() } },
                     )
                 }
             }
@@ -301,6 +459,7 @@ fun JdrNavGraph(overrideStartDestination: String = Route.RoleSelection.path) {
                     isMjMode = isMj,
                     onCharacterCreated = { navController.popBackStack() },
                     onBack = { navController.popBackStack() },
+                    onOpenMenu = { drawerScope.launch { drawerState.open() } },
                 )
             }
 
@@ -324,7 +483,8 @@ fun JdrNavGraph(overrideStartDestination: String = Route.RoleSelection.path) {
                             navController.popBackStack()
                         }
                     },
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onOpenMenu = { drawerScope.launch { drawerState.open() } },
                 )
             }
 
@@ -340,7 +500,8 @@ fun JdrNavGraph(overrideStartDestination: String = Route.RoleSelection.path) {
                         )
                         navController.popBackStack()
                     },
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onOpenMenu = { drawerScope.launch { drawerState.open() } },
                 )
             }
 
@@ -352,8 +513,11 @@ fun JdrNavGraph(overrideStartDestination: String = Route.RoleSelection.path) {
                         navController.navigate(Route.ScenarioEditor.path.replace("{scenarioId}", scenarioId ?: "new"))
                     },
                     onOpenScenarioReader = { scenarioId ->
-                        navController.navigate(Route.ScenarioReader.path.replace("{scenarioId}", scenarioId))
-                    }
+                        navController.navigate(Route.ScenarioReader.path.replace("{scenarioId}", scenarioId)) {
+                            launchSingleTop = true
+                        }
+                    },
+                    onOpenMenu = { drawerScope.launch { drawerState.open() } },
                 )
             }
 
@@ -368,7 +532,8 @@ fun JdrNavGraph(overrideStartDestination: String = Route.RoleSelection.path) {
                     onSaved = { navController.popBackStack() },
                     onOpenInternalLink = { type, name ->
                         navigateToInternalLink(navController, type, name)
-                    }
+                    },
+                    onOpenMenu = { drawerScope.launch { drawerState.open() } },
                 )
             }
 
@@ -382,7 +547,8 @@ fun JdrNavGraph(overrideStartDestination: String = Route.RoleSelection.path) {
                     onBack = { navController.popBackStack() },
                     onOpenInternalLink = { type, name ->
                         navigateToInternalLink(navController, type, name)
-                    }
+                    },
+                    onOpenMenu = { drawerScope.launch { drawerState.open() } },
                 )
             }
 
@@ -419,7 +585,8 @@ fun JdrNavGraph(overrideStartDestination: String = Route.RoleSelection.path) {
                     kind = kind,
                     entryName = entryName,
                     currentWorld = currentWorld,
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onOpenMenu = { drawerScope.launch { drawerState.open() } },
                 )
             }
 
@@ -431,7 +598,8 @@ fun JdrNavGraph(overrideStartDestination: String = Route.RoleSelection.path) {
                 BestiaryDetailScreen(
                     monsterName = monsterName,
                     currentWorld = currentWorld,
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onOpenMenu = { drawerScope.launch { drawerState.open() } },
                 )
             }
 
@@ -443,7 +611,8 @@ fun JdrNavGraph(overrideStartDestination: String = Route.RoleSelection.path) {
                 SpellDetailScreen(
                     spellName = spellName,
                     currentWorld = currentWorld,
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onOpenMenu = { drawerScope.launch { drawerState.open() } },
                 )
             }
 
@@ -455,14 +624,56 @@ fun JdrNavGraph(overrideStartDestination: String = Route.RoleSelection.path) {
                 EquipmentDetailScreen(
                     equipmentName = equipmentName,
                     currentWorld = currentWorld,
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onOpenMenu = { drawerScope.launch { drawerState.open() } },
                 )
             }
 
             composable(Route.Music.path) {
                 MusicScreen(
                     currentWorld = currentWorld,
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onOpenMenu = { drawerScope.launch { drawerState.open() } },
+                )
+            }
+
+            composable(Route.Groups.path) {
+                GroupsScreen(
+                    currentWorld = currentWorld,
+                    onOpenBestiaryDetail = { monsterName ->
+                        navController.navigate(Route.BestiaryDetail.path.replace("{monsterName}", monsterName))
+                    },
+                    onOpenEquipmentDetail = { equipmentName ->
+                        navController.navigate(Route.EquipmentDetail.path.replace("{equipmentName}", equipmentName))
+                    },
+                    onBack = { navController.popBackStack() },
+                    onOpenMenu = { drawerScope.launch { drawerState.open() } },
+                )
+            }
+
+            composable(Route.Boutiques.path) {
+                val boutiqueViewModel: BoutiqueViewModel = viewModel(factory = BoutiqueViewModelFactory())
+                BoutiqueListScreen(
+                    viewModel = boutiqueViewModel,
+                    onBoutiqueClick = { boutiqueId ->
+                        navController.navigate(Route.BoutiqueDetail.path.replace("{boutiqueId}", boutiqueId))
+                    },
+                    onBack = { navController.popBackStack() },
+                    onOpenMenu = { drawerScope.launch { drawerState.open() } },
+                )
+            }
+
+            composable(
+                route = Route.BoutiqueDetail.path,
+                arguments = listOf(navArgument("boutiqueId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val boutiqueId = backStackEntry.arguments?.getString("boutiqueId") ?: return@composable
+                val boutiqueDetailViewModel: BoutiqueDetailViewModel =
+                    viewModel(factory = BoutiqueDetailViewModelFactory(boutiqueId))
+                BoutiqueDetailScreen(
+                    viewModel = boutiqueDetailViewModel,
+                    onBack = { navController.popBackStack() },
+                    onOpenMenu = { drawerScope.launch { drawerState.open() } },
                 )
             }
 
@@ -472,7 +683,8 @@ fun JdrNavGraph(overrideStartDestination: String = Route.RoleSelection.path) {
                     onBack = { navController.popBackStack() },
                     onOpenCampaignEditor = { campaignId ->
                         navController.navigate(Route.CampaignEditor.path.replace("{campaignId}", campaignId ?: "new"))
-                    }
+                    },
+                    onOpenMenu = { drawerScope.launch { drawerState.open() } },
                 )
             }
 
@@ -483,7 +695,75 @@ fun JdrNavGraph(overrideStartDestination: String = Route.RoleSelection.path) {
                 val campaignId = backStackEntry.arguments?.getString("campaignId")
                 CampaignEditorScreen(
                     campaignId = if (campaignId == "new") null else campaignId,
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onOpenMenu = { drawerScope.launch { drawerState.open() } },
+                    onOpenCarte = { id -> navController.navigate(Route.CarteCampagne.path.replace("{campagneId}", id)) },
+                    onOpenEvenements = { id -> navController.navigate(Route.Evenements.path.replace("{campagneId}", id)) },
+                    onOpenVilles = { id -> navController.navigate(Route.Villes.path.replace("{campagneId}", id)) },
+                )
+            }
+
+            composable(
+                route = Route.CarteCampagne.path,
+                arguments = listOf(navArgument("campagneId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val campagneId = backStackEntry.arguments?.getString("campagneId") ?: return@composable
+                CarteCampagneScreen(
+                    campagneId = campagneId,
+                    onBack = { navController.popBackStack() },
+                    onOpenMenu = { drawerScope.launch { drawerState.open() } },
+                )
+            }
+
+            composable(
+                route = Route.Evenements.path,
+                arguments = listOf(navArgument("campagneId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val campagneId = backStackEntry.arguments?.getString("campagneId") ?: return@composable
+                EvenementsAleatoiresScreen(
+                    campagneId = campagneId,
+                    onBack = { navController.popBackStack() },
+                    onOpenMenu = { drawerScope.launch { drawerState.open() } },
+                )
+            }
+
+            composable(
+                route = Route.Villes.path,
+                arguments = listOf(navArgument("campagneId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val campagneId = backStackEntry.arguments?.getString("campagneId") ?: return@composable
+                VillesListScreen(
+                    campagneId = campagneId,
+                    onBack = { navController.popBackStack() },
+                    onOpenMenu = { drawerScope.launch { drawerState.open() } },
+                    onOpenVille = { villeId ->
+                        navController.navigate(
+                            Route.VilleDetail.path.replace("{campagneId}", campagneId).replace("{villeId}", villeId)
+                        )
+                    },
+                )
+            }
+
+            composable(
+                route = Route.VilleDetail.path,
+                arguments = listOf(
+                    navArgument("campagneId") { type = NavType.StringType },
+                    navArgument("villeId") { type = NavType.StringType }
+                )
+            ) { backStackEntry ->
+                val campagneId = backStackEntry.arguments?.getString("campagneId") ?: return@composable
+                val villeId = backStackEntry.arguments?.getString("villeId") ?: return@composable
+                VilleDetailScreen(
+                    campagneId = campagneId,
+                    villeId = villeId,
+                    onBack = { navController.popBackStack() },
+                    onOpenMenu = { drawerScope.launch { drawerState.open() } },
+                )
+            }
+
+            composable(Route.Settings.path) {
+                SettingsScreen(
+                    onBack = { navController.popBackStack() },
                 )
             }
         }
@@ -494,35 +774,39 @@ fun JdrNavGraph(overrideStartDestination: String = Route.RoleSelection.path) {
         // Barre de menu globale accessible depuis n'importe quel écran
         AppBottomBar(
             onNavigateConnection = {
-                when (appRole) {
-                    AppRole.MJ -> navController.navigate(Route.LanHost.path)
-                    AppRole.JOUEUR -> navController.navigate(Route.LanJoin.path)
-                    null -> navController.navigate(Route.LanTools.path)
+                // Sans popUpTo/launchSingleTop, chaque tap (y compris depuis l'écran
+                // de connexion lui-même) empilait un nouvel écran LanHost/LanJoin par
+                // dessus le précédent : la navigation semblait "bloquée" dessus car le
+                // retour arrière ne faisait que dépiler des doublons.
+                val destination = when (appRole) {
+                    AppRole.MJ -> Route.LanHost.path
+                    AppRole.JOUEUR -> Route.LanJoin.path
+                    null -> Route.LanTools.path
+                }
+                navController.navigate(destination) {
+                    popUpTo(currentHomeRoute(appRole)) { inclusive = false; saveState = true }
+                    launchSingleTop = true
+                    restoreState = true
                 }
             },
-            onNavigateLibrary = { navController.navigate(Route.Library.path.replace("{initialTab}", "monsters")) },
-            onHomeTap = {
-                val homeRoute = when (appRole) {
-                    AppRole.MJ -> Route.MjHome.path
-                    AppRole.JOUEUR -> {
-                        val lastCharacterId = GameState.selectedCharacterId.value
-                        val hasLastCharacter = lastCharacterId != null &&
-                                GameState.characters.value.any { it.id == lastCharacterId }
-                        if (hasLastCharacter) {
-                            "${Route.CharacterSheet.path}/$lastCharacterId?isMj=false"
-                        } else {
-                            Route.JoueurHome.path
-                        }
-                    }
-                    null -> Route.RoleSelection.path
-                }
-                navController.navigate(homeRoute) {
+            onNavigateLibrary = {
+                navController.navigate(Route.Library.path.replace("{initialTab}", "monsters")) {
+                    popUpTo(currentHomeRoute(appRole)) { inclusive = false; saveState = true }
                     launchSingleTop = true
-                    popUpTo(homeRoute) { inclusive = false }
+                    restoreState = true
+                }
+            },
+            onHomeTap = {
+                val homeRoute = currentHomeRoute(appRole)
+                navController.navigate(homeRoute) {
+                    popUpTo(homeRoute) { inclusive = false; saveState = true }
+                    launchSingleTop = true
+                    restoreState = true
                 }
             },
             modifier = Modifier.align(Alignment.BottomCenter)
         )
+    }
     }
 }
 
@@ -536,7 +820,7 @@ private fun navigateToInternalLink(navController: androidx.navigation.NavControl
             // on ouvre la liste plutôt que de ne rien faire.
             Route.CharacterSelection.path + "?isMj=true"
         }
-        navController.navigate(route)
+        navController.navigate(route) { launchSingleTop = true }
         return
     }
     val route = when (type) {
@@ -546,5 +830,5 @@ private fun navigateToInternalLink(navController: androidx.navigation.NavControl
         "rule" -> Route.Library.path.replace("{initialTab}", "rules")
         else -> null
     }
-    route?.let { navController.navigate(it) }
+    route?.let { navController.navigate(it) { launchSingleTop = true } }
 }

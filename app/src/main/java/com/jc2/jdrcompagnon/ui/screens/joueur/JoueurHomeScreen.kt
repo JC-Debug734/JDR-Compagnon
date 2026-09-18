@@ -11,21 +11,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -36,8 +32,6 @@ import com.jc2.jdrcompagnon.ui.Character
 import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.WorldState
 import com.jc2.jdrcompagnon.ui.components.GlobalMusicIndicator
-import com.jc2.jdrcompagnon.ui.components.JoueurDrawer
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,29 +43,18 @@ fun JoueurHomeScreen(
     onViewCharacter: (Character) -> Unit = {},
     onOpenMusic: () -> Unit = {},
     onSelectWorld: () -> Unit = {},
+    onOpenMenu: () -> Unit = {},
 ) {
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-    val coroutineScope = rememberCoroutineScope()
-
     val allCharacters by GameState.characters.collectAsState()
     val selectedCharacterId by GameState.selectedCharacterId.collectAsState()
     val lastCharacter = allCharacters.find { it.id == selectedCharacterId }
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = {
-            JoueurDrawer(
-                onChooseCharacter = onChooseCharacter,
-                onClose = { coroutineScope.launch { drawerState.close() } }
-            )
-        }
-    ) {
-        Scaffold(
+    Scaffold(
             topBar = {
                 CenterAlignedTopAppBar(
                     title = { Text("AVENTURIER", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black, letterSpacing = 2.sp)) },
                     navigationIcon = {
-                        IconButton(onClick = { coroutineScope.launch { drawerState.open() } }) {
+                        IconButton(onClick = onOpenMenu) {
                             Icon(Icons.Default.Menu, contentDescription = "Menu")
                         }
                     },
@@ -81,7 +64,7 @@ fun JoueurHomeScreen(
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
                 )
             },
-            containerColor = MaterialTheme.colorScheme.background
+            containerColor = Color.Transparent
         ) { innerPadding ->
             Box(
                 modifier = Modifier
@@ -129,5 +112,4 @@ fun JoueurHomeScreen(
                 }
             }
         }
-    }
 }

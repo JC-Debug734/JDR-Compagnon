@@ -1,10 +1,25 @@
 package com.jc2.jdrcompagnon.ui.components
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.OutlinedTextField
@@ -16,6 +31,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.theme.ForcedDarkPalette
 
@@ -35,41 +54,85 @@ import com.jc2.jdrcompagnon.ui.theme.ForcedDarkPalette
  */
 @Composable
 fun JoueurDrawer(
+    onOpenAccueil: () -> Unit,
     onChooseCharacter: () -> Unit,
+    onOpenSettings: () -> Unit = {},
     onClose: () -> Unit,
 ) {
-    var showSettingsDialog by remember { mutableStateOf(false) }
+    ModalDrawerSheet(
+        drawerContainerColor = ForcedDarkPalette.Surface,
+        drawerContentColor = ForcedDarkPalette.Content,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxHeight()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            // ── Header with settings button ──
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "MENU",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = ForcedDarkPalette.AccentGold,
+                )
+                IconButton(
+                    onClick = {
+                        onClose()
+                        onOpenSettings()
+                    },
+                    modifier = Modifier.size(28.dp),
+                ) {
+                    Icon(
+                        Icons.Default.Settings,
+                        contentDescription = "Réglages",
+                        tint = ForcedDarkPalette.AccentGold,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
 
-    AppDrawer {
-        NavigationDrawerItem(
-            icon = { Icon(Icons.Default.Group, null, tint = ForcedDarkPalette.Content) },
-            label = { Text("Choisir un personnage", color = ForcedDarkPalette.Content) },
-            selected = false,
-            onClick = {
-                onClose()
-                onChooseCharacter()
-            },
-            colors = NavigationDrawerItemDefaults.colors(
-                unselectedContainerColor = ForcedDarkPalette.Surface,
-                unselectedIconColor = ForcedDarkPalette.Content,
-                unselectedTextColor = ForcedDarkPalette.Content
-            )
-        )
-        NavigationDrawerItem(
-            icon = { Icon(Icons.Default.Settings, null, tint = ForcedDarkPalette.Content) },
-            label = { Text("Configuration", color = ForcedDarkPalette.Content) },
-            selected = false,
-            onClick = { showSettingsDialog = true },
-            colors = NavigationDrawerItemDefaults.colors(
-                unselectedContainerColor = ForcedDarkPalette.Surface,
-                unselectedIconColor = ForcedDarkPalette.Content,
-                unselectedTextColor = ForcedDarkPalette.Content
-            )
-        )
-    }
+            HorizontalDivider(color = ForcedDarkPalette.Indicator)
 
-    if (showSettingsDialog) {
-        PlayerSettingsDialog(onDismiss = { showSettingsDialog = false })
+            // Choose character
+            NavigationDrawerItem(
+                icon = { Icon(Icons.Default.Group, null, tint = ForcedDarkPalette.Content) },
+                label = { Text("Choisir un personnage", color = ForcedDarkPalette.Content) },
+                selected = false,
+                onClick = {
+                    onClose()
+                    onChooseCharacter()
+                },
+                colors = NavigationDrawerItemDefaults.colors(
+                    unselectedContainerColor = ForcedDarkPalette.Surface,
+                    unselectedIconColor = ForcedDarkPalette.Content,
+                    unselectedTextColor = ForcedDarkPalette.Content
+                )
+            )
+
+            HorizontalDivider(color = ForcedDarkPalette.Indicator)
+
+            // Change role
+            NavigationDrawerItem(
+                icon = { Icon(Icons.Default.SwapHoriz, null, tint = ForcedDarkPalette.Content) },
+                label = { Text("Changer de rôle", color = ForcedDarkPalette.Content) },
+                selected = false,
+                onClick = { GameState.requestRoleChange() },
+                colors = NavigationDrawerItemDefaults.colors(
+                    unselectedContainerColor = ForcedDarkPalette.Surface,
+                    unselectedIconColor = ForcedDarkPalette.Content,
+                    unselectedTextColor = ForcedDarkPalette.Content,
+                ),
+            )
+        }
     }
 }
 

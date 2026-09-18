@@ -7,11 +7,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
@@ -38,7 +38,8 @@ fun ScenariosScreen(
     currentWorld: WorldState?,
     onBack: () -> Unit,
     onOpenScenarioEditor: (String?) -> Unit,
-    onOpenScenarioReader: (String) -> Unit
+    onOpenScenarioReader: (String) -> Unit,
+    onOpenMenu: () -> Unit = {},
 ) {
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -80,8 +81,8 @@ fun ScenariosScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
+                    IconButton(onClick = onOpenMenu) {
+                        Icon(Icons.Default.Menu, contentDescription = "Menu")
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = androidx.compose.ui.graphics.Color.Transparent)

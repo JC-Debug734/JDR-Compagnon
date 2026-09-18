@@ -37,7 +37,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
@@ -46,7 +45,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -54,13 +52,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,10 +69,8 @@ import androidx.compose.ui.unit.sp
 import com.jc2.jdrcompagnon.ui.Character
 import com.jc2.jdrcompagnon.ui.CharacterProgression
 import com.jc2.jdrcompagnon.ui.GameState
-import com.jc2.jdrcompagnon.ui.components.JoueurDrawer
 import com.jc2.jdrcompagnon.ui.NaheulbeukCharacter
 import com.jc2.jdrcompagnon.ui.WorldState
-import kotlinx.coroutines.launch
 
 // ─────────────────────────────────────────────────────────────
 // Sélection de personnage : routeur (CharacterSelectionScreen)
@@ -95,6 +89,7 @@ fun CharacterSelectionScreen(
     onCreateWizard: () -> Unit = {},
     onBack: () -> Unit,
     isMjMode: Boolean = false,
+    onOpenMenu: () -> Unit = {},
 ) {
     val allCharacters by GameState.characters.collectAsState()
     val characters = if (currentWorld != null) {
@@ -116,7 +111,8 @@ fun CharacterSelectionScreen(
             onCreateQuick = if (isMjMode) onCreateQuick else { {} },
             onCreateWizard = if (isMjMode) onCreateWizard else { {} },
             onBack = onBack,
-            showCreateButton = isMjMode
+            showCreateButton = isMjMode,
+            onOpenMenu = onOpenMenu,
         )
     }
 }
@@ -134,14 +130,13 @@ fun CharacterListWithSearchScreen(
     onCreateQuick: () -> Unit,
     onCreateWizard: () -> Unit,
     onBack: () -> Unit,
-    showCreateButton: Boolean = true
+    showCreateButton: Boolean = true,
+    onOpenMenu: () -> Unit = {},
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var selectedTypeFilter by remember { mutableStateOf("Tous") }
     var showFilters by remember { mutableStateOf(false) }
     var showChoixCreation by remember { mutableStateOf(false) }
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-    val coroutineScope = rememberCoroutineScope()
 
     val filteredCharacters = remember(searchQuery, selectedTypeFilter, characters) {
         characters.filter { character ->
@@ -154,16 +149,7 @@ fun CharacterListWithSearchScreen(
         }
     }
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = {
-            JoueurDrawer(
-                onChooseCharacter = {},
-                onClose = { coroutineScope.launch { drawerState.close() } }
-            )
-        }
-    ) {
-        Scaffold(
+    Scaffold(
             topBar = {
                 TopAppBar(
                     title = {
@@ -175,7 +161,7 @@ fun CharacterListWithSearchScreen(
                         )
                     },
                     navigationIcon = {
-                        IconButton(onClick = { coroutineScope.launch { drawerState.open() } }) {
+                        IconButton(onClick = onOpenMenu) {
                             Icon(Icons.Default.Menu, contentDescription = "Menu")
                         }
                     },
@@ -189,7 +175,7 @@ fun CharacterListWithSearchScreen(
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface
+                        containerColor = Color.Transparent
                     )
                 )
             },
@@ -202,7 +188,7 @@ fun CharacterListWithSearchScreen(
                     )
                 }
             },
-            containerColor = MaterialTheme.colorScheme.background
+            containerColor = Color.Transparent
         ) { innerPadding ->
             Column(
                 modifier = Modifier
@@ -277,7 +263,6 @@ fun CharacterListWithSearchScreen(
                 }
             }
         }
-    }
 
     if (showChoixCreation) {
         AlertDialog(

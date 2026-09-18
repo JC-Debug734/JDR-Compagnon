@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,6 +26,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Landscape
 import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SystemUpdate
@@ -33,6 +35,7 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -69,7 +72,6 @@ import com.jc2.jdrcompagnon.BuildConfig
 import com.jc2.jdrcompagnon.R
 import com.jc2.jdrcompagnon.ui.WorldState
 import com.jc2.jdrcompagnon.ui.theme.Breakpoints
-import com.jc2.jdrcompagnon.ui.theme.ForcedDarkPalette
 import com.jc2.jdrcompagnon.update.UpdateManager
 import com.jc2.jdrcompagnon.update.UpdateUiState
 import kotlinx.coroutines.launch
@@ -126,6 +128,47 @@ data class RoleCardData(
     val color: Color,
     val onClick: () -> Unit,
 )
+
+@Composable
+fun RoleSelectionButton(
+    label: String,
+    icon: ImageVector,
+    color: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier
+            .height(80.dp)
+            .border(2.dp, color, MaterialTheme.shapes.medium)
+            .clickable(onClick = onClick),
+        shape = MaterialTheme.shapes.medium,
+        color = color.copy(alpha = 0.15f),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = color,
+                modifier = Modifier.size(24.dp),
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = color,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+            )
+        }
+    }
+}
 
 /**
  * Role selection card: grande icône cliquable, sans carte ni texte.
@@ -252,6 +295,7 @@ fun RoleSelectionScreen(
     onSelectMj: () -> Unit,
     onSelectJoueur: () -> Unit,
     onSelectContext: () -> Unit,
+    onSelectSettings: () -> Unit = {},
 ) {
     if (playerName == null) {
         NameEntryDialog(
@@ -298,23 +342,195 @@ fun RoleSelectionScreen(
     )
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column {
+        containerColor = Color.Transparent
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+            verticalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Top,
+            ) {
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // ── Message de bienvenue (nom du joueur persistant) ──
+                if (playerName != null) {
+                    Text(
+                        text = "Bienvenue, $playerName !",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.primary,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+
+                // ── Hero section (delay 100ms, 200ms) ──
+                val worldCoverRes = when (currentWorld?.id) {
+                    // TODO: image temporairement retirée (fichier PNG invalide, à corriger puis remettre)
+                    // "donjon_et_dragon" -> R.drawable.dnd_cover_image
+                    "naheulbeuk" -> R.drawable.naheulbeuk
+                    else -> null
+                }
+
+                AnimatedVisibility(
+                    visible = visible,
+                    enter = fadeIn(animationSpec = tween(durationMillis = 200, delayMillis = 100)) +
+                            slideInVertically(
+                                animationSpec = tween(durationMillis = 200, delayMillis = 100),
+                                initialOffsetY = { it / 4 },
+                            ),
+                ) {
+                    if (worldCoverRes != null) {
+                        // Bandeau visuel lié au monde actif
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(220.dp)
+                                .clip(MaterialTheme.shapes.large),
+                        ) {
+                            AsyncImage(
+                                model = worldCoverRes,
+                                contentDescription = "Couverture ${currentWorld?.name}",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop,
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        Brush.verticalGradient(
+                                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.6f))
+                                        )
+                                    ),
+                                contentAlignment = Alignment.BottomCenter,
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.role_selection_title),
+                                    style = MaterialTheme.typography.headlineLarge,
+                                    color = Color.White,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 24.dp, vertical = 16.dp),
+                                )
+                            }
+                        }
+                    } else {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            HeroSection(
+                                title = stringResource(R.string.role_selection_title),
+                                subtitle = "",
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // ── Role cards (delay 300ms / 380ms, 250ms each) ──
+                if (isCompact) {
+                    // Compact: vertical Column
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        roleCards.forEachIndexed { index, roleData ->
+                            AnimatedVisibility(
+                                visible = visible,
+                                enter = fadeIn(
+                                    animationSpec = tween(
+                                        durationMillis = 250,
+                                        delayMillis = 300 + index * 80,
+                                    )
+                                ) + slideInVertically(
+                                    animationSpec = tween(
+                                        durationMillis = 250,
+                                        delayMillis = 300 + index * 80,
+                                    ),
+                                    initialOffsetY = { it / 4 },
+                                ),
+                            ) {
+                                RoleCard(data = roleData)
+                            }
+                        }
+                    }
+                } else {
+                    // Expanded: horizontal Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        roleCards.forEachIndexed { index, roleData ->
+                            AnimatedVisibility(
+                                visible = visible,
+                                modifier = Modifier.weight(1f),
+                                enter = fadeIn(
+                                    animationSpec = tween(
+                                        durationMillis = 250,
+                                        delayMillis = 300 + index * 80,
+                                    )
+                                ) + slideInVertically(
+                                    animationSpec = tween(
+                                        durationMillis = 250,
+                                        delayMillis = 300 + index * 80,
+                                    ),
+                                    initialOffsetY = { it / 4 },
+                                ),
+                            ) {
+                                RoleCard(data = roleData)
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(32.dp))
+            }
+
+            // ── Bottom bar with rectangles for roles and settings ──
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                // World badge and version info at top
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    WorldBadge(
+                        world = currentWorld,
+                        onClick = onSelectContext,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Column(horizontalAlignment = Alignment.End) {
                             Text(
                                 text = "v${BuildConfig.VERSION_NAME}",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Text(
-                                text = if (lastRemoteVersion != null) "distante v$lastRemoteVersion" else "distante —",
+                                text = if (lastRemoteVersion != null) "v$lastRemoteVersion" else "—",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                             )
                         }
-                        Spacer(modifier = Modifier.width(4.dp))
                         IconButton(
                             onClick = {
                                 val current = updateState
@@ -330,6 +546,7 @@ fun RoleSelectionScreen(
                                 }
                             },
                             enabled = updateState is UpdateUiState.Idle || updateState is UpdateUiState.UpdateAvailable,
+                            modifier = Modifier.size(32.dp),
                         ) {
                             when (updateState) {
                                 is UpdateUiState.Checking -> {
@@ -352,166 +569,39 @@ fun RoleSelectionScreen(
                             }
                         }
                     }
-                },
-                actions = {
-                    WorldBadge(
-                        world = currentWorld,
-                        onClick = onSelectContext,
-                    )
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    // Fond forcé : le thème ne doit pas influencer la couleur
-                    // de fond, quelle que soit sa configuration.
-                    containerColor = ForcedDarkPalette.Background,
-                ),
-            )
-        },
-        containerColor = ForcedDarkPalette.Background
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Top,
-        ) {
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // ── Message de bienvenue (nom du joueur persistant) ──
-            if (playerName != null) {
-                Text(
-                    text = "Bienvenue, $playerName !",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.primary,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-            }
-
-            // ── Hero section (delay 100ms, 200ms) ──
-            val worldCoverRes = when (currentWorld?.id) {
-                // TODO: image temporairement retirée (fichier PNG invalide, à corriger puis remettre)
-                // "donjon_et_dragon" -> R.drawable.dnd_cover_image
-                "naheulbeuk" -> R.drawable.naheulbeuk
-                else -> null
-            }
-
-            AnimatedVisibility(
-                visible = visible,
-                enter = fadeIn(animationSpec = tween(durationMillis = 200, delayMillis = 100)) +
-                        slideInVertically(
-                            animationSpec = tween(durationMillis = 200, delayMillis = 100),
-                            initialOffsetY = { it / 4 },
-                        ),
-            ) {
-                if (worldCoverRes != null) {
-                    // Bandeau visuel lié au monde actif
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(220.dp)
-                            .clip(MaterialTheme.shapes.large),
-                    ) {
-                        AsyncImage(
-                            model = worldCoverRes,
-                            contentDescription = "Couverture ${currentWorld?.name}",
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop,
-                        )
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(
-                                    Brush.verticalGradient(
-                                        listOf(Color.Transparent, Color.Black.copy(alpha = 0.6f))
-                                    )
-                                ),
-                            contentAlignment = Alignment.BottomCenter,
-                        ) {
-                            Text(
-                                text = stringResource(R.string.role_selection_title),
-                                style = MaterialTheme.typography.headlineLarge,
-                                color = Color.White,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 24.dp, vertical = 16.dp),
-                            )
-                        }
-                    }
-                } else {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        HeroSection(
-                            title = stringResource(R.string.role_selection_title),
-                            subtitle = "",
-                        )
-                    }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(24.dp))
+                HorizontalDivider()
 
-            // ── Role cards (delay 300ms / 380ms, 250ms each) ──
-            if (isCompact) {
-                // Compact: vertical Column
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    roleCards.forEachIndexed { index, roleData ->
-                        AnimatedVisibility(
-                            visible = visible,
-                            enter = fadeIn(
-                                animationSpec = tween(
-                                    durationMillis = 250,
-                                    delayMillis = 300 + index * 80,
-                                )
-                            ) + slideInVertically(
-                                animationSpec = tween(
-                                    durationMillis = 250,
-                                    delayMillis = 300 + index * 80,
-                                ),
-                                initialOffsetY = { it / 4 },
-                            ),
-                        ) {
-                            RoleCard(data = roleData)
-                        }
-                    }
-                }
-            } else {
-                // Expanded: horizontal Row
+                // Role selection rectangles
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    roleCards.forEachIndexed { index, roleData ->
-                        AnimatedVisibility(
-                            visible = visible,
-                            modifier = Modifier.weight(1f),
-                            enter = fadeIn(
-                                animationSpec = tween(
-                                    durationMillis = 250,
-                                    delayMillis = 300 + index * 80,
-                                )
-                            ) + slideInVertically(
-                                animationSpec = tween(
-                                    durationMillis = 250,
-                                    delayMillis = 300 + index * 80,
-                                ),
-                                initialOffsetY = { it / 4 },
-                            ),
-                        ) {
-                            RoleCard(data = roleData)
-                        }
-                    }
+                    RoleSelectionButton(
+                        label = "Maître du Jeu",
+                        icon = Icons.Default.Shield,
+                        color = MaterialTheme.colorScheme.primary,
+                        onClick = onSelectMj,
+                        modifier = Modifier.weight(1f),
+                    )
+                    RoleSelectionButton(
+                        label = "Joueur",
+                        icon = Icons.Default.Public,
+                        color = MaterialTheme.colorScheme.secondary,
+                        onClick = onSelectJoueur,
+                        modifier = Modifier.weight(1f),
+                    )
+                    RoleSelectionButton(
+                        label = "Réglages",
+                        icon = Icons.Default.Settings,
+                        color = MaterialTheme.colorScheme.tertiary,
+                        onClick = onSelectSettings,
+                        modifier = Modifier.weight(1f),
+                    )
                 }
             }
-
-            Spacer(modifier = Modifier.height(32.dp))
-
         }
     }
 }

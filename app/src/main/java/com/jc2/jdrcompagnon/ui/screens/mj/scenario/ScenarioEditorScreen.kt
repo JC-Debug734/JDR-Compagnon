@@ -7,7 +7,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.*
@@ -61,6 +60,7 @@ fun ScenarioEditorScreen(
     onBack: () -> Unit,
     onSaved: () -> Unit,
     onOpenInternalLink: (type: String, name: String) -> Unit = { _, _ -> },
+    onOpenMenu: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val mjScenarios by GameState.mjScenarios.collectAsState()
@@ -257,8 +257,8 @@ fun ScenarioEditorScreen(
             TopAppBar(
                 title = { Text("Scénario", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
+                    IconButton(onClick = onOpenMenu) {
+                        Icon(Icons.Default.Menu, contentDescription = "Menu")
                     }
                 },
                 actions = {

@@ -10,6 +10,7 @@ Ce fichier recense les 12 classes du Document de Référence du Système (D&D 5e
 
 ### Traits de base
 
+- Description : Guerrier tribal qui puise sa force dans une rage primale, encaissant les coups pour mieux les rendre.
 - Caractéristique principale : Force
 - Dé de vie : d12 par niveau
 - Maîtrise des jets de sauvegarde : Force et Constitution
@@ -114,6 +115,7 @@ Force et Constitution +4 (max. 25).
 
 ### Traits de base
 
+- Description : Artiste itinérant qui tisse une magie inspirante à travers musique, récits et éloquence.
 - Caractéristique principale : Charisme
 - Dé de vie : d8 par niveau
 - Maîtrise des jets de sauvegarde : Dextérité et Charisme
@@ -206,6 +208,7 @@ mot de pouvoir guérisseur et mot de pouvoir mortel toujours préparés ; ciblag
 
 ### Traits de base
 
+- Description : Intermédiaire entre le monde mortel et le divin, canalisant la puissance de son dieu pour soigner ou punir.
 - Caractéristique principale : Sagesse
 - Dé de vie : d8 par niveau
 - Maîtrise des jets de sauvegarde : Sagesse et Charisme
@@ -287,6 +290,7 @@ Intervention divine peut désormais choisir souhait (cooldown : 2d4 Repos longs)
 
 ### Traits de base
 
+- Description : Gardien de la nature, capable de se transformer en animal et de manier les éléments sauvages.
 - Caractéristique principale : Sagesse
 - Dé de vie : d8 par niveau
 - Maîtrise des jets de sauvegarde : Intelligence et Sagesse
@@ -370,6 +374,7 @@ Récupération automatique d'une utilisation de Forme sauvage à l'Initiative ; 
 
 ### Traits de base
 
+- Description : Lanceur de sorts dont la magie jaillit d'un don inné, hérité du sang ou d'un évènement surnaturel.
 - Caractéristique principale : Charisme
 - Dé de vie : d6 par niveau
 - Maîtrise des jets de sauvegarde : Constitution et Charisme
@@ -450,6 +455,7 @@ Une option de Métamagie gratuite par tour tant que Sorcellerie innée est activ
 
 ### Traits de base
 
+- Description : Combattant polyvalent maîtrisant un large éventail d'armes et de tactiques martiales.
 - Caractéristique principale : Force ou Dextérité
 - Dé de vie : d10 par niveau
 - Maîtrise des jets de sauvegarde : Force et Constitution
@@ -546,6 +552,7 @@ Quatre attaques au lieu d'une.
 
 ### Traits de base
 
+- Description : Érudit de l'arcane qui étudie et inscrit ses sorts dans un grimoire pour façonner la réalité.
 - Caractéristique principale : Intelligence
 - Dé de vie : d6 par niveau
 - Maîtrise des jets de sauvegarde : Intelligence et Sagesse
@@ -625,6 +632,7 @@ Deux sorts supplémentaires lançables sans emplacement une fois par Repos long.
 
 ### Traits de base
 
+- Description : Adepte de la perfection martiale et spirituelle, canalisant une énergie intérieure dans ses coups.
 - Caractéristique principale : Dextérité et Sagesse
 - Dé de vie : d8 par niveau
 - Maîtrise des jets de sauvegarde : Force et Dextérité
@@ -740,6 +748,7 @@ Dextérité et Sagesse +4 (max. 25).
 
 ### Traits de base
 
+- Description : Lanceur de sorts lié par un pacte à une entité surnaturelle qui lui accorde son pouvoir.
 - Caractéristique principale : Charisme
 - Dé de vie : d8 par niveau
 - Maîtrise des jets de sauvegarde : Sagesse et Charisme
@@ -817,6 +826,7 @@ Rouerie magique récupère désormais tous les emplacements de Magie de pacte d�
 
 ### Traits de base
 
+- Description : Guerrier sacré lié par un serment, mêlant combat et magie divine au service d'une cause.
 - Caractéristique principale : Force et Charisme
 - Dé de vie : d10 par niveau
 - Maîtrise des jets de sauvegarde : Sagesse et Charisme
@@ -913,6 +923,7 @@ Faveur de Vision lucide recommandé.
 
 ### Traits de base
 
+- Description : Chasseur et pisteur à l'aise en terrain sauvage, combinant maîtrise du combat et magie de la nature.
 - Caractéristique principale : Dextérité et Sagesse
 - Dé de vie : d10 par niveau
 - Maîtrise des jets de sauvegarde : Force et Dextérité
@@ -1000,6 +1011,7 @@ Les dégâts ne peuvent pas briser la Concentration sur marque du chasseur.
 
 ### Traits de base
 
+- Description : Expert de la discrétion et de la ruse, frappant avec précision là où l'adversaire est vulnérable.
 - Caractéristique principale : Dextérité
 - Dé de vie : d8 par niveau
 - Maîtrise des jets de sauvegarde : Dextérité et Intelligence

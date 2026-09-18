@@ -316,15 +316,16 @@ object SrdRepository {
 
     /**
      * Charge la liste des dons pour le monde donné (D&D uniquement, SRD 5.2.1).
-     * [SrdSectionEntry.category] contient la catégorie de don (Origines, Général,
-     * Style de combat, Faveur épique).
+     * Format dédié "### Don" + "#### Compétence" (voir [DonsParser]) — n'a plus de champ
+     * de catégorie dans la source, [SrdSectionEntry.category] vaut donc toujours "Dons"
+     * pour toutes les entrées.
      */
     suspend fun loadDons(context: Context, worldId: String? = "donjon_et_dragon"): List<SrdSectionEntry> =
         withContext(Dispatchers.IO) {
             if (worldId != "donjon_et_dragon") return@withContext emptyList()
             donsCache[worldId]?.let { return@withContext it }
             val raw = readAsset(context, FILE_DONS)
-            val entries = MarkdownSectionParser.parseTwoLevel(raw)
+            val entries = DonsParser.parse(raw)
             donsCache[worldId] = entries
             entries
         }
@@ -573,6 +574,22 @@ object SrdRepository {
     }
 
     /**
+     * Force une recopie complète des fichiers SRD depuis les assets vers le stockage
+     * public, en écrasant la copie existante quelle qu'elle soit (même si la version
+     * stockée correspond déjà à [SRD_DATA_VERSION]), puis vide les caches en mémoire pour
+     * que les prochains chargements relisent ces nouvelles copies. Déclenché manuellement
+     * depuis l'écran de gestion des livres ("Forcer la mise à jour"), en complément du
+     * contrôle automatique par version — utile par exemple juste après avoir remplacé un
+     * fichier sans avoir encore incrémenté la version, ou pour réparer une copie publique
+     * corrompue sans attendre la prochaine mise à jour de l'app.
+     */
+    fun forceRefreshFromAssets(context: Context) {
+        forcedRefreshNeeded = true
+        PublicFilesStore.writeText(context, SRD_VERSION_FILENAME, SRD_DATA_VERSION.toString(), SRD_VERSION_SUBFOLDER)
+        clearCache()
+    }
+
+    /**
      * Invalide tous les caches en mémoire.
      */
     fun clearCache() {
@@ -595,18 +612,54 @@ object SrdRepository {
     }
 
     /**
-     * Lit un fichier SRD, en donnant la priorité à une version modifiée par
-     * l'utilisateur dans Téléchargements/JDRCompagnon/SRD/... si elle existe.
-     * Sinon, lit la version intégrée à l'app (assets/) et la copie dans ce
-     * dossier public pour qu'elle soit consultable/modifiable en dehors de l'app.
+     * Lit un fichier SRD depuis le stockage public s'il est à jour (voir
+     * [SRD_DATA_VERSION]), sinon depuis la version intégrée à l'app (assets/), et
+     * (re)copie systématiquement cette dernière dans Téléchargements/JDRCompagnon/
+     * quand la version stockée diffère. Ces fichiers ne sont pas destinés à être
+     * modifiés par l'utilisateur ; la copie publique n'est qu'un cache, jamais
+     * considérée comme faisant autorité une fois la version dépassée.
      */
     private fun readAsset(context: Context, path: String): String {
         val (subfolder, displayName) = splitPublicPath(path)
-        PublicFilesStore.readText(context, displayName, subfolder)?.let { return it }
+        if (!needsForcedRefresh(context)) {
+            PublicFilesStore.readText(context, displayName, subfolder)?.let { return it }
+        }
 
         val raw = context.assets.open(path).bufferedReader().use { it.readText() }
         PublicFilesStore.writeText(context, displayName, raw, subfolder)
         return raw
+    }
+
+    // Version des données SRD embarquées dans les assets : À INCRÉMENTER à chaque
+    // modification d'un fichier .md source (ajout, correction, restructuration...).
+    // Toute incrémentation force une recopie complète vers le stockage public au
+    // prochain lancement, écrasant la copie précédente quelle qu'elle soit — c'est
+    // le seul moyen fiable de propager un changement de contenu, puisque la copie
+    // publique ne porte par elle-même aucune information de date ni de provenance.
+    private const val SRD_DATA_VERSION = 1
+    private const val SRD_VERSION_SUBFOLDER = "SRD"
+    private const val SRD_VERSION_FILENAME = ".srd_version"
+
+    // Résultat du contrôle de version, calculé une seule fois par session (évite de
+    // relire le marqueur de version à chaque fichier SRD chargé).
+    private var forcedRefreshNeeded: Boolean? = null
+
+    /**
+     * Compare la version stockée sur l'appareil à [SRD_DATA_VERSION]. Si elles
+     * diffèrent (première installation, mise à jour de l'app avec des .md modifiés,
+     * ou marqueur absent), met à jour le marqueur et retourne `true` : chaque appel à
+     * [readAsset] de cette session ignorera alors la copie publique existante et la
+     * régénérera depuis les assets.
+     */
+    private fun needsForcedRefresh(context: Context): Boolean {
+        forcedRefreshNeeded?.let { return it }
+        val storedVersion = PublicFilesStore.readText(context, SRD_VERSION_FILENAME, SRD_VERSION_SUBFOLDER)?.trim()
+        val outdated = storedVersion != SRD_DATA_VERSION.toString()
+        if (outdated) {
+            PublicFilesStore.writeText(context, SRD_VERSION_FILENAME, SRD_DATA_VERSION.toString(), SRD_VERSION_SUBFOLDER)
+        }
+        forcedRefreshNeeded = outdated
+        return outdated
     }
 
     /**

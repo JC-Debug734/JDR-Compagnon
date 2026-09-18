@@ -3,12 +3,15 @@ package com.jc2.jdrcompagnon.ui.screens.joueur.character.creation
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment as UiAlignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdSectionEntry
+import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdEntry
 
 /**
  * Écran principal du wizard. À brancher dans NavGraph.kt sur une route dédiée
@@ -21,7 +24,7 @@ import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdSectionEntry
  *   val historiques = HistoriqueParser.parse(SrdRepository.loadHistoriques(context, worldId).joinToString("\n\n") { it.rawMarkdown })
  *   val especes = EspeceParser.parse(SrdRepository.loadEspeces(context, worldId).joinToString("\n\n") { it.rawMarkdown })
  *   val langues = LangueParser.parse(SrdRepository.loadLangues(context, worldId))
- *   val sortsNiveau1 = SrdRepository.loadSpellsIndex(context, worldId).filter { it.category in setOf("Sorts mineurs", "Sorts de niveau 1") }
+ *   val sortsNiveau1 = SrdRepository.loadSpells(context, worldId).filter { val l = it.rawMarkdown.lineSequence().firstOrNull().orEmpty(); l.contains("mineur", true) || l.contains("1er niveau", true) }
  *   CharacterCreationWizard(classes = classes, historiques = historiques, especes = especes, langues = langues, sortsDisponibles = sortsNiveau1, ...)
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -41,22 +44,35 @@ fun CharacterCreationWizard(
     // Liste vide acceptable : l'étape SORTS est de toute façon sautée pour les classes
     // non lanceuses, et si la liste est vide pour une classe lanceuse le joueur passera
     // l'étape sans rien choisir plutôt que de planter.
-    sortsDisponibles: List<SrdSectionEntry> = emptyList(),
+    // Sorts mineurs + sorts de niveau 1 (entrées détaillées de SrdRepository.loadSpells,
+    // filtrées en amont sur le niveau ; voir CharacterCreationScreen). Liste vide
+    // acceptable : l'étape SORTS est de toute façon sautée pour les classes non
+    // lanceuses, et si la liste est vide pour une classe lanceuse le joueur passe
+    // l'étape sans rien choisir plutôt que de bloquer.
+    sortsDisponibles: List<SrdEntry> = emptyList(),
+    // Noms des dons d'origines (dons_srd521.md, catégorie "Origines"), pour le choix
+    // de don du trait "Polyvalent" de l'Humain à l'étape ESPECE_CHOIX.
+    donsOriginesNoms: List<String> = emptyList(),
     onTermine: (CharacterDraft) -> Unit,
     onAnnuler: () -> Unit
 ) {
     val state by holder.uiState.collectAsState()
+    LaunchedEffect(donsOriginesNoms) { holder.donsOriginesNoms = donsOriginesNoms }
 
     Scaffold(
         topBar = {
             Column {
-                TopAppBar(title = { Text("Création de personnage — ${state.step.label}") })
+                TopAppBar(
+                    title = { Text("Création de personnage — ${state.step.label}") },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                )
                 LinearProgressIndicator(
                     progress = { state.progression },
                     modifier = Modifier.fillMaxWidth()
                 )
             }
-        }
+        },
+        containerColor = Color.Transparent,
     ) { padding ->
         Column(
             modifier = Modifier
@@ -68,8 +84,9 @@ fun CharacterCreationWizard(
                 when (state.step) {
                     CreationStep.CLASSE -> EtapeClasse(state, holder, classes)
                     CreationStep.COMPETENCES_CLASSE -> EtapeCompetencesClasse(state, holder)
-                    CreationStep.HISTORIQUE -> EtapeHistorique(state, holder, historiques)
                     CreationStep.ESPECE -> EtapeEspece(state, holder, especes)
+                    CreationStep.ESPECE_CHOIX -> EtapeEspeceChoix(state, holder)
+                    CreationStep.HISTORIQUE -> EtapeHistorique(state, holder, historiques)
                     CreationStep.LANGUES -> EtapeLangues(state, holder, langues)
                     CreationStep.METHODE_CARACTERISTIQUES -> EtapeMethodeCaracteristiques(state, holder)
                     CreationStep.VALEURS_CARACTERISTIQUES -> EtapeValeursCaracteristiques(state, holder)
@@ -79,7 +96,6 @@ fun CharacterCreationWizard(
                     CreationStep.EQUIPEMENT_CLASSE -> EtapeEquipementClasse(state, holder)
                     CreationStep.EQUIPEMENT_HISTORIQUE -> EtapeEquipementHistorique(state, holder)
                     CreationStep.SORTS -> EtapeSorts(state, holder, sortsDisponibles)
-                    CreationStep.PERSONNALITE -> EtapePersonnalite(state, holder)
                     CreationStep.RECAPITULATIF -> EtapeRecapitulatif(state, holder, onTermine)
                 }
             }
@@ -119,7 +135,10 @@ private fun EtapeClasse(state: CharacterCreationUiState, holder: CharacterCreati
             items(classes) { classe ->
                 ChoixCard(
                     titre = classe.nom,
-                    sousTitre = "${classe.caracteristiquePrincipale.joinToString(" ou ") { it.label }} · Dé de vie ${classe.deDeVie}",
+                    sousTitre = listOfNotNull(
+                        classe.description.ifBlank { null },
+                        "${classe.caracteristiquePrincipale.joinToString(" ou ") { it.label }} · Dé de vie ${classe.deDeVie}"
+                    ).joinToString("\n"),
                     selectionne = selection == classe,
                     onClick = { holder.mettreAJourSelection(classe) }
                 )
@@ -166,20 +185,51 @@ private fun EtapeCompetencesClasse(state: CharacterCreationUiState, holder: Char
 
 @Composable
 private fun EtapeHistorique(state: CharacterCreationUiState, holder: CharacterCreationStateHolder, historiques: List<Historique>) {
-    val selection = state.selectionEnAttente as? Historique
-    Column {
+    val selectionActuelle = state.selectionEnAttente as? SelectionHistorique
+    var historiqueChoisi by remember(state.draft.historique) { mutableStateOf(state.draft.historique) }
+    var texte by remember(state.draft.histoirePersonnalite) { mutableStateOf(state.draft.histoirePersonnalite) }
+
+    fun publier() {
+        val h = historiqueChoisi
+        holder.mettreAJourSelection(if (h != null) SelectionHistorique(h, texte) else null)
+    }
+
+    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
         Text("L'historique représente la place et l'occupation les plus formatrices du parcours du personnage.")
         Spacer(Modifier.height(12.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(historiques) { h ->
-                ChoixCard(
-                    titre = h.nom,
-                    sousTitre = "Don : ${h.don} · Caractéristiques : ${h.caracteristiques.joinToString(", ") { it.label }}",
-                    selectionne = selection == h,
-                    onClick = { holder.mettreAJourSelection(h) }
-                )
+        historiques.forEach { h ->
+            ChoixCard(
+                titre = h.nom,
+                sousTitre = "Don : ${h.don} · Caractéristiques : ${h.caracteristiques.joinToString(", ") { it.label }}",
+                selectionne = (selectionActuelle?.historique ?: historiqueChoisi) == h,
+                onClick = { historiqueChoisi = h; publier() }
+            )
+            Spacer(Modifier.height(8.dp))
+        }
+        Spacer(Modifier.height(16.dp))
+        Text("Imaginez son passé et son présent", style = MaterialTheme.typography.titleSmall)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Laissez-vous guider par l'historique et l'espèce du personnage pour imaginer son passé :",
+            style = MaterialTheme.typography.bodySmall
+        )
+        Spacer(Modifier.height(8.dp))
+        QUESTIONS_PASSE_PERSONNAGE.forEach { question ->
+            Row(modifier = Modifier.padding(vertical = 2.dp)) {
+                Text("• ", style = MaterialTheme.typography.bodySmall)
+                Text(question, style = MaterialTheme.typography.bodySmall)
             }
         }
+        Spacer(Modifier.height(12.dp))
+        OutlinedTextField(
+            value = texte,
+            onValueChange = { texte = it; publier() },
+            label = { Text("Histoire et personnalité") },
+            placeholder = { Text("Racontez la légende de votre personnage...") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 160.dp)
+        )
     }
 }
 
@@ -198,6 +248,28 @@ private fun EtapeEspece(state: CharacterCreationUiState, holder: CharacterCreati
                     onClick = { holder.mettreAJourSelection(e) }
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun EtapeEspeceChoix(state: CharacterCreationUiState, holder: CharacterCreationStateHolder) {
+    val espece = state.draft.espece
+    val choix = espece?.let { detecterChoixEspece(it, holder.donsOriginesNoms) }
+    if (espece == null || choix == null) {
+        // Ne devrait pas s'afficher (étape sautée automatiquement si non pertinente),
+        // filet de sécurité au cas où l'espèce serait modifiée entre-temps.
+        Text("Retournez à l'étape précédente pour choisir une espèce.")
+        return
+    }
+    val selection = state.selectionEnAttente as? String
+
+    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+        Text("${espece.nom} — trait « ${choix.nomTrait} » : choisissez une option.")
+        Spacer(Modifier.height(12.dp))
+        choix.options.forEach { option ->
+            ChoixCard(option, null, selection == option) { holder.mettreAJourSelection(option) }
+            Spacer(Modifier.height(8.dp))
         }
     }
 }
@@ -234,7 +306,7 @@ private fun EtapeLangues(state: CharacterCreationUiState, holder: CharacterCreat
 @Composable
 private fun EtapeMethodeCaracteristiques(state: CharacterCreationUiState, holder: CharacterCreationStateHolder) {
     val selection = state.selectionEnAttente as? MethodeGenerationCaracteristiques
-    Column {
+    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
         Text("Choisissez la méthode de génération des 6 valeurs de caractéristique.")
         Spacer(Modifier.height(12.dp))
         MethodeGenerationCaracteristiques.entries.forEach { methode ->
@@ -246,24 +318,93 @@ private fun EtapeMethodeCaracteristiques(state: CharacterCreationUiState, holder
 
 @Composable
 private fun EtapeValeursCaracteristiques(state: CharacterCreationUiState, holder: CharacterCreationStateHolder) {
-    // Pour "valeurs standard" la liste est fixe : on la propose directement.
-    // Pour les deux autres méthodes, l'app doit lancer les dés / laisser saisir
-    // les points, puis appeler holder.mettreAJourSelection(listeDe6Valeurs).
-    val methode = state.draft.methodeCaracteristiques
-    Column {
-        when (methode) {
-            MethodeGenerationCaracteristiques.VALEURS_STANDARD -> {
-                Text("Valeurs standard : ${TablesCaracteristiques.valeursStandard.joinToString(", ")}")
-                Spacer(Modifier.height(12.dp))
-                Button(onClick = { holder.mettreAJourSelection(TablesCaracteristiques.valeursStandard) }) {
-                    Text("Utiliser ces valeurs")
+    when (state.draft.methodeCaracteristiques) {
+        MethodeGenerationCaracteristiques.VALEURS_STANDARD -> EtapeValeursStandard(holder)
+        MethodeGenerationCaracteristiques.GENERATION_ALEATOIRE -> EtapeValeursAleatoires(holder)
+        MethodeGenerationCaracteristiques.ACQUISITION_PAR_POINTS -> EtapeValeursParPoints(holder)
+        null -> Text("Retournez à l'étape précédente pour choisir une méthode.")
+    }
+}
+
+@Composable
+private fun EtapeValeursStandard(holder: CharacterCreationStateHolder) {
+    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+        Text("Valeurs standard : ${TablesCaracteristiques.valeursStandard.joinToString(", ")}")
+        Spacer(Modifier.height(12.dp))
+        Button(onClick = { holder.mettreAJourSelection(TablesCaracteristiques.valeursStandard) }) {
+            Text("Utiliser ces valeurs")
+        }
+    }
+}
+
+@Composable
+private fun EtapeValeursAleatoires(holder: CharacterCreationStateHolder) {
+    var valeurs by remember { mutableStateOf<List<Int>?>(null) }
+
+    fun lancer() {
+        val resultat = List(6) {
+            List(4) { (1..6).random() }.sortedDescending().take(3).sum()
+        }
+        valeurs = resultat
+        holder.mettreAJourSelection(resultat)
+    }
+
+    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+        Text("4d6, on garde les 3 meilleurs, six fois de suite.")
+        Spacer(Modifier.height(12.dp))
+        Button(onClick = { lancer() }) { Text(if (valeurs == null) "Lancer les dés" else "Relancer") }
+        valeurs?.let {
+            Spacer(Modifier.height(16.dp))
+            Text(
+                it.joinToString("   ·   "),
+                style = MaterialTheme.typography.headlineSmall
+            )
+        }
+    }
+}
+
+@Composable
+private fun EtapeValeursParPoints(holder: CharacterCreationStateHolder) {
+    var valeurs by remember { mutableStateOf(List(6) { 8 }) }
+    val cout = TablesCaracteristiques.coutParValeur
+    val depense = valeurs.sumOf { cout[it] ?: 0 }
+    val restant = TablesCaracteristiques.BUDGET_POINTS - depense
+
+    fun publier(nouvelles: List<Int>) {
+        valeurs = nouvelles
+        holder.mettreAJourSelection(nouvelles)
+    }
+
+    // Valeurs par défaut (8 partout) déjà valides : on publie tout de suite pour ne pas
+    // bloquer "Confirmer" tant qu'on n'a touché à rien, comme pour l'étape Personnalité.
+    LaunchedEffect(Unit) { holder.mettreAJourSelection(valeurs) }
+
+    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+        Text("Acquisition par points — $restant point(s) restant(s) sur ${TablesCaracteristiques.BUDGET_POINTS}.")
+        Spacer(Modifier.height(12.dp))
+        valeurs.forEachIndexed { index, valeur ->
+            val coutSuivant = cout[valeur + 1]
+            val peutAugmenter = valeur < 15 && coutSuivant != null && (depense - (cout[valeur] ?: 0) + coutSuivant) <= TablesCaracteristiques.BUDGET_POINTS
+            val peutDiminuer = valeur > 8
+
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                verticalAlignment = UiAlignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Valeur ${index + 1}", style = MaterialTheme.typography.bodyLarge)
+                Row(verticalAlignment = UiAlignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    OutlinedButton(
+                        onClick = { publier(valeurs.toMutableList().also { it[index] = valeur - 1 }) },
+                        enabled = peutDiminuer
+                    ) { Text("−") }
+                    Text(valeur.toString(), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 8.dp))
+                    OutlinedButton(
+                        onClick = { publier(valeurs.toMutableList().also { it[index] = valeur + 1 }) },
+                        enabled = peutAugmenter
+                    ) { Text("+") }
                 }
             }
-            MethodeGenerationCaracteristiques.GENERATION_ALEATOIRE ->
-                Text("TODO intégration : lancer 4d6 (garder les 3 meilleurs) × 6, puis appeler mettreAJourSelection(valeurs).")
-            MethodeGenerationCaracteristiques.ACQUISITION_PAR_POINTS ->
-                Text("TODO intégration : UI de répartition de ${TablesCaracteristiques.BUDGET_POINTS} points selon la table des coûts.")
-            null -> Text("Retournez à l'étape précédente pour choisir une méthode.")
         }
     }
 }
@@ -305,7 +446,11 @@ private fun EtapeRepartitionCaracteristiques(state: CharacterCreationUiState, ho
                                 selected = selectionne,
                                 enabled = !prisAilleurs || selectionne,
                                 onClick = { publier(assignation.filterValues { it != index } + (c to index)) },
-                                label = { Text(valeur.toString()) }
+                                label = { Text(valeur.toString()) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = COULEUR_SELECTION,
+                                    selectedLabelColor = COULEUR_TEXTE_SELECTION
+                                )
                             )
                         }
                     }
@@ -325,36 +470,44 @@ private fun EtapeAjustementHistorique(state: CharacterCreationUiState, holder: C
         return
     }
 
-    var modeReparti by remember { mutableStateOf(true) } // true = +1 aux trois, false = +2/+1
+    var modeReparti by remember { mutableStateOf<Boolean?>(null) } // null = rien choisi ; true = +1 aux trois ; false = +2/+1
     var plus2 by remember { mutableStateOf<Caracteristique?>(null) }
     var plus1 by remember { mutableStateOf<Caracteristique?>(null) }
 
     fun publier() {
-        val map = when {
-            modeReparti -> caracteristiquesHistorique.associateWith { 1 }
-            plus2 != null && plus1 != null -> mapOf(plus2!! to 2, plus1!! to 1)
-            else -> null
+        val map = when (modeReparti) {
+            true -> caracteristiquesHistorique.associateWith { 1 }
+            false -> if (plus2 != null && plus1 != null) mapOf(plus2!! to 2, plus1!! to 1) else null
+            null -> null
         }
         holder.mettreAJourSelection(map)
     }
 
-    Column {
+    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
         Text("Votre historique cite : ${caracteristiquesHistorique.joinToString(", ") { it.label }}.")
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(
-                selected = modeReparti,
+                selected = modeReparti == true,
                 onClick = { modeReparti = true; publier() },
-                label = { Text("+1 aux trois") }
+                label = { Text("+1 aux trois") },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = COULEUR_SELECTION,
+                    selectedLabelColor = COULEUR_TEXTE_SELECTION
+                )
             )
             FilterChip(
-                selected = !modeReparti,
+                selected = modeReparti == false,
                 onClick = { modeReparti = false; plus2 = null; plus1 = null },
-                label = { Text("+2 sur une, +1 sur une autre") }
+                label = { Text("+2 sur une, +1 sur une autre") },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = COULEUR_SELECTION,
+                    selectedLabelColor = COULEUR_TEXTE_SELECTION
+                )
             )
         }
 
-        if (!modeReparti) {
+        if (modeReparti == false) {
             Spacer(Modifier.height(16.dp))
             Text("Reçoit +2 :", style = MaterialTheme.typography.labelLarge)
             caracteristiquesHistorique.forEach { c ->
@@ -386,7 +539,7 @@ private fun EtapeAlignement(state: CharacterCreationUiState, holder: CharacterCr
         Spacer(Modifier.height(12.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(Alignement.entries) { a ->
-                ChoixCard(a.label, a.code, selection == a) {
+                ChoixCard("${a.label} (${a.code})", a.description, selection == a) {
                     if (a.estMauvais) confirmationMauvaisRequise = a
                     else holder.mettreAJourSelection(a)
                 }
@@ -455,7 +608,7 @@ private fun EtapeEquipementHistorique(state: CharacterCreationUiState, holder: C
     }
     val selection = state.selectionEnAttente as? String
 
-    Column {
+    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
         Text("Équipement de départ de l'historique ${historique.nom} — choisissez une option.")
         Spacer(Modifier.height(12.dp))
         ChoixCard("Option A", historique.equipementA, selection == historique.equipementA) {
@@ -469,24 +622,32 @@ private fun EtapeEquipementHistorique(state: CharacterCreationUiState, holder: C
 }
 
 @Composable
-private fun EtapeSorts(state: CharacterCreationUiState, holder: CharacterCreationStateHolder, sortsDisponibles: List<SrdSectionEntry>) {
+private fun EtapeSorts(state: CharacterCreationUiState, holder: CharacterCreationStateHolder, sortsDisponibles: List<SrdEntry>) {
     val classe = state.draft.classe
-    // Filtrage heuristique : le nom de la classe doit apparaître dans le texte brut
-    // du sort (champ "Classes :" de sorts_srd521.md). Pas de comptage exact "N sorts
-    // mineurs + N sorts de niveau 1" par classe ici — le joueur choisit librement
-    // dans sa liste et ajuste ensuite si besoin, cf. limite documentée dans
-    // CharacterDraftMapping.kt.
+    // Le champ "Classes :" n'existe que dans les entrées détaillées (SrdRepository.loadSpells),
+    // pas dans l'index par niveau (dont le rawMarkdown ne contient que l'école de magie) —
+    // c'est cette confusion qui causait "aucun sort trouvé" pour toutes les classes.
+    val regexClasses = Regex("""\*\*Classes\s*:\*\*\s*(.+)""")
     val sortsDeLaClasse = remember(classe, sortsDisponibles) {
-        sortsDisponibles.filter { classe != null && it.rawMarkdown.contains(classe.nom, ignoreCase = true) }
+        sortsDisponibles.filter { sort ->
+            if (classe == null) return@filter false
+            val classesDuSort = regexClasses.find(sort.rawMarkdown)?.groupValues?.get(1).orEmpty()
+            classesDuSort.split(",").map { it.trim() }.any { it.equals(classe.nom, ignoreCase = true) }
+        }
     }
     @Suppress("UNCHECKED_CAST")
     val selection = (state.selectionEnAttente as? List<String>) ?: emptyList()
+
+    // Étape toujours confirmable, même à 0 sort choisi (le sort est facultatif à la
+    // création, et surtout aucun sort disponible ne doit jamais bloquer la suite) :
+    // on publie la sélection dès l'entrée sur l'étape, comme pour Personnalité.
+    LaunchedEffect(classe) { holder.mettreAJourSelection(state.draft.sortsChoisis) }
 
     Column {
         Text("Sorts connus/préparés au niveau 1 pour ${classe?.nom.orEmpty()} (${selection.size} choisi(s)).")
         Spacer(Modifier.height(12.dp))
         if (sortsDeLaClasse.isEmpty()) {
-            Text("Aucun sort trouvé pour cette classe dans la bibliothèque — vous pourrez les ajouter plus tard depuis la fiche.")
+            Text("Aucun sort trouvé pour cette classe dans la bibliothèque pour l'instant — vous pourrez les ajouter plus tard depuis la fiche. Vous pouvez continuer sans en choisir.")
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(sortsDeLaClasse) { sort ->
@@ -502,57 +663,6 @@ private fun EtapeSorts(state: CharacterCreationUiState, holder: CharacterCreatio
 }
 
 @Composable
-private fun EtapePersonnalite(state: CharacterCreationUiState, holder: CharacterCreationStateHolder) {
-    val draft = state.draft
-    var personnalite by remember { mutableStateOf(draft.personnalite) }
-    var ideaux by remember { mutableStateOf(draft.ideaux) }
-    var liens by remember { mutableStateOf(draft.liens) }
-    var defauts by remember { mutableStateOf(draft.defauts) }
-
-    // Étape facultative : on publie tout de suite une sélection (même vide) pour que
-    // "Confirmer" soit utilisable sans rien remplir.
-    LaunchedEffect(Unit) {
-        holder.mettreAJourSelection(mapOf("personnalite" to personnalite, "ideaux" to ideaux, "liens" to liens, "defauts" to defauts))
-    }
-
-    fun publier() {
-        holder.mettreAJourSelection(mapOf("personnalite" to personnalite, "ideaux" to ideaux, "liens" to liens, "defauts" to defauts))
-    }
-
-    Column {
-        Text("Facultatif — vous pourrez toujours les modifier depuis la fiche.", style = MaterialTheme.typography.bodySmall)
-        Spacer(Modifier.height(12.dp))
-        OutlinedTextField(
-            value = personnalite,
-            onValueChange = { personnalite = it; publier() },
-            label = { Text("Traits de personnalité") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            value = ideaux,
-            onValueChange = { ideaux = it; publier() },
-            label = { Text("Idéaux") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            value = liens,
-            onValueChange = { liens = it; publier() },
-            label = { Text("Liens") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            value = defauts,
-            onValueChange = { defauts = it; publier() },
-            label = { Text("Défauts") },
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
-}
-
-@Composable
 private fun EtapeRecapitulatif(
     state: CharacterCreationUiState,
     holder: CharacterCreationStateHolder,
@@ -561,7 +671,7 @@ private fun EtapeRecapitulatif(
     val draft = state.draft
     var confirmationFinale by remember { mutableStateOf(false) }
 
-    Column {
+    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
         Text("Vérifiez vos choix avant de créer la fiche.", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(12.dp))
 
@@ -569,6 +679,9 @@ private fun EtapeRecapitulatif(
         RecapLigne("Compétences de classe", draft.competencesClasse.joinToString(", ").ifBlank { null }, CreationStep.COMPETENCES_CLASSE, holder)
         RecapLigne("Historique", draft.historique?.nom, CreationStep.HISTORIQUE, holder)
         RecapLigne("Espèce", draft.espece?.nom, CreationStep.ESPECE, holder)
+        draft.especeChoixSupplementaire?.let {
+            RecapLigne("Particularité d'espèce", it, CreationStep.ESPECE_CHOIX, holder)
+        }
         RecapLigne("Langues", draft.langues.joinToString(", ") { it.nom }, CreationStep.LANGUES, holder)
         RecapLigne(
             "Caractéristiques",
@@ -629,19 +742,25 @@ private fun RecapLigne(label: String, valeur: String?, step: CreationStep, holde
 // ---------------------------------------------------------------------------
 // Composant partagé
 // ---------------------------------------------------------------------------
+// Couleur de sélection fixée en dur : les rôles de thème onPrimaryContainer/
+// onSecondaryContainer produisent un texte illisible (même couleur que le fond)
+// dans le thème actuel de l'app. Un blanc explicite garantit le contraste quel
+// que soit l'état du thème.
+private val COULEUR_SELECTION = Color(0xFFB71C1C)
+private val COULEUR_TEXTE_SELECTION = Color.White
+
 @Composable
 private fun ChoixCard(titre: String, sousTitre: String?, selectionne: Boolean, onClick: () -> Unit) {
+    val couleurFond = if (selectionne) COULEUR_SELECTION else MaterialTheme.colorScheme.surface
+    val couleurTexte = if (selectionne) COULEUR_TEXTE_SELECTION else MaterialTheme.colorScheme.onSurface
     Card(
         onClick = onClick,
-        colors = CardDefaults.cardColors(
-            containerColor = if (selectionne) MaterialTheme.colorScheme.primaryContainer
-            else MaterialTheme.colorScheme.surface
-        ),
+        colors = CardDefaults.cardColors(containerColor = couleurFond, contentColor = couleurTexte),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(Modifier.padding(12.dp)) {
-            Text(titre, style = MaterialTheme.typography.bodyLarge)
-            sousTitre?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            Text(titre, style = MaterialTheme.typography.bodyLarge, color = couleurTexte)
+            sousTitre?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = couleurTexte) }
         }
     }
 }

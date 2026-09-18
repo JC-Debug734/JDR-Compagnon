@@ -286,8 +286,13 @@ object NetworkSessionManager {
     fun requestClaimCharacter(characterId: String) {
         val socket = currentSocket ?: return
         val message = NetworkMessage(type = NetworkMessage.TYPE_CHARACTER_CLAIM_REQUEST, characterId = characterId)
-        runCatching {
-            PrintWriter(socket.getOutputStream(), true).println(networkJson.encodeToString(message))
+        // Écriture socket bloquante : toujours hors thread principal (appelé
+        // depuis un onClick Compose), sinon NetworkOnMainThreadException
+        // silencieusement avalée par runCatching.
+        scope.launch {
+            runCatching {
+                PrintWriter(socket.getOutputStream(), true).println(networkJson.encodeToString(message))
+            }
         }
     }
 
@@ -297,8 +302,10 @@ object NetworkSessionManager {
         pendingProposalCharacterId = character.id
         _proposalPending.value = true
         val message = NetworkMessage(type = NetworkMessage.TYPE_CHARACTER_PROPOSAL, character = character)
-        runCatching {
-            PrintWriter(socket.getOutputStream(), true).println(networkJson.encodeToString(message))
+        scope.launch {
+            runCatching {
+                PrintWriter(socket.getOutputStream(), true).println(networkJson.encodeToString(message))
+            }
         }
     }
 

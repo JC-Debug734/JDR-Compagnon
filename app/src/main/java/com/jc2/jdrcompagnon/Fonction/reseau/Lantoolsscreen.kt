@@ -274,9 +274,11 @@ private fun HostScreen(
                         IconButton(onClick = onNavigateBack) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
                         }
-                    }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 )
-            }
+            },
+            containerColor = Color.Transparent,
         ) { innerPadding ->
             Column(
                 modifier = Modifier
@@ -323,9 +325,11 @@ private fun HostScreen(
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
             )
-        }
+        },
+        containerColor = Color.Transparent,
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -557,9 +561,11 @@ private fun JoinScreen(
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
             )
-        }
+        },
+        containerColor = Color.Transparent,
     ) { innerPadding ->
         Column(
             modifier = Modifier

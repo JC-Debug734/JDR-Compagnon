@@ -4,18 +4,20 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.MusicManager
 import com.jc2.jdrcompagnon.ui.navigation.JdrNavGraph
 import com.jc2.jdrcompagnon.ui.navigation.Route
-import com.jc2.jdrcompagnon.ui.theme.ForcedDarkPalette
 import com.jc2.jdrcompagnon.ui.theme.JdrCompagnonTheme
 
 class MainActivity : ComponentActivity() {
@@ -30,13 +32,17 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             JdrCompagnonTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
+                Box(modifier = Modifier.fillMaxSize()) {
                     // Fond forcé, quel que soit le thème sélectionné
                     // (clair/sombre/monde) : le thème ne doit jamais influencer
-                    // cette couleur.
-                    color = ForcedDarkPalette.Background,
-                ) {
+                    // ce fond. Remplace l'ancien fond uni ForcedDarkPalette.Background
+                    // par une image, appliquée une seule fois ici pour toute l'app.
+                    Image(
+                        painter = painterResource(id = R.drawable.fond_ecran),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
                     AppEntryPoint()
                 }
             }

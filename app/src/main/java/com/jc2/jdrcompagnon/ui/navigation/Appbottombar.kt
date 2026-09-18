@@ -2,6 +2,7 @@ package com.jc2.jdrcompagnon.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import android.graphics.BitmapFactory
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -25,8 +26,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import com.jc2.jdrcompagnon.network.NetworkSessionManager
@@ -70,6 +73,17 @@ fun AppBottomBar(
     val coroutineScope = rememberCoroutineScope()
     var isRolling by remember { mutableStateOf(false) }
     var rotationDegrees by remember { mutableStateOf(0f) }
+
+    // Icône personnalisée "Accueil", fournie en asset (pas en drawable) pour permettre
+    // plus tard une icône différente par monde ; repli silencieux sur l'icône Material
+    // si le fichier est absent, pour ne jamais casser la barre du bas.
+    val context = LocalContext.current
+    val homeIconBitmap = remember {
+        runCatching {
+            context.assets.open("dnd/icone/ic_acceuil.png").use { BitmapFactory.decodeStream(it) }
+                ?.asImageBitmap()
+        }.getOrNull()
+    }
     val animatedRotation by animateFloatAsState(
         targetValue = rotationDegrees,
         animationSpec = tween(durationMillis = 600),
@@ -112,19 +126,27 @@ fun AppBottomBar(
 
     NavigationBar(
         modifier = modifier,
-        containerColor = ForcedDarkPalette.Surface,
+        containerColor = Color.Transparent,
         contentColor = ForcedDarkPalette.Content,
     ) {
         NavigationBarItem(
             selected = false,
             onClick = onHomeTap,
             icon = {
-                Icon(
-                    Icons.Default.Home,
-                    contentDescription = "Accueil",
-                )
+                if (homeIconBitmap != null) {
+                    Icon(
+                        bitmap = homeIconBitmap,
+                        contentDescription = "Accueil",
+                        tint = Color.Unspecified,
+                        modifier = Modifier.size(60.dp),
+                    )
+                } else {
+                    Icon(
+                        Icons.Default.Home,
+                        contentDescription = "Accueil",
+                    )
+                }
             },
-            label = { Text("Accueil") },
             colors = itemColors,
         )
         NavigationBarItem(

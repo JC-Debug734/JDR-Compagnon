@@ -31,12 +31,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.filled.Backpack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Shield
@@ -47,14 +47,12 @@ import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -62,14 +60,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberDrawerState
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -88,7 +85,6 @@ import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.ProficiencyLevel
 import com.jc2.jdrcompagnon.ui.components.CharacterEquipment
 import com.jc2.jdrcompagnon.ui.components.EquipmentManagementContent
-import com.jc2.jdrcompagnon.ui.components.JoueurDrawer
 import com.jc2.jdrcompagnon.ui.components.SheetBorder
 import com.jc2.jdrcompagnon.ui.components.SheetCard
 import com.jc2.jdrcompagnon.ui.components.SheetSurface
@@ -109,26 +105,22 @@ fun CharacterSheetScreen(
     onBack: () -> Unit,
     onEdit: ((Character) -> Unit)? = null,
     onLevelUp: ((Character) -> Unit)? = null,
-    onManageSpells: ((Character) -> Unit)? = null
+    onManageSpells: ((Character) -> Unit)? = null,
+    // Distinct de onBack : "Choisir un personnage" doit toujours rouvrir la
+    // liste de sélection (même item, même comportement que sur JoueurHomeScreen
+    // et CharacterSelectionScreen), pas juste dépiler l'écran courant — sinon
+    // le même libellé fait des choses différentes selon d'où on arrive ici.
+    onChooseCharacter: () -> Unit = onBack,
+    onOpenMenu: () -> Unit = {},
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabTitles = listOf("Aperçu", "Combat", "Équipement", "Notes")
+    val tabIcons = listOf(Icons.Default.Person, Icons.Default.Shield, Icons.Default.Backpack, Icons.AutoMirrored.Filled.Article)
     var showDeleteDialog by remember { mutableStateOf(false) }
     val allCharacters by GameState.characters.collectAsState()
     val currentCharacter = allCharacters.find { it.id == character.id } ?: character
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-    val coroutineScope = rememberCoroutineScope()
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = {
-            JoueurDrawer(
-                onChooseCharacter = onBack,
-                onClose = { coroutineScope.launch { drawerState.close() } }
-            )
-        }
-    ) {
-        Scaffold(
+    Scaffold(
             topBar = {
                 CenterAlignedTopAppBar(
                     title = {
@@ -147,16 +139,11 @@ fun CharacterSheetScreen(
                         }
                     },
                     navigationIcon = {
-                        IconButton(onClick = { coroutineScope.launch { drawerState.open() } }) {
+                        IconButton(onClick = onOpenMenu) {
                             Icon(Icons.Default.Menu, contentDescription = "Menu", tint = SheetTextPrimary)
                         }
                     },
                     actions = {
-                        if (onManageSpells != null) {
-                            IconButton(onClick = { onManageSpells(currentCharacter) }) {
-                                Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = "Gérer les sorts", tint = SheetTextPrimary)
-                            }
-                        }
                         if (isMjMode && onEdit != null) {
                             IconButton(onClick = { onEdit(currentCharacter) }) {
                                 Icon(Icons.Default.Edit, contentDescription = "Modifier", tint = SheetTextPrimary)
@@ -189,27 +176,52 @@ fun CharacterSheetScreen(
                 // Carte d'en-tête commune, présente sur les 4 onglets
                 CharacterStatsHeader(currentCharacter, isMjMode)
 
-                // Tab selector, sous la carte d'en-tête
+                // Tab selector, sous la carte d'en-tête — icônes uniquement, gestion des sorts à côté
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                 ) {
-                    Row(modifier = Modifier.padding(4.dp)) {
-                        tabTitles.forEachIndexed { index, title ->
+                    Row(modifier = Modifier.padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        tabIcons.forEachIndexed { index, icon ->
                             val selected = selectedTab == index
-                            Text(
-                                text = title,
+                            Box(
                                 modifier = Modifier
                                     .weight(1f)
                                     .clip(RoundedCornerShape(12.dp))
                                     .background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent)
                                     .clickable { selectedTab = index }
                                     .padding(vertical = 10.dp),
-                                color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                                style = MaterialTheme.typography.labelLarge,
-                                textAlign = TextAlign.Center
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    icon,
+                                    contentDescription = tabTitles[index],
+                                    tint = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                        if (onManageSpells != null) {
+                            VerticalDivider(
+                                modifier = Modifier
+                                    .height(28.dp)
+                                    .padding(horizontal = 2.dp),
+                                color = SheetBorder
                             )
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable { onManageSpells(currentCharacter) }
+                                    .padding(vertical = 10.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.MenuBook,
+                                    contentDescription = "Gérer les sorts",
+                                    tint = SheetTextPrimary
+                                )
+                            }
                         }
                     }
                 }
@@ -224,7 +236,6 @@ fun CharacterSheetScreen(
                 Spacer(modifier = Modifier.height(24.dp))
             }
         }
-    }
 
     if (showDeleteDialog) {
         AlertDialog(
@@ -360,6 +371,7 @@ private fun CharacterStatsHeader(character: Character, isMjMode: Boolean = false
     var showPortraitPicker by remember { mutableStateOf(false) }
     var showHpDialog by remember { mutableStateOf(false) }
     var showHitDiceDialog by remember { mutableStateOf(false) }
+    var showConditionDialog by remember { mutableStateOf(false) }
     var showXpDialog by remember { mutableStateOf(false) }
     var showSpeedDialog by remember { mutableStateOf(false) }
     var showSizeDialog by remember { mutableStateOf(false) }
@@ -483,6 +495,26 @@ private fun CharacterStatsHeader(character: Character, isMjMode: Boolean = false
                             color = SheetTextPrimary
                         )
                     }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .clickable { showConditionDialog = true }
+                            .padding(4.dp)
+                    ) {
+                        Text(
+                            "CONDITION",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = SheetTextSecondary,
+                            letterSpacing = 1.sp
+                        )
+                        Text(
+                            character.condition.ifBlank { "Aucune" },
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = SheetTextPrimary,
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
             }
 
@@ -559,6 +591,17 @@ private fun CharacterStatsHeader(character: Character, isMjMode: Boolean = false
                 showHitDiceDialog = false
             },
             onDismiss = { showHitDiceDialog = false }
+        )
+    }
+
+    if (showConditionDialog) {
+        ConditionEditDialog(
+            currentCondition = character.condition,
+            onConfirm = { value ->
+                GameState.setCondition(character.id, value)
+                showConditionDialog = false
+            },
+            onDismiss = { showConditionDialog = false }
         )
     }
 
@@ -668,6 +711,36 @@ private fun HitDiceEditDialog(
                 val newRemaining = (remainingText.toIntOrNull() ?: hitDiceRemaining).coerceIn(0, level)
                 onConfirm(newRemaining)
             }) { Text("Valider") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Annuler") }
+        }
+    )
+}
+
+@Composable
+private fun ConditionEditDialog(
+    currentCondition: String,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var conditionText by remember { mutableStateOf(currentCondition) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Condition") },
+        text = {
+            OutlinedTextField(
+                value = conditionText,
+                onValueChange = { conditionText = it },
+                label = { Text("État du personnage") },
+                placeholder = { Text("Ex : Empoisonné, À terre...") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(conditionText.trim()) }) { Text("Valider") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Annuler") }
@@ -1187,12 +1260,32 @@ private fun DetailRow(label: String, value: String) {
 @Composable
 private fun CombatTab(character: Character) {
     val acBreakdown = GameState.armorClassBreakdown(character)
+    val init = GameState.abilityModifier(character.dexterity)
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SheetCard {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Default.Shield, null, tint = SheetTextSecondary)
-                Text("Classe d'armure", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = SheetTextPrimary)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.Shield, null, tint = SheetTextSecondary)
+                    Text("Classe d'armure", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = SheetTextPrimary)
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "INITIATIVE",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = SheetTextSecondary,
+                        letterSpacing = 1.sp
+                    )
+                    Text(
+                        if (init >= 0) "+$init" else init.toString(),
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = SheetTextPrimary
+                    )
+                }
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
@@ -1238,48 +1331,6 @@ private fun CombatTab(character: Character) {
                     }
                 }
             }
-        }
-
-        // HP / death saves / hit dice
-        SheetCard {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Default.Favorite, null, tint = MaterialTheme.colorScheme.error)
-                Text("Points de vie", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = SheetTextPrimary)
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-
-            val hpFraction = if (character.maxHitPoints > 0) {
-                character.currentHitPoints.toFloat() / character.maxHitPoints.toFloat()
-            } else 0f
-            Text(
-                "${character.currentHitPoints} / ${character.maxHitPoints}",
-                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Black),
-                color = SheetTextPrimary
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-            LinearProgressIndicator(
-                progress = { hpFraction.coerceIn(0f, 1f) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(6.dp)
-                    .clip(RoundedCornerShape(3.dp)),
-                color = MaterialTheme.colorScheme.error,
-                trackColor = SheetBorder
-            )
-            if ((character.temporaryHitPoints ?: 0) > 0) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("PV temporaires : +${character.temporaryHitPoints}", color = MaterialTheme.colorScheme.tertiary, fontWeight = FontWeight.Bold)
-            }
-        }
-
-        SheetCard {
-            Text("Initiative", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = SheetTextPrimary)
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                "Mod DEX : ${GameState.abilityModifier(character.dexterity)}",
-                style = MaterialTheme.typography.bodyLarge,
-                color = SheetTextSecondary
-            )
         }
     }
 }
@@ -1336,6 +1387,13 @@ private fun ProficiencyRow(
 @Composable
 private fun EquipmentTab(character: Character, isMjMode: Boolean) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        if (character.weaponArmorTraining.isNotBlank()) {
+            SheetCard {
+                Text("Maîtrises de combat", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = SheetTextPrimary)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(character.weaponArmorTraining, style = MaterialTheme.typography.bodyMedium, color = SheetTextPrimary)
+            }
+        }
         CharacterEquipment(character, isMjMode)
         EquipmentManagementContent(character, isMjMode)
     }
@@ -1380,6 +1438,22 @@ private fun NotesTab(character: Character, isMjMode: Boolean) {
                 Text("Traits & capacités", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = SheetTextPrimary)
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(character.traits, style = MaterialTheme.typography.bodyMedium, color = SheetTextPrimary)
+            }
+        }
+
+        if (character.languages.isNotEmpty()) {
+            SheetCard {
+                Text("Langues connues", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = SheetTextPrimary)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(character.languages.joinToString(", "), style = MaterialTheme.typography.bodyMedium, color = SheetTextPrimary)
+            }
+        }
+
+        if (character.proficiencies.isNotBlank()) {
+            SheetCard {
+                Text("Maîtrises", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = SheetTextPrimary)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(character.proficiencies, style = MaterialTheme.typography.bodyMedium, color = SheetTextPrimary)
             }
         }
     }

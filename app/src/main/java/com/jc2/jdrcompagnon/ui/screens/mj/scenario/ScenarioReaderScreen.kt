@@ -14,7 +14,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.*
@@ -45,6 +44,7 @@ fun ScenarioReaderScreen(
     scenarioId: String,
     onBack: () -> Unit,
     onOpenInternalLink: (type: String, name: String) -> Unit = { _, _ -> },
+    onOpenMenu: () -> Unit = {},
 ) {
     val mjScenarios by GameState.mjScenarios.collectAsState()
     val scenario = remember(scenarioId, mjScenarios) {
@@ -56,8 +56,8 @@ fun ScenarioReaderScreen(
             TopAppBar(
                 title = {},
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
+                    IconButton(onClick = onOpenMenu) {
+                        Icon(Icons.Default.Menu, contentDescription = "Menu")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)

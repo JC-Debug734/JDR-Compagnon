@@ -2,7 +2,6 @@ package com.jc2.jdrcompagnon.ui
 
 import android.content.Context
 import android.content.SharedPreferences
-import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdRepository
 import com.jc2.jdrcompagnon.ui.screens.joueur.character.ArmorRules
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -10,7 +9,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
-import com.jc2.jdrcompagnon.ui.MusicSettings
+import com.jc2.jdrcompagnon.feature_group.domain.model.Mount
+import com.jc2.jdrcompagnon.feature_group.domain.model.Reputation
+import com.jc2.jdrcompagnon.feature_group.domain.model.Transport
 
 typealias ScenarioFileEntry = PublicFilesStore.FileEntry
 
@@ -47,7 +48,13 @@ object GameState {
         val id: String = java.util.UUID.randomUUID().toString(),
         val name: String,
         val memberIds: List<String> = emptyList(),
-        val worldId: String = ""
+        val worldId: String = "",
+        // Montures et moyens de transport : purement descriptifs (aucun impact mécanique/combat),
+        // sur le même principe que les employés de feature_boutique. Réputation : suivi par
+        // faction, propre au groupe (et non à un personnage individuel).
+        val mounts: List<Mount> = emptyList(),
+        val transports: List<Transport> = emptyList(),
+        val reputations: List<Reputation> = emptyList()
     )
 
     @Serializable
@@ -132,6 +139,8 @@ object GameState {
         loadPlayerName()
         importDefaultScenarioIfNeeded(context)
         syncScenariosFromDisk(context)
+        com.jc2.jdrcompagnon.di.BoutiqueDependencies.init(context)
+        com.jc2.jdrcompagnon.di.BoutiqueDependencies.initEquipementSource(context)
     }
 
     /**
@@ -295,10 +304,16 @@ object GameState {
      */
     fun syncScenariosFromDisk(context: Context) {
         val files = listScenarioFiles(context)
-        if (files.isEmpty()) return
 
         var current = _mjScenarios.value
         var changed = false
+
+        // ids retrouvés sur le disque au fil du scan ci-dessous, pour pouvoir ensuite
+        // retirer de l'app les scénarios dont le fichier .md a été supprimé manuellement
+        // (auparavant, un scénario supprimé côté disque restait indéfiniment visible et
+        // accessible dans l'app, car cette fonction ne faisait qu'ajouter/mettre à jour,
+        // jamais supprimer).
+        val idsFoundOnDisk = mutableSetOf<String>()
 
         for (entry in files) {
             val markdown = try {
@@ -322,6 +337,7 @@ object GameState {
                     existing.scenes.getOrNull(index)?.let { scene.copy(id = it.id) } ?: scene
                 }
                 val updated = existing.copy(title = parsed.first, scenes = mergedScenes)
+                idsFoundOnDisk += existing.id
                 if (updated != existing) {
                     current = current.map { if (it.id == existing.id) updated else it }
                     changed = true
@@ -334,10 +350,22 @@ object GameState {
                     createdBy = "MJ"
                 )
                 current = current + newScenario
+                idsFoundOnDisk += newScenario.id
                 changed = true
                 // Réécrit le fichier avec l'id désormais connu, pour une synchro fiable la prochaine fois.
                 writeScenarioFile(context, newScenario)
                 android.util.Log.i("GameState", "Nouveau scénario importé depuis le disque : ${newScenario.title}")
+            }
+        }
+
+        // Retire les scénarios dont le fichier .md n'existe plus sur le disque (supprimé
+        // manuellement en dehors de l'app, ou depuis un autre appareil).
+        val orphaned = current.filter { it.id !in idsFoundOnDisk }
+        if (orphaned.isNotEmpty()) {
+            current = current - orphaned.toSet()
+            changed = true
+            orphaned.forEach {
+                android.util.Log.i("GameState", "Scénario retiré (fichier supprimé) : ${it.title}")
             }
         }
 
@@ -1133,6 +1161,17 @@ object GameState {
         saveCharacters(updated)
     }
 
+    /** Définit la condition/état courant d'un personnage (ex : "Empoisonné", "À terre"). */
+    fun setCondition(characterId: String, value: String) {
+        val updated = _characters.value.map { character ->
+            if (character.id == characterId) {
+                character.copy(condition = value)
+            } else character
+        }
+        _characters.value = updated
+        saveCharacters(updated)
+    }
+
     /**
      * Dépense un dé de vie (ex : lors d'un repos court). Le nombre de dés
      * disponibles est égal au niveau du personnage moins ceux déjà dépensés.
@@ -1402,10 +1441,28 @@ object GameState {
         saveMjGroups(newList)
     }
 
-    fun removeMjScenario(scenarioId: String) {
+    fun removeMjScenario(scenarioId: String, context: Context? = null) {
+        val scenario = _mjScenarios.value.firstOrNull { it.id == scenarioId }
         val newList = _mjScenarios.value.filter { it.id != scenarioId }
         _mjScenarios.value = newList
         saveMjScenarios(newList)
+        // Supprime aussi le fichier .md : sinon il reste orphelin sur le disque et
+        // syncScenariosFromDisk le réimporterait comme un nouveau scénario au prochain scan.
+        if (context != null && scenario != null) {
+            deleteScenarioFile(context, scenario)
+        }
+    }
+
+    private fun deleteScenarioFile(context: Context, scenario: MjScenario) {
+        try {
+            val entry = listScenarioFiles(context).firstOrNull { entry ->
+                val content = context.contentResolver.openInputStream(entry.uri)?.bufferedReader()?.use { it.readText() }
+                content?.let { hiddenIdRegex.find(it)?.groupValues?.get(1) } == scenario.id
+            }
+            entry?.let { context.contentResolver.delete(it.uri, null, null) }
+        } catch (e: Exception) {
+            android.util.Log.e("GameState", "Impossible de supprimer le fichier du scénario ${scenario.title}", e)
+        }
     }
 
     fun addMjGroup(group: MjGroup) {
@@ -1857,6 +1914,7 @@ data class Character(
     val proficiencyBonus: Int = 2,
     val heroicInspiration: Boolean = false,
     val hitDiceUsed: Int = 0,
+    val condition: String = "",
     val savingThrows: Map<String, ProficiencyLevel> = emptyMap(),
     val savingThrowProficiencies: List<String> = emptyList(),
     val skills: Map<String, ProficiencyLevel> = emptyMap(),
@@ -1873,6 +1931,15 @@ data class Character(
     val armor: List<String> = emptyList(),
     val traits: String = "",
     val notes: String = "",
+    // Langues connues (Commun + langues choisies à la création), affichées dans
+    // l'onglet Notes de la fiche.
+    val languages: List<String> = emptyList(),
+    // Maîtrises d'outils octroyées par l'historique (ex. "matériel de calligraphe"),
+    // affichées dans l'onglet Notes de la fiche sous "Maîtrises".
+    val proficiencies: String = "",
+    // Maîtrise des armes/armures/outils octroyée par la classe (ex. "Armes courantes
+    // et armes de guerre"), affichée dans l'onglet Équipement de la fiche.
+    val weaponArmorTraining: String = "",
     val personalityTraits: String = "",
     val ideals: String = "",
     val bonds: String = "",

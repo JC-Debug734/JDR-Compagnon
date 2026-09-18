@@ -3,20 +3,17 @@ package com.jc2.jdrcompagnon.ui.screens.mj.library.srd
 /**
  * Parser pour les fichiers equipment.md.
  *
- * Format SRD 5.2.1 FR réel (celui utilisé par `equipement_srd521.md`) : des tableaux
- * Markdown ("| Colonne | ... |") sous des titres "## " (catégorie principale : Armes,
- * Armures, Outils, Paquetages, Matériel d'aventurier) et parfois "### " (sous-catégorie,
- * ex. "Armes courantes de corps à corps", "Outils d'artisan"). Chaque ligne de données
- * d'une table devient un [EquipmentItem], la première colonne étant toujours le nom.
- * Seules les tables comportant une colonne "Prix" ou "Poids" sont retenues : ça exclut
- * les tables de référence (ex. "Propriétés des armes", "Bottes d'arme") qui ne décrivent
- * pas des objets achetables. Le tableau des armures utilise en plus des lignes de
- * séparation en gras ("| **Légères** *(...)* | | | | | |") pour sous-catégoriser sans
- * titre "### " dédié ; elles sont détectées (première cellule commençant par "**", le
- * reste vide ou "—") et non transformées en objet.
+ * Format SRD 5.2.1 FR réel (celui utilisé par `equipement_srd521.md`, décrit par
+ * `guide_format_equipement.md`) : des blocs "### Nom" contenant des champs en gras sans
+ * deux-points ("**Champ** valeur"), terminés par une ligne "---" (voir [parseBoldFields]).
+ * Le champ **Type** identifie la sorte d'objet (Arme, Armure, Outil, Paquetage, Matériel,
+ * Munition, Propriété, Devise) et sa présence sert de détection du format.
  *
  * Anciens formats conservés en repli (pour compatibilité avec d'éventuels autres
  * fichiers) :
+ * - Tableaux Markdown ("| Colonne | ... |") sous des titres "## "/"### " (voir
+ *   [parseTableFormat]) — ancien format de `equipement_srd521.md` avant sa restructuration
+ *   en blocs.
  * - Format structuré "### Nom" + champs "Clé: valeur" + description (voir [parseStructured]).
  * - Format Naheulbeuk V4 : sections "## " + items "- Nom : description".
  */
@@ -25,14 +22,144 @@ object EquipmentParser {
     private val structuredItemRegex = Regex("""(?m)^### .+$""")
 
     /**
+     * Détecte le format "### Nom" + champs en gras "**Champ** valeur" (sans deux-points),
+     * décrit par `guide_format_equipement.md` et utilisé par `equipement_srd521.md` : la
+     * présence d'une ligne "**Type**" suffit à l'identifier sans ambiguïté avec les autres
+     * formats (le format structuré historique utilise "Catégorie:" avec deux-points, pas
+     * de gras).
+     */
+    private val boldFieldTypeRegex = Regex("""(?m)^\*\*Type\*\*\s""")
+
+    /**
      * Parse le contenu markdown de l'équipement en une liste d'items typés.
      */
     fun parse(rawMarkdown: String): List<EquipmentItem> {
         return when {
+            boldFieldTypeRegex.containsMatchIn(rawMarkdown) -> parseBoldFields(rawMarkdown)
             containsItemTable(rawMarkdown) -> parseTableFormat(rawMarkdown)
             structuredItemRegex.containsMatchIn(rawMarkdown) && rawMarkdown.contains("Catégorie:") ->
                 parseStructured(rawMarkdown)
             else -> parseNaheulbeuk(rawMarkdown)
+        }
+    }
+
+    private val boldFieldRegex = Regex("""^\*\*(.+?)\*\*\s?(.*)$""")
+
+    /**
+     * Parse le format "### Nom" + champs "**Champ** valeur" de `guide_format_equipement.md`.
+     * Chaque bloc se termine par une ligne "---" ; le champ **Contenu** (Paquetage) peut
+     * être une liste à puces "- Quantité Nom" sur plusieurs lignes plutôt qu'une valeur en
+     * ligne. Les champs sans équivalent direct dans [EquipmentItem] (Sous-catégorie,
+     * Caractéristique, Utilisation type, Quantité, Rangement, Botte, Temps enfiler/retirer,
+     * Conversion, Contenu, Consommable) sont conservés en texte libre à la suite de la
+     * description, dans `rawMarkdown`, pour ne rien perdre.
+     */
+    private fun parseBoldFields(rawMarkdown: String): List<EquipmentItem> {
+        val entries = mutableListOf<EquipmentItem>()
+        // Le premier fragment (avant le tout premier "### ") est l'en-tête du fichier
+        // (titre + Univers), ignoré.
+        val blocks = rawMarkdown.split(Regex("""(?m)^### """)).drop(1)
+
+        for (block in blocks) {
+            val lines = block.lines()
+            val name = lines.firstOrNull()?.trim().orEmpty()
+            if (name.isBlank()) continue
+
+            val fields = mutableMapOf<String, String>()
+            var i = 1
+            while (i < lines.size) {
+                val trimmed = lines[i].trim()
+                if (trimmed == "---") break
+                val match = boldFieldRegex.find(trimmed)
+                if (match != null) {
+                    val fieldName = match.groupValues[1].trim()
+                    var fieldValue = match.groupValues[2].trim()
+                    if (fieldValue.isEmpty()) {
+                        // Champ multi-lignes en liste à puces (ex. Contenu d'un Paquetage).
+                        val subLines = mutableListOf<String>()
+                        var j = i + 1
+                        while (j < lines.size && lines[j].trim().startsWith("- ")) {
+                            subLines.add(lines[j].trim().removePrefix("- ").trim())
+                            j++
+                        }
+                        if (subLines.isNotEmpty()) {
+                            fields[fieldName] = subLines.joinToString(", ")
+                            i = j
+                            continue
+                        }
+                    }
+                    fields[fieldName] = fieldValue
+                }
+                i++
+            }
+
+            fun field(key: String): String = fields[key].orEmpty().let { if (it == "-") "" else it }
+
+            val type = fields["Type"].orEmpty()
+            val category = buildBoldFieldCategoryLabel(type, fields)
+
+            val extraLines = buildList {
+                field("Sous-catégorie").takeIf { it.isNotBlank() }?.let { add("Sous-catégorie : $it") }
+                field("Caractéristique").takeIf { it.isNotBlank() }?.let { add("Caractéristique : $it") }
+                field("Utilisation type").takeIf { it.isNotBlank() }?.let { add("Utilisation type : $it") }
+                field("Quantité").takeIf { it.isNotBlank() }?.let { add("Quantité : $it") }
+                field("Rangement").takeIf { it.isNotBlank() }?.let { add("Rangement : $it") }
+                field("Botte").takeIf { it.isNotBlank() }?.let { add("Botte : $it") }
+                field("Temps enfiler").takeIf { it.isNotBlank() }?.let { add("Temps pour enfiler : $it") }
+                field("Temps retirer").takeIf { it.isNotBlank() }?.let { add("Temps pour retirer : $it") }
+                field("Conversion").takeIf { it.isNotBlank() }?.let { add("Conversion : $it") }
+                field("Contenu").takeIf { it.isNotBlank() }?.let { add("Contenu : $it") }
+                field("Consommable").takeIf { it.isNotBlank() }?.let { add("Consommable : $it") }
+            }
+
+            val description = field("Description")
+            val rawContent = buildString {
+                append(description)
+                if (extraLines.isNotEmpty()) {
+                    if (isNotEmpty()) append("\n\n")
+                    append(extraLines.joinToString("\n"))
+                }
+            }.trim()
+
+            val cost = fields["Coût"]?.let { if (it == "-") "" else it } ?: field("Conversion")
+
+            entries.add(
+                EquipmentItem(
+                    name = name,
+                    category = category,
+                    cost = cost,
+                    weight = field("Poids"),
+                    damage = field("Dégâts"),
+                    ac = field("CA"),
+                    strength = field("Force requise"),
+                    stealth = field("Discrétion"),
+                    properties = field("Propriétés"),
+                    rawMarkdown = rawContent,
+                )
+            )
+        }
+        return entries
+    }
+
+    /**
+     * Construit un libellé de catégorie lisible à partir de **Type** (+ **Catégorie** ou
+     * **Sous-catégorie** selon le type) — sert à la fois de titre de section (sticky
+     * header) et de filtre dans l'onglet Équipement. Contient toujours "arme"/"armure"
+     * en minuscule pour les types concernés, condition dont dépendent l'affichage des
+     * dégâts/propriétés (armes) et CA/Force/Discrétion (armures) dans l'UI.
+     */
+    private fun buildBoldFieldCategoryLabel(type: String, fields: Map<String, String>): String {
+        fun sub(key: String): String? = fields[key]?.takeIf { it.isNotBlank() && it != "-" }
+        return when (type) {
+            "Arme" -> "Armes" + (sub("Catégorie")?.let { " $it" } ?: "")
+            "Armure" -> "Armures" + (sub("Catégorie")?.let { " $it" } ?: "")
+            "Outil" -> "Outils" + (sub("Sous-catégorie")?.let { " $it" } ?: "")
+            "Paquetage" -> "Paquetages"
+            "Matériel" -> "Matériel d'aventurier"
+            "Munition" -> "Munitions"
+            "Propriété" -> "Propriétés" + (sub("Catégorie")?.let { " ($it)" } ?: "")
+            "Devise" -> "Monnaie"
+            else -> type.ifBlank { "Équipement" }
         }
     }
 

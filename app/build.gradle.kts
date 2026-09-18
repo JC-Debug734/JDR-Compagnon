@@ -2,9 +2,18 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    id("com.google.devtools.ksp") version "2.2.10-2.0.2"
 }
 
-// AUTO-VERSION: 1.7.6
+// AGP 9 charge déjà kotlin-android sur le classpath (runtime dependency interne, sans
+// version déclarée) pour son "built-in Kotlin" — même désactivé via android.builtInKotlin=false.
+// alias(libs.plugins.kotlin.android) imposerait une version précise et Gradle refuse de
+// vérifier la compatibilité avec la version déjà présente ("already on the classpath with
+// an unknown version"). apply(plugin = ...) contourne ce conflit en utilisant directement
+// les classes déjà chargées, sans repasser par la résolution de version.
+apply(plugin = "org.jetbrains.kotlin.android")
+
+// AUTO-VERSION: 2.5.2
 // ── Auto-incrémentation de version à chaque compilation ──────────────────
 // Format X.Y.Z : Z va de 0 à 9 puis repasse à 0 en incrémentant Y ; Y suit
 // la même règle sur X ; X n'a pas de limite.
@@ -90,6 +99,16 @@ android {
     }
 }
 
+// kotlin-android est appliqué via apply(plugin = ...) plus haut (contournement du conflit
+// AGP 9 / built-in Kotlin), donc l'accesseur "kotlin { }" généré par le plugins{} block
+// n'est pas disponible ici — on configure le jvmTarget via tasks.withType à la place, pour
+// qu'il corresponde à compileOptions ci-dessus (Java 11) plutôt que le 21 par défaut.
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
+    }
+}
+
 dependencies {
     // Core / AppCompat / Material (legacy, conservés)
     implementation(libs.androidx.appcompat)
@@ -133,6 +152,14 @@ dependencies {
     // WorkManager — vérification périodique des mises à jour en arrière-plan
     // (pas de version catalog entry existante : ajoutée en direct)
     implementation("androidx.work:work-runtime-ktx:2.9.1")
+
+    // Room — persistance locale de la feature Boutique (première utilisation de Room
+    // dans le projet ; jusqu'ici SharedPreferences + fichiers .md)
+    // Room 2.6.1 plante avec KSP2 sur les fonctions suspend retournant Unit
+    // ("unexpected jvm signature V") — corrigé à partir de 2.7.0, on prend la dernière stable.
+    implementation("androidx.room:room-runtime:2.8.5")
+    implementation("androidx.room:room-ktx:2.8.5")
+    ksp("androidx.room:room-compiler:2.8.5")
 
     // Tests
     testImplementation(libs.junit)

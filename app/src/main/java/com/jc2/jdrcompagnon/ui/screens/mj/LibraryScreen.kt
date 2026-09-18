@@ -54,6 +54,7 @@ import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Pets
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -92,6 +93,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -111,6 +113,7 @@ import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdSectionEntry
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdDocSection
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdRepository
 import com.mikepenz.markdown.m3.Markdown
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -500,6 +503,33 @@ fun LibraryScreen(
     // S'assurer que les données sont rechargées quand le monde change
     val worldIdKey = currentWorld?.id
 
+    // Incrémenté par "Forcer la mise à jour" (écran de gestion des livres) : ajouté aux
+    // clés du LaunchedEffect de chargement ci-dessous pour le forcer à se relancer même
+    // si l'onglet et le monde n'ont pas changé — nécessaire puisque remettre les données
+    // à null ne suffit pas à lui seul à redéclencher un LaunchedEffect déjà stable sur
+    // ses clés actuelles.
+    var srdRefreshTrigger by remember { mutableStateOf(0) }
+
+    // Force une recopie des fichiers SRD depuis les assets (voir
+    // SrdRepository.forceRefreshFromAssets) et vide les données déjà chargées en mémoire
+    // dans cet écran, pour que l'onglet actuellement ouvert se recharge avec le contenu
+    // frais dès la fin de cette fonction (via srdRefreshTrigger).
+    val onForceSrdRefresh: () -> Unit = {
+        SrdRepository.forceRefreshFromAssets(context)
+        monsters = null
+        spells = null
+        ruleSections = null
+        equipment = null
+        glossaryMarkdown = null
+        classes = null
+        especes = null
+        historiques = null
+        dons = null
+        armesMagiques = null
+        montures = null
+        srdRefreshTrigger++
+    }
+
     // Recharge la liste des livres personnalisés à chaque changement de monde et à chaque
     // ajout/suppression (bookSettingsVersion, incrémenté par onSettingChanged côté écran
     // de gestion des livres).
@@ -507,8 +537,10 @@ fun LibraryScreen(
         customBooks = CustomBooksStore.list(context, worldIdKey)
     }
 
-    // Chargement des données selon l'onglet sélectionné ET du monde
-    LaunchedEffect(selectedTab, worldIdKey) {
+    // Chargement des données selon l'onglet sélectionné ET du monde (+ srdRefreshTrigger,
+    // voir sa déclaration ci-dessus, pour permettre un rechargement forcé sans changer
+    // d'onglet ni de monde)
+    LaunchedEffect(selectedTab, worldIdKey, srdRefreshTrigger) {
         val worldId = currentWorld?.id
         // Réinitialiser les données monde-dépendantes quand le monde change
         if (worldIdKey == null || worldId != worldIdKey) {
@@ -781,10 +813,24 @@ fun LibraryScreen(
         }
     }
 
-    // Fond sombre uniforme (ForcedDarkPalette), aligné sur le reste de l'app
-    // (MainActivity, AppBottomBar) plutôt que le fond texturé par monde de
-    // WorldBackground, qui tranchait avec la barre de navigation du bas.
+    // Fond dédié à la bibliothèque, fourni en asset (comme ic_acceuil dans AppBottomBar) ;
+    // repli silencieux sur le fond sombre uniforme (ForcedDarkPalette) si le fichier est
+    // absent, pour ne jamais casser l'écran.
+    val bibliothequeBackground = remember {
+        runCatching {
+            context.assets.open("dnd/fond_ecran/fe_bliblio.png").use { android.graphics.BitmapFactory.decodeStream(it) }
+                ?.asImageBitmap()
+        }.getOrNull()
+    }
     Box(modifier = Modifier.fillMaxSize()) {
+        if (bibliothequeBackground != null) {
+            Image(
+                bitmap = bibliothequeBackground,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        }
         Scaffold(
             topBar = {
                 TopAppBar(
@@ -827,7 +873,7 @@ fun LibraryScreen(
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 )
             },
-            containerColor = ForcedDarkPalette.Background,
+            containerColor = if (bibliothequeBackground != null) Color.Transparent else ForcedDarkPalette.Background,
         ) { innerPadding ->
             if (!SrdRepository.isLibraryAvailable(currentWorld?.id)) {
                 Box(
@@ -859,6 +905,7 @@ fun LibraryScreen(
                             books = libraryBooks,
                             worldId = currentWorld?.id,
                             onSettingChanged = { bookSettingsVersion++ },
+                            onForceRefresh = onForceSrdRefresh,
                         )
                     } else {
                         if (showGlobalSearch) {
@@ -1446,8 +1493,8 @@ fun LibraryScreen(
             contentScale = ContentScale.Fit,
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .padding(top = 52.dp, end = 8.dp)
-                .size(121.dp)
+                .padding(top = 50.dp, end = 1.dp)
+                .size(161.dp)
                 .clickable {
                     showShelf = true
                     showBookSettings = true
@@ -2030,12 +2077,18 @@ private data class GlobalSearchResult(
  * Permet aussi d'ajouter un livre personnalisé (n'importe quel fichier, .md ou non,
  * choisi via le sélecteur système) — voir [CustomBooksStore] — et de retirer un livre
  * personnalisé déjà ajouté.
+ *
+ * Propose également "Forcer la mise à jour" ([onForceRefresh]), qui recopie les fichiers
+ * SRD intégrés vers le stockage public même si une copie y existe déjà (voir
+ * [SrdRepository.forceRefreshFromAssets]) — utile quand la copie sur l'appareil est restée
+ * périmée malgré une mise à jour de l'application.
  */
 @Composable
 private fun LibraryBookSettingsScreen(
     books: List<LibraryBook>,
     worldId: String?,
     onSettingChanged: () -> Unit,
+    onForceRefresh: () -> Unit,
 ) {
     val context = LocalContext.current
 
@@ -2079,6 +2132,57 @@ private fun LibraryBookSettingsScreen(
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                     )
+                }
+            }
+        }
+
+        item(key = "force_update") {
+            // Confirmation brève ("Fichiers SRD resynchronisés ✓") affichée quelques
+            // secondes après un tap, pour que l'action — invisible sinon, puisqu'elle ne
+            // fait rien de visible tant qu'on ne rouvre pas un livre — ait un retour
+            // immédiat.
+            var justRefreshed by remember { mutableStateOf(false) }
+            LaunchedEffect(justRefreshed) {
+                if (justRefreshed) {
+                    delay(2000)
+                    justRefreshed = false
+                }
+            }
+            Surface(
+                onClick = {
+                    onForceRefresh()
+                    justRefreshed = true
+                },
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Forcer la mise à jour",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            text = if (justRefreshed) {
+                                "Fichiers SRD resynchronisés ✓"
+                            } else {
+                                "Recopie les fichiers SRD depuis l'application, même si une version existe déjà sur l'appareil"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (justRefreshed) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -2555,6 +2659,34 @@ private fun SrdEntryRow(
     }
 }
 
+/**
+ * Petit badge mettant en avant une statistique d'équipement (poids ou prix) : fond teinté
+ * AccentGold, très lisible en un coup d'œil, distinct du reste de la ligne qui reste en
+ * texte neutre (dégâts, CA, propriétés).
+ */
+@Composable
+private fun EquipmentStatBadge(emoji: String, value: String) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = ForcedDarkPalette.AccentGold.copy(alpha = 0.16f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, ForcedDarkPalette.AccentGold.copy(alpha = 0.5f)),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(text = emoji, style = MaterialTheme.typography.labelSmall)
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = value,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = ForcedDarkPalette.AccentGold,
+            )
+        }
+    }
+}
+
 @Composable
 private fun EquipmentItemRow(
     entry: EquipmentItem,
@@ -2562,11 +2694,13 @@ private fun EquipmentItemRow(
 ) {
     val isWeapon = entry.category.lowercase().contains("arme")
     val isArmor = entry.category.lowercase().contains("armure")
+    val hasWeight = entry.weight.isNotBlank() && entry.weight != "-"
+    val hasCost = entry.cost.isNotBlank() && entry.cost != "-"
+    // Poids et prix sont retirés du sous-titre : ils sont désormais mis en avant à part,
+    // sous forme de badges (voir EquipmentStatBadge), plutôt que noyés dans le texte gris.
     val subtitle = buildList {
         if (isWeapon && entry.damage.isNotBlank()) add(entry.damage)
         if (isArmor && entry.ac.isNotBlank()) add("CA ${entry.ac}")
-        if (entry.weight.isNotBlank() && entry.weight != "-") add(entry.weight)
-        if (entry.cost.isNotBlank()) add(entry.cost)
         if (entry.properties.isNotBlank()) add(entry.properties)
     }.joinToString(" • ").takeIf { it.isNotBlank() }
 
@@ -2590,7 +2724,7 @@ private fun EquipmentItemRow(
                 modifier = Modifier.size(20.dp),
             )
             Spacer(modifier = Modifier.width(12.dp))
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = entry.name,
                     style = MaterialTheme.typography.bodyLarge,
@@ -2603,6 +2737,18 @@ private fun EquipmentItemRow(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+            }
+            if (hasWeight || hasCost) {
+                Spacer(modifier = Modifier.width(8.dp))
+                Column(horizontalAlignment = Alignment.End) {
+                    if (hasCost) {
+                        EquipmentStatBadge(emoji = "💰", value = entry.cost)
+                    }
+                    if (hasWeight) {
+                        if (hasCost) Spacer(modifier = Modifier.height(4.dp))
+                        EquipmentStatBadge(emoji = "⚖️", value = entry.weight)
+                    }
                 }
             }
         }

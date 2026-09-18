@@ -10,14 +10,20 @@ import kotlinx.coroutines.flow.update
  * mais découpées en sous-étapes pour que chaque CHOIX individuel ait sa propre
  * confirmation : on ne peut pas avancer sans valider explicitement le choix affiché.
  *
- * SORTS est sautée automatiquement pour les classes non lanceuses de sorts au
- * niveau 1 (cf. [CharacterCreationStateHolder.etapeSuivanteReelle]).
+ * L'ordre suit le SRD : Classe → Espèce (dont son éventuel sous-choix, ex. type de
+ * dragon) → Historique (avec le champ libre "Histoire et personnalité") → Langues →
+ * Caractéristiques → Alignement → Équipement/Sorts → Récapitulatif.
+ *
+ * SORTS et ESPECE_CHOIX sont sautées automatiquement quand elles ne s'appliquent
+ * pas (classe non lanceuse de sorts / espèce sans sous-choix), cf.
+ * [CharacterCreationStateHolder.etapeEstPertinente].
  */
 enum class CreationStep(val majorStep: Int, val label: String) {
     CLASSE(1, "Classe"),
     COMPETENCES_CLASSE(1, "Compétences de classe"),
-    HISTORIQUE(2, "Historique"),
     ESPECE(2, "Espèce"),
+    ESPECE_CHOIX(2, "Particularité d'espèce"),
+    HISTORIQUE(2, "Historique"),
     LANGUES(2, "Langues"),
     METHODE_CARACTERISTIQUES(3, "Méthode de génération"),
     VALEURS_CARACTERISTIQUES(3, "Génération des valeurs"),
@@ -27,13 +33,15 @@ enum class CreationStep(val majorStep: Int, val label: String) {
     EQUIPEMENT_CLASSE(5, "Équipement de classe"),
     EQUIPEMENT_HISTORIQUE(5, "Équipement d'historique"),
     SORTS(5, "Sorts connus"),
-    PERSONNALITE(5, "Personnalité"),
     RECAPITULATIF(5, "Récapitulatif & finalisation");
 
     companion object {
         val ordered = entries
     }
 }
+
+/** Choix combiné de l'étape Historique : l'historique lui-même + le texte libre "Histoire et personnalité". */
+data class SelectionHistorique(val historique: Historique, val texte: String)
 
 /**
  * Brouillon de personnage en cours de création. Chaque champ n'est renseigné
@@ -51,8 +59,10 @@ data class CharacterDraft(
     val classe: Classe? = null,
     val competencesClasse: List<String> = emptyList(),
 
-    val historique: Historique? = null,
     val espece: Espece? = null,
+    val especeChoixSupplementaire: String? = null, // ex. type de dragon, lignage elfique, don "Polyvalent"...
+    val historique: Historique? = null,
+    val histoirePersonnalite: String = "", // saisi sur l'étape Historique, sous les questions d'aide
     val langues: List<Langue> = emptyList(), // Commun + 2 langues
 
     val methodeCaracteristiques: MethodeGenerationCaracteristiques? = null,
@@ -64,12 +74,7 @@ data class CharacterDraft(
 
     val equipementClasseTexte: String? = null,
     val equipementHistoriqueTexte: String? = null,
-    val sortsChoisis: List<String> = emptyList(),
-
-    val personnalite: String = "",
-    val ideaux: String = "",
-    val liens: String = "",
-    val defauts: String = ""
+    val sortsChoisis: List<String> = emptyList()
 ) {
     /** Valeurs finales de caractéristique = répartition + ajustement d'historique. */
     val valeursFinales: Map<Caracteristique, Int>
@@ -120,15 +125,24 @@ class CharacterCreationStateHolder {
     private val _uiState = MutableStateFlow(CharacterCreationUiState())
     val uiState: StateFlow<CharacterCreationUiState> = _uiState.asStateFlow()
 
+    /**
+     * Noms des dons d'origines (dons_srd521.md, catégorie "Origines"), nécessaires
+     * pour savoir si l'étape ESPECE_CHOIX s'applique au trait "Polyvalent" de
+     * l'Humain. Fixé par l'appelant une fois les données chargées (cf.
+     * CharacterCreationScreen : LaunchedEffect qui assigne cette liste).
+     */
+    var donsOriginesNoms: List<String> = emptyList()
+
     /** Met à jour la sélection en cours, sans rien confirmer. Appelé à chaque tap. */
     fun mettreAJourSelection(selection: Any?) {
         _uiState.update { it.copy(selectionEnAttente = selection) }
     }
 
     /**
-     * Confirme le choix affiché sur l'étape courante et avance à la suivante
-     * (en sautant SORTS si la classe choisie n'est pas lanceuse de sorts).
-     * Retourne false (et ne fait rien) si aucune sélection valide n'est en attente.
+     * Confirme le choix affiché sur l'étape courante et avance à la suivante (en
+     * sautant les étapes non pertinentes, cf. [etapeEstPertinente]). Retourne false
+     * (et ne fait rien) si aucune sélection valide n'est en attente, ou si la
+     * sélection ne respecte pas la règle de l'étape (ex. mauvais nombre de choix).
      */
     fun confirmerEtapeCourante(): Boolean {
         val state = _uiState.value
@@ -147,7 +161,7 @@ class CharacterCreationStateHolder {
         return true
     }
 
-    /** Revient à l'étape précédente (en sautant SORTS si non pertinente) ; sa confirmation est annulée. */
+    /** Revient à l'étape précédente pertinente ; sa confirmation est annulée. */
     fun revenirEtapePrecedente() {
         val state = _uiState.value
         val etapePrecedente = etapePrecedenteReelle(state.step, state.draft)
@@ -166,12 +180,94 @@ class CharacterCreationStateHolder {
         _uiState.update { it.copy(step = step, selectionEnAttente = null) }
     }
 
+    /**
+     * Instantané sérialisable de l'état courant, pour sauvegarde locale
+     * (CharacterCreationDraftStore) — permet de reprendre une création interrompue.
+     */
+    fun exporterSnapshot(nomPersonnage: String): CreationSnapshot {
+        val s = _uiState.value
+        val d = s.draft
+        return CreationSnapshot(
+            step = s.step.name,
+            nomPersonnage = nomPersonnage,
+            classeNom = d.classe?.nom,
+            competencesClasse = d.competencesClasse,
+            especeNom = d.espece?.nom,
+            especeChoixSupplementaire = d.especeChoixSupplementaire,
+            historiqueNom = d.historique?.nom,
+            histoirePersonnalite = d.histoirePersonnalite,
+            languesNoms = d.langues.map { it.nom },
+            methodeCaracteristiques = d.methodeCaracteristiques?.name,
+            valeursGenerees = d.valeursGenerees,
+            repartition = d.repartition.entries.associate { it.key.name to it.value },
+            ajustementHistorique = d.ajustementHistorique.entries.associate { it.key.name to it.value },
+            alignementNom = d.alignement?.name,
+            equipementClasseTexte = d.equipementClasseTexte,
+            equipementHistoriqueTexte = d.equipementHistoriqueTexte,
+            sortsChoisis = d.sortsChoisis,
+            stepsConfirmees = s.stepsConfirmees.map { it.name }
+        )
+    }
+
+    /**
+     * Reconstruit l'état à partir d'un instantané sauvegardé, en retrouvant les
+     * objets Classe/Historique/Espece/Langue par leur nom dans les listes
+     * fraîchement rechargées depuis la bibliothèque SRD.
+     */
+    fun restaurerDepuisSnapshot(
+        snapshot: CreationSnapshot,
+        classes: List<Classe>,
+        historiques: List<Historique>,
+        especes: List<Espece>,
+        langues: List<Langue>
+    ) {
+        val draft = CharacterDraft(
+            classe = classes.firstOrNull { it.nom == snapshot.classeNom },
+            competencesClasse = snapshot.competencesClasse,
+            espece = especes.firstOrNull { it.nom == snapshot.especeNom },
+            especeChoixSupplementaire = snapshot.especeChoixSupplementaire,
+            historique = historiques.firstOrNull { it.nom == snapshot.historiqueNom },
+            histoirePersonnalite = snapshot.histoirePersonnalite,
+            langues = langues.filter { it.nom in snapshot.languesNoms },
+            methodeCaracteristiques = snapshot.methodeCaracteristiques
+                ?.let { nom -> MethodeGenerationCaracteristiques.entries.firstOrNull { it.name == nom } },
+            valeursGenerees = snapshot.valeursGenerees,
+            repartition = snapshot.repartition.mapNotNull { (k, v) ->
+                Caracteristique.entries.firstOrNull { it.name == k }?.let { it to v }
+            }.toMap(),
+            ajustementHistorique = snapshot.ajustementHistorique.mapNotNull { (k, v) ->
+                Caracteristique.entries.firstOrNull { it.name == k }?.let { it to v }
+            }.toMap(),
+            alignement = snapshot.alignementNom?.let { nom -> Alignement.entries.firstOrNull { it.name == nom } },
+            equipementClasseTexte = snapshot.equipementClasseTexte,
+            equipementHistoriqueTexte = snapshot.equipementHistoriqueTexte,
+            sortsChoisis = snapshot.sortsChoisis
+        )
+        val step = CreationStep.entries.firstOrNull { it.name == snapshot.step } ?: CreationStep.CLASSE
+        val stepsConfirmees = snapshot.stepsConfirmees
+            .mapNotNull { nom -> CreationStep.entries.firstOrNull { it.name == nom } }
+            .toSet()
+        _uiState.value = CharacterCreationUiState(
+            step = step,
+            draft = draft,
+            stepsConfirmees = stepsConfirmees,
+            selectionEnAttente = null
+        )
+    }
+
+    /** Une étape peut être sautée automatiquement si elle ne s'applique pas au brouillon courant. */
+    private fun etapeEstPertinente(step: CreationStep, draft: CharacterDraft): Boolean = when (step) {
+        CreationStep.SORTS -> draft.classe?.estLanceurDeSorts == true
+        CreationStep.ESPECE_CHOIX -> draft.espece?.let { detecterChoixEspece(it, donsOriginesNoms) } != null
+        else -> true
+    }
+
     private fun etapeSuivanteReelle(depuis: CreationStep, draft: CharacterDraft): CreationStep {
         val etapesOrdonnees = CreationStep.ordered
         var index = etapesOrdonnees.indexOf(depuis) + 1
         while (index < etapesOrdonnees.size) {
             val candidate = etapesOrdonnees[index]
-            if (candidate == CreationStep.SORTS && draft.classe?.estLanceurDeSorts != true) {
+            if (!etapeEstPertinente(candidate, draft)) {
                 index++
                 continue
             }
@@ -185,7 +281,7 @@ class CharacterCreationStateHolder {
         var index = etapesOrdonnees.indexOf(depuis) - 1
         while (index >= 0) {
             val candidate = etapesOrdonnees[index]
-            if (candidate == CreationStep.SORTS && draft.classe?.estLanceurDeSorts != true) {
+            if (!etapeEstPertinente(candidate, draft)) {
                 index--
                 continue
             }
@@ -201,13 +297,23 @@ class CharacterCreationStateHolder {
 
             CreationStep.COMPETENCES_CLASSE ->
                 @Suppress("UNCHECKED_CAST")
-                (selection as? List<String>)?.let { draft.copy(competencesClasse = it) }
-
-            CreationStep.HISTORIQUE ->
-                (selection as? Historique)?.let { draft.copy(historique = it) }
+                (selection as? List<String>)?.let { liste ->
+                    val requis = draft.classe?.let { parseCompetencesClasse(it.maitrisesCompetence).nombre } ?: 2
+                    // Refuse d'avancer tant que le nombre exact de compétences requis
+                    // n'est pas atteint (ni moins, ni plus).
+                    liste.takeIf { it.size == requis }?.let { draft.copy(competencesClasse = it) }
+                }
 
             CreationStep.ESPECE ->
-                (selection as? Espece)?.let { draft.copy(espece = it) }
+                (selection as? Espece)?.let { draft.copy(espece = it, especeChoixSupplementaire = null) }
+
+            CreationStep.ESPECE_CHOIX ->
+                (selection as? String)?.let { draft.copy(especeChoixSupplementaire = it) }
+
+            CreationStep.HISTORIQUE ->
+                (selection as? SelectionHistorique)?.let {
+                    draft.copy(historique = it.historique, histoirePersonnalite = it.texte)
+                }
 
             CreationStep.LANGUES ->
                 @Suppress("UNCHECKED_CAST")
@@ -243,17 +349,6 @@ class CharacterCreationStateHolder {
             CreationStep.SORTS ->
                 @Suppress("UNCHECKED_CAST")
                 (selection as? List<String>)?.let { draft.copy(sortsChoisis = it) }
-
-            CreationStep.PERSONNALITE ->
-                @Suppress("UNCHECKED_CAST")
-                (selection as? Map<String, String>)?.let { m ->
-                    draft.copy(
-                        personnalite = m["personnalite"] ?: draft.personnalite,
-                        ideaux = m["ideaux"] ?: draft.ideaux,
-                        liens = m["liens"] ?: draft.liens,
-                        defauts = m["defauts"] ?: draft.defauts
-                    )
-                }
 
             CreationStep.RECAPITULATIF -> draft // rien à appliquer, c'est l'étape de revue finale
         }

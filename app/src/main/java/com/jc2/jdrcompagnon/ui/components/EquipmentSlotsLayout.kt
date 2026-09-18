@@ -2,7 +2,6 @@
 
 package com.jc2.jdrcompagnon.ui.components
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -14,6 +13,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,6 +29,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -44,6 +45,8 @@ import com.jc2.jdrcompagnon.ui.EquipmentSlot
 import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdRepository
 import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import com.jc2.jdrcompagnon.ui.screens.joueur.character.ArmorRules
 import com.jc2.jdrcompagnon.ui.screens.joueur.slotColor
 import com.jc2.jdrcompagnon.ui.screens.joueur.equipmentWeightLabel
@@ -167,9 +170,7 @@ fun EquipmentManagementContent(character: Character, isMjMode: Boolean = false, 
             character = currentCharacter,
             hoveredSlot = hoveredSlot,
             isDraggingFromBackpack = draggedItem != null && currentCharacter.backpackItems.contains(draggedItem),
-            isHoveringTrash = isHoveringTrash,
             onSlotBoundsChanged = { slot, bounds -> slotBounds = slotBounds + (slot to bounds) },
-            onTrashBoundsChanged = { trashBounds = it },
             onSlotDragStart = { item, offset ->
                 draggedItem = item
                 dragStart = offset
@@ -178,6 +179,12 @@ fun EquipmentManagementContent(character: Character, isMjMode: Boolean = false, 
             onDragMove = { delta -> dragOffset += delta },
             onDragEnd = { resolveDrop() },
             onItemDoubleClick = { selectedItemDetail = it }
+        )
+
+        // Corbeille — en bas de l'écran, glisser un objet ici (du sac ou d'un emplacement) le supprime (avec confirmation)
+        TrashDropZone(
+            isHovering = isHoveringTrash,
+            onBoundsChanged = { trashBounds = it }
         )
     }
 
@@ -234,90 +241,141 @@ private fun WeightSummaryCard(character: Character, isMjMode: Boolean) {
     val totalWeight = GameState.totalEquipmentWeight(character)
     val maxCarry = GameState.maxCarryWeight(character)
     val isOverloaded = totalWeight > maxCarry
-    var showDetail by remember { mutableStateOf(false) }
+    var isFlipped by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+    val rotation by animateFloatAsState(targetValue = if (isFlipped) 180f else 0f, animationSpec = tween(400), label = "chargeCardFlip")
 
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                rotationY = rotation
+                cameraDistance = 12f * density
+            }
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onPress = {
+                        val flipJob = coroutineScope.launch {
+                            delay(1500)
+                            isFlipped = !isFlipped
+                        }
+                        tryAwaitRelease()
+                        flipJob.cancel()
+                    }
+                )
+            },
         shape = RoundedCornerShape(16.dp),
         color = if (isOverloaded) MaterialTheme.colorScheme.error.copy(alpha = 0.15f) else SheetSurface,
-        border = BorderStroke(1.dp, if (isOverloaded) MaterialTheme.colorScheme.error else SheetBorder),
-        onClick = { showDetail = !showDetail }
+        border = BorderStroke(1.dp, if (isOverloaded) MaterialTheme.colorScheme.error else SheetBorder)
     ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Charge", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = SheetTextPrimary)
-                Text(
-                    text = "${String.format(java.util.Locale.FRANCE, "%.1f", totalWeight)} / ${String.format(java.util.Locale.FRANCE, "%.1f", maxCarry)} kg",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isOverloaded) MaterialTheme.colorScheme.error else SheetTextPrimary
-                )
-            }
-            LinearProgressIndicator(
-                progress = { (totalWeight / maxCarry.coerceAtLeast(0.1)).toFloat().coerceIn(0f, 1f) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(6.dp)
-                    .clip(RoundedCornerShape(3.dp)),
-                color = if (isOverloaded) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                trackColor = SheetBorder
-            )
-            if (isOverloaded) {
-                Text("Surcharge ! Force × 7,5 dépassé.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            }
-            AnimatedVisibility(visible = showDetail) {
-                Text(
-                    text = "Charge max = ${character.strength} (FOR) × 7,5 = ${String.format(java.util.Locale.FRANCE, "%.1f", maxCarry)} kg",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = SheetTextSecondary
-                )
-            }
-
-            HorizontalDivider(thickness = 0.5.dp, color = SheetBorder)
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Icon(
-                        Icons.Default.Payments,
-                        contentDescription = null,
-                        tint = Color(0xFFD4AF37),
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Text(
-                        text = "Bourse :",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = SheetTextPrimary
-                    )
-                }
-                if (isMjMode) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        IconButton(onClick = { GameState.addGold(character.id, -10) }, modifier = Modifier.size(28.dp)) {
-                            Icon(Icons.Default.Remove, contentDescription = "Retirer 10 po", modifier = Modifier.size(16.dp))
-                        }
+        Box {
+            if (rotation <= 90f) {
+                // Face avant
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Charge", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = SheetTextPrimary)
                         Text(
-                            text = "${character.gold} po",
-                            style = MaterialTheme.typography.bodyMedium,
+                            text = "${String.format(java.util.Locale.FRANCE, "%.1f", totalWeight)} / ${String.format(java.util.Locale.FRANCE, "%.1f", maxCarry)} kg",
+                            style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFFD4AF37)
+                            color = if (isOverloaded) MaterialTheme.colorScheme.error else SheetTextPrimary
                         )
-                        IconButton(onClick = { GameState.addGold(character.id, 10) }, modifier = Modifier.size(28.dp)) {
-                            Icon(Icons.Default.Add, contentDescription = "Ajouter 10 po", modifier = Modifier.size(16.dp))
+                    }
+                    LinearProgressIndicator(
+                        progress = { (totalWeight / maxCarry.coerceAtLeast(0.1)).toFloat().coerceIn(0f, 1f) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(3.dp)),
+                        color = if (isOverloaded) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                        trackColor = SheetBorder
+                    )
+                    if (isOverloaded) {
+                        Text("Surcharge ! Force × 7,5 dépassé.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+
+                    HorizontalDivider(thickness = 0.5.dp, color = SheetBorder)
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(
+                                Icons.Default.Payments,
+                                contentDescription = null,
+                                tint = Color(0xFFD4AF37),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = "Bourse :",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = SheetTextPrimary
+                            )
+                        }
+                        if (isMjMode) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                IconButton(onClick = { GameState.addGold(character.id, -10) }, modifier = Modifier.size(28.dp)) {
+                                    Icon(Icons.Default.Remove, contentDescription = "Retirer 10 po", modifier = Modifier.size(16.dp))
+                                }
+                                Text(
+                                    text = "${character.gold} po",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFD4AF37)
+                                )
+                                IconButton(onClick = { GameState.addGold(character.id, 10) }, modifier = Modifier.size(28.dp)) {
+                                    Icon(Icons.Default.Add, contentDescription = "Ajouter 10 po", modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        } else {
+                            Text(
+                                text = "${character.gold} po",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFD4AF37)
+                            )
                         }
                     }
-                } else {
+                }
+            } else {
+                // Face arrière — détail du calcul de charge, contre-tournée pour rester lisible
+                Column(
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .graphicsLayer { rotationY = 180f }
+                        .fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text("Détail du calcul", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = SheetTextPrimary)
+                    HorizontalDivider(thickness = 0.5.dp, color = SheetBorder)
                     Text(
-                        text = "${character.gold} po",
+                        text = "Charge max = ${character.strength} (FOR) × 7,5 = ${String.format(java.util.Locale.FRANCE, "%.1f", maxCarry)} kg",
                         style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFFD4AF37)
+                        color = SheetTextSecondary
                     )
+                    Text(
+                        text = "Poids total porté : ${String.format(java.util.Locale.FRANCE, "%.1f", totalWeight)} kg",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = SheetTextSecondary
+                    )
+                    if (isOverloaded) {
+                        Text("Surcharge ! Force × 7,5 dépassé.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             }
+
+            Icon(
+                Icons.Default.Info,
+                contentDescription = "Rester appuyé pour voir le détail du calcul",
+                tint = SheetTextSecondary.copy(alpha = 0.6f),
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp)
+                    .size(16.dp)
+            )
         }
     }
 }
@@ -389,9 +447,7 @@ private fun SilhouetteSlots(
     character: Character,
     hoveredSlot: EquipmentSlot?,
     isDraggingFromBackpack: Boolean,
-    isHoveringTrash: Boolean,
     onSlotBoundsChanged: (EquipmentSlot, Rect) -> Unit,
-    onTrashBoundsChanged: (Rect) -> Unit,
     onSlotDragStart: (String, Offset) -> Unit,
     onDragMove: (Offset) -> Unit,
     onDragEnd: () -> Unit,
@@ -411,14 +467,6 @@ private fun SilhouetteSlots(
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Corbeille — glisser un objet ici (du sac ou d'un emplacement) le supprime définitivement
-            TrashDropZone(
-                isHovering = isHoveringTrash,
-                onBoundsChanged = onTrashBoundsChanged
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
             // TORSO (large)
             SlotBox(
                 slot = EquipmentSlot.TORSO,
@@ -634,6 +682,7 @@ private fun TrashDropZone(
         color = containerColor,
         border = BorderStroke(if (isHovering) 2.dp else 1.dp, borderColor),
         modifier = Modifier
+            .fillMaxWidth()
             .onGloballyPositioned { coords ->
                 val pos = coords.positionInRoot()
                 val size = coords.size
@@ -642,7 +691,7 @@ private fun TrashDropZone(
     ) {
         Column(
             modifier = Modifier
-                .widthIn(min = 120.dp)
+                .fillMaxWidth()
                 .padding(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {

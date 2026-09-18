@@ -10,16 +10,19 @@ import com.jc2.jdrcompagnon.ui.Character
  *
  * `background` reçoit le nom de l'historique SRD (Acolyte/Criminel/Sage/Soldat) :
  * CharacterSheetScreen l'affiche sous le libellé "Historique" (onglet Notes,
- * DetailRow). Le don, les traits d'espèce et les aptitudes de classe de niveau 1
- * vont dans `traits` (affiché sur la fiche via le bloc "Traits & capacités" de
- * l'onglet Notes).
+ * DetailRow). Le don d'historique, le sous-choix d'espèce (ex. type de dragon),
+ * les traits d'espèce et les aptitudes de classe de niveau 1 vont dans `traits`
+ * (carte "Traits & capacités" de l'onglet Notes). `languages` (carte "Langues
+ * connues") et `proficiencies` (carte "Maîtrises", outils de l'historique) sont
+ * dédiés. `weaponArmorTraining` (armes/armures de la classe) va dans l'onglet
+ * Équipement.
  *
  * Champ non couvert par ce mapping, car le wizard ne propose pas encore ce choix :
- * - `weapons` / `armor` : l'équipement choisi est stocké en texte libre dans
- *   `equipment` (et son or dans `gold`), pas décomposé objet par objet dans
- *   `backpackItems`/`weapons`/`armor` — ces listes attendent des noms d'objets
- *   exacts de la bibliothèque SRD, que le texte d'équipement de départ ne donne
- *   pas sous cette forme (ex. "Hache à deux mains, 4 hachettes" reste une chaîne).
+ * - `weapons` / `armor` (objets réellement portés) : l'équipement choisi est
+ *   stocké en texte libre dans `equipment` (et son or dans `gold`), pas décomposé
+ *   objet par objet — ces listes attendent des noms d'objets exacts de la
+ *   bibliothèque SRD, que le texte d'équipement de départ ne donne pas sous
+ *   cette forme (ex. "Hache à deux mains, 4 hachettes" reste une chaîne).
  */
 fun CharacterDraft.versCharacter(nom: String, worldId: String, createdBy: String = "Joueur"): Character {
     val modConstitution = modificateurs[Caracteristique.CONSTITUTION] ?: 0
@@ -32,8 +35,9 @@ fun CharacterDraft.versCharacter(nom: String, worldId: String, createdBy: String
 
     val traitsTexte = buildString {
         historique?.let { h ->
-            appendLine("Don d'historique : ${h.don} — outils : ${h.maitriseOutils}")
+            appendLine("Don d'historique : ${h.don}")
         }
+        especeChoixSupplementaire?.let { appendLine("Choix d'espèce : $it") }
         espece?.traits?.forEach { t -> appendLine("${t.nom} (${espece.nom}) : ${t.description}") }
         classe?.aptitudesNiveau1?.forEach { a -> appendLine("${a.nom} (${classe.nom}) : ${a.description}") }
     }.trim()
@@ -42,6 +46,19 @@ fun CharacterDraft.versCharacter(nom: String, worldId: String, createdBy: String
         .joinToString(", ")
 
     val competencesFinales = (historique?.maitrisesCompetence.orEmpty() + competencesClasse).distinct()
+
+    val proficiencesTexte = historique?.maitriseOutils
+        ?.ifBlank { null }
+        ?.let { "Outils (${historique.nom}) : $it" }
+        .orEmpty()
+
+    val armesArmuresTexte = classe?.let { c ->
+        listOfNotNull(
+            "Armes : ${c.maitrisesArme}".takeIf { c.maitrisesArme.isNotBlank() },
+            "Armures : ${c.formationArmures}".takeIf { c.formationArmures.isNotBlank() },
+            c.maitrisesOutils?.ifBlank { null }?.let { "Outils : $it" }
+        ).joinToString("\n")
+    }.orEmpty()
 
     return Character(
         name = nom,
@@ -67,10 +84,10 @@ fun CharacterDraft.versCharacter(nom: String, worldId: String, createdBy: String
         skillProficiencies = competencesFinales,
         spells = sortsChoisis,
         traits = traitsTexte,
-        personalityTraits = personnalite,
-        ideals = ideaux,
-        bonds = liens,
-        flaws = defauts,
+        personalityTraits = histoirePersonnalite,
+        languages = langues.map { it.nom },
+        proficiencies = proficiencesTexte,
+        weaponArmorTraining = armesArmuresTexte,
         createdBy = createdBy
         // `size` volontairement absent : Character le déduit de `race` via
         // sizeForRace ailleurs dans le code quand il est vide.

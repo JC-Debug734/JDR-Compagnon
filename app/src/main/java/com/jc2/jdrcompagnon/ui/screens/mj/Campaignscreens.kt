@@ -7,7 +7,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,6 +18,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.WorldState
+import com.jc2.jdrcompagnon.ui.theme.ForcedDarkPalette
 
 // ─────────────────────────────────────────────────────────────
 // Gestion des campagnes : liste (CampaignListScreen) + édition
@@ -33,7 +33,8 @@ import com.jc2.jdrcompagnon.ui.WorldState
 fun CampaignListScreen(
     currentWorld: WorldState?,
     onBack: () -> Unit,
-    onOpenCampaignEditor: (String?) -> Unit
+    onOpenCampaignEditor: (String?) -> Unit,
+    onOpenMenu: () -> Unit = {},
 ) {
     val campaigns by GameState.mjCampaigns.collectAsState()
     val worldCampaigns = remember(campaigns, currentWorld) {
@@ -48,15 +49,19 @@ fun CampaignListScreen(
             TopAppBar(
                 title = { Text("Campagnes", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
+                    IconButton(onClick = onOpenMenu) {
+                        Icon(Icons.Default.Menu, contentDescription = "Menu")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { onOpenCampaignEditor(null) }) {
+            FloatingActionButton(
+                onClick = { onOpenCampaignEditor(null) },
+                containerColor = ForcedDarkPalette.AccentGold,
+                contentColor = ForcedDarkPalette.Background
+            ) {
                 Icon(Icons.Default.Add, contentDescription = "Nouvelle campagne")
             }
         },
@@ -219,7 +224,11 @@ private fun EmptyCampaignState() {
 @Composable
 fun CampaignEditorScreen(
     campaignId: String?,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onOpenMenu: () -> Unit = {},
+    onOpenCarte: (String) -> Unit = {},
+    onOpenEvenements: (String) -> Unit = {},
+    onOpenVilles: (String) -> Unit = {},
 ) {
     val mjCampaigns by GameState.mjCampaigns.collectAsState()
     val mjScenarios by GameState.mjScenarios.collectAsState()
@@ -243,8 +252,8 @@ fun CampaignEditorScreen(
             TopAppBar(
                 title = { Text(if (campaignId == null) "Nouvelle campagne" else "Éditer la campagne", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
+                    IconButton(onClick = onOpenMenu) {
+                        Icon(Icons.Default.Menu, contentDescription = "Menu")
                     }
                 },
                 actions = {
@@ -339,6 +348,51 @@ fun CampaignEditorScreen(
                         Icon(Icons.Default.Add, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
                         Text("Attacher un scénario")
+                    }
+                }
+            }
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.large
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Carte & événements", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    if (existing == null) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "Enregistrez d'abord la campagne (bouton « Enregistrer » en haut) pour accéder à sa carte et à ses événements.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = { onOpenVilles(existing.id) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.LocationCity, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Villes (boutiques, scénarios, événements)")
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = { onOpenCarte(existing.id) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Map, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Carte de la campagne")
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = { onOpenEvenements(existing.id) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Casino, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Événements aléatoires (campagne entière)")
+                        }
                     }
                 }
             }

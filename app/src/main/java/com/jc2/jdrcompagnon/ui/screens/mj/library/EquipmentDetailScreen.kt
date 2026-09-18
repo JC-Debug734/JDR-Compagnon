@@ -4,7 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -34,7 +34,8 @@ fun EquipmentDetailScreen(
     equipmentName: String?,
     isMj: Boolean = false,
     currentWorld: WorldState? = null,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onOpenMenu: () -> Unit = {},
 ) {
     val context = LocalContext.current
     var item by remember { mutableStateOf<EquipmentItem?>(null) }
@@ -60,8 +61,8 @@ fun EquipmentDetailScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
+                    IconButton(onClick = onOpenMenu) {
+                        Icon(Icons.Default.Menu, contentDescription = "Menu")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
@@ -279,11 +280,14 @@ private fun EquipmentStatsGrid(
         maxItemsInEachRow = 2
     ) {
         stats.forEach { (label, value) ->
-            val isPrice = label == "Prix"
+            // Poids et Prix sont tous deux mis en avant en doré : ce sont les deux
+            // informations qu'on veut repérer d'un coup d'œil (contrairement à
+            // Dégâts/Propriétés/CA, qui restent en style neutre).
+            val isHighlighted = label == "Prix" || label == "Poids"
             ElevatedCard(
                 modifier = Modifier.weight(1f),
                 colors = CardDefaults.elevatedCardColors(
-                    containerColor = if (isPrice) Color(0xFFFFD700).copy(alpha = 0.2f)
+                    containerColor = if (isHighlighted) Color(0xFFFFD700).copy(alpha = 0.2f)
                     else MaterialTheme.colorScheme.surfaceVariant
                 )
             ) {
@@ -294,17 +298,17 @@ private fun EquipmentStatsGrid(
                     Text(
                         text = label,
                         style = MaterialTheme.typography.labelMedium,
-                        color = if (isPrice) Color(0xFFFFD700)
+                        color = if (isHighlighted) Color(0xFFFFD700)
                         else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                     )
                     Text(
                         text = value,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = if (isPrice) Color(0xFFFFD700)
+                        color = if (isHighlighted) Color(0xFFFFD700)
                         else MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = if (isPrice) TextAlign.End else TextAlign.Start,
-                        modifier = if (isPrice) Modifier.fillMaxWidth()
+                        textAlign = if (isHighlighted) TextAlign.End else TextAlign.Start,
+                        modifier = if (isHighlighted) Modifier.fillMaxWidth()
                         else Modifier
                     )
                 }

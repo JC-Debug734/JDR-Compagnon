@@ -215,19 +215,27 @@ class GameServer(
         multicastLock = null
     }
 
+    // Les appelants (UI Compose, callbacks) ne garantissent pas d'être hors
+    // du thread principal ; l'écriture socket est bloquante et lèverait
+    // NetworkOnMainThreadException sinon (silencieusement avalée par
+    // runCatching, ce qui donnait l'impression que l'envoi ne faisait rien).
     fun sendToAll(message: String) {
-        _connectedClients.value.forEach { client ->
-            runCatching {
-                PrintWriter(client.socket.getOutputStream(), true).println(message)
+        scope.launch {
+            _connectedClients.value.forEach { client ->
+                runCatching {
+                    PrintWriter(client.socket.getOutputStream(), true).println(message)
+                }.onFailure { Log.d(TAG, "Échec envoi à ${client.id}: ${it.message}") }
             }
         }
     }
 
     /** Envoie un message à un seul client, identifié par son id. */
     fun sendToClient(clientId: String, message: String) {
-        _connectedClients.value.find { it.id == clientId }?.let { client ->
-            runCatching {
-                PrintWriter(client.socket.getOutputStream(), true).println(message)
+        scope.launch {
+            _connectedClients.value.find { it.id == clientId }?.let { client ->
+                runCatching {
+                    PrintWriter(client.socket.getOutputStream(), true).println(message)
+                }.onFailure { Log.d(TAG, "Échec envoi à $clientId: ${it.message}") }
             }
         }
     }
