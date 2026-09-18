@@ -13,7 +13,7 @@ plugins {
 // les classes déjà chargées, sans repasser par la résolution de version.
 apply(plugin = "org.jetbrains.kotlin.android")
 
-// AUTO-VERSION: 2.5.8
+// AUTO-VERSION: 2.5.9
 // ── Auto-incrémentation de version à chaque compilation ──────────────────
 // Format X.Y.Z : Z va de 0 à 9 puis repasse à 0 en incrémentant Y ; Y suit
 // la même règle sur X ; X n'a pas de limite.
