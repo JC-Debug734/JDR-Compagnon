@@ -71,7 +71,8 @@ fun ServiceEntity.toDomain(): Service = Service(
     description = description,
     prixEnPo = prixEnPo,
     quantiteDisponible = quantiteDisponible,
-    actif = actif
+    actif = actif,
+    personnalise = personnalise
 )
 
 fun Service.toEntity(boutiqueId: String): ServiceEntity = ServiceEntity(
@@ -80,5 +81,6 @@ fun Service.toEntity(boutiqueId: String): ServiceEntity = ServiceEntity(
     description = description,
     prixEnPo = prixEnPo,
     quantiteDisponible = quantiteDisponible,
-    actif = actif
+    actif = actif,
+    personnalise = personnalise
 )

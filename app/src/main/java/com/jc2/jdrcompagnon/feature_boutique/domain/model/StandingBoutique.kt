@@ -1,11 +1,14 @@
 package com.jc2.jdrcompagnon.feature_boutique.domain.model
 
+import kotlinx.serialization.Serializable
+
 /**
  * Niveau de standing d'une boutique. Détermine :
  *  - la marge appliquée sur le prix de base des articles (voir CalculerPrixArticleUseCase)
  *  - la rareté des objets accessibles à la génération d'inventaire (voir GenererInventaireUseCase)
  *  - le nombre et les rôles des employés générés (voir GenererEmployesUseCase)
  */
+@Serializable
 enum class StandingBoutique(val label: String, val multiplicateurPrix: Double) {
     MODESTE(label = "Modeste", multiplicateurPrix = 0.9),
     CORRECT(label = "Correct", multiplicateurPrix = 1.0),

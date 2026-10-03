@@ -30,4 +30,11 @@ object CarteImageStore {
     }
 
     fun fichier(context: Context, fileName: String): File = File(dossier(context), fileName)
+
+    /** Écrit directement des octets déjà lus en mémoire (import de campagne). Retourne le nom du fichier créé. */
+    fun copierBytes(context: Context, campagneId: String, bytes: ByteArray): String {
+        val fileName = "$campagneId.img"
+        File(dossier(context), fileName).writeBytes(bytes)
+        return fileName
+    }
 }

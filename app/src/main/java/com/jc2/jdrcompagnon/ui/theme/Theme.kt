@@ -9,8 +9,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.Color
 import com.jc2.jdrcompagnon.ui.GameState
+import com.jc2.jdrcompagnon.ui.WorldState
 import com.jc2.jdrcompagnon.ui.components.updateSheetTheme
 import com.jc2.jdrcompagnon.ui.theme.Type.JdrTypography
+import com.jc2.jdrcompagnon.ui.worlds.toWorldColorOrNull
 
 @Composable
 fun JdrCompagnonTheme(
@@ -27,7 +29,7 @@ fun JdrCompagnonTheme(
     val colors = when (currentWorld?.id) {
         "donjon_et_dragon" -> DndDarkColors
         "naheulbeuk" -> NaheulDarkColors
-        else -> DefaultDarkColors
+        else -> currentWorld?.let { customWorldDarkColors(it) } ?: DefaultDarkColors
     }
 
     // Fait suivre la palette des fiches de personnage (SheetTheme.kt) au
@@ -49,6 +51,44 @@ fun JdrCompagnonTheme(
         content = content
     )
 }
+
+/**
+ * Palette sombre d'un univers importé (voir [com.jc2.jdrcompagnon.ui.worlds.CustomWorldsRepository]),
+ * construite à partir des couleurs optionnelles de son `reference.md`. Toute couleur absente
+ * ou mal formée retombe sur l'équivalent de [DefaultDarkColors], pour qu'un univers importé
+ * sans aucune couleur déclarée garde une apparence cohérente plutôt qu'un thème à moitié
+ * défini.
+ */
+private fun customWorldDarkColors(world: WorldState) = darkColorScheme(
+    primary = world.primaryColorHex.toWorldColorOrNull() ?: MysticPurple,
+    onPrimary = MysticOnPrimary,
+    primaryContainer = MysticPurpleContainer,
+    onPrimaryContainer = MysticOnPrimaryContainer,
+    secondary = world.secondaryColorHex.toWorldColorOrNull() ?: MysticGold,
+    onSecondary = Color.Black,
+    secondaryContainer = NaheulAmberContainer,
+    onSecondaryContainer = NaheulOnSecondaryContainer,
+    tertiary = MysticSuccess,
+    onTertiary = PureWhite,
+    tertiaryContainer = NaheulGreenContainer,
+    onTertiaryContainer = NaheulOnPrimaryContainer,
+    error = MysticAlert,
+    onError = OnErrorDark,
+    errorContainer = ErrorContainerDark,
+    onErrorContainer = OnErrorContainerDark,
+    background = world.backgroundColorHex.toWorldColorOrNull() ?: MysticBackground,
+    onBackground = MysticTextPrimary,
+    surface = MysticSurface,
+    onSurface = MysticTextPrimary,
+    surfaceVariant = SurfaceVariantDark,
+    onSurfaceVariant = MysticTextSecondary,
+    outline = OutlineDark,
+    outlineVariant = OutlineVariantDark,
+    scrim = ScrimDark,
+    inverseSurface = MysticTextPrimary,
+    inverseOnSurface = MysticBackground,
+    inversePrimary = MysticPurpleDark,
+)
 
 /**
  * Custom shape system for JDR Compagnon

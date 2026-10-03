@@ -2,7 +2,6 @@ package com.jc2.jdrcompagnon.ui.navigation
 
 // Routes de l'app — sealed pour éviter les fautes de frappe au call site.
 sealed class Route(val path: String) {
-    data object FirstLaunchWorldSelection : Route("first_launch_world_selection")
     data object RoleSelection : Route("role_selection")
     data object MjHome : Route("mj")
     data object MjCharacterCreation : Route("mj_character_creation")
@@ -11,7 +10,6 @@ sealed class Route(val path: String) {
     data object CharacterSheet : Route("character_sheet")
     data object CharacterEdit : Route("character_edit/{characterId}")
     data object CharacterCreation : Route("character_creation")
-    data object SpellManagement : Route("spell_management/{characterId}")
     data object SrdSectionDetail : Route("srd_entry/{kind}/{entryName}")
     data object WorldSelection : Route("world_selection")
     data object ScenarioEditor : Route("scenario_editor/{scenarioId}")
@@ -19,14 +17,36 @@ sealed class Route(val path: String) {
     data object Scenarios : Route("scenarios")
     data object CampaignEditor : Route("campaign_editor/{campaignId}")
     data object Campaigns : Route("campaigns")
-    data object CarteCampagne : Route("carte_campagne/{campagneId}")
+    data object CampaignOverview : Route("campaign_overview/{campaignId}")
+    data object CarteCampagne : Route("carte_campagne/{campagneId}?carteId={carteId}") {
+        /** carteId null = carte principale de la campagne. */
+        fun creer(campagneId: String, carteId: String? = null): String =
+            "carte_campagne/$campagneId" + (carteId?.let { "?carteId=$it" } ?: "")
+    }
     data object Evenements : Route("evenements/{campagneId}")
+    data object EpreuveEnCours : Route("epreuve_en_cours")
+    // Outil ÉPREUVES (feature_epreuve), distinct des épreuves Progrès/Menace des environnements.
+    data object Epreuves : Route("epreuves")
+    data object EpreuveResolution : Route("epreuve_resolution")
     data object Villes : Route("villes/{campagneId}")
     data object VilleDetail : Route("ville_detail/{campagneId}/{villeId}")
     data object Groups : Route("groups")
+    data object Repos : Route("repos")
+    data object Horloge : Route("horloge")
+    data object GroupDetail : Route("group_detail/{groupId}")
     data object Boutiques : Route("boutiques")
     data object BoutiqueDetail : Route("boutique_detail/{boutiqueId}")
+    data object Environnements : Route("environnements")
+    data object EnvironnementDetail : Route("environnement_detail/{environnementId}")
+    data object TablesAleatoires : Route("tables_aleatoires")
+    data object TableAleatoireDetail : Route("table_aleatoire_detail/{tableId}")
+    data object BibliothequeEvenements : Route("bibliotheque_evenements")
+    data object CombatActions : Route("combat_actions")
+    data object SimulationCombat : Route("simulation_combat/{personnageId}")
+    data object CombatEnCours : Route("combat_en_cours")
+    data object CombatJoueur : Route("combat_joueur")
     data object Music : Route("music")
+    data object Import : Route("import")
     data object Library : Route("library/{initialTab}")
     data object BestiaryDetail : Route("bestiary/{monsterName}")
     data object SpellDetail : Route("spell/{spellName}")
@@ -36,4 +56,7 @@ sealed class Route(val path: String) {
     data object LanHost : Route("lan_tools_host")
     data object LanJoin : Route("lan_tools_join")
     data object Settings : Route("settings")
+    data object ProposalStatus : Route("proposal_status")
+    data object PlayerQuests : Route("player_quests")
+    data object PlayerGroup : Route("player_group")
 }

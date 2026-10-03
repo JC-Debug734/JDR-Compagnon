@@ -19,6 +19,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.jc2.jdrcompagnon.feature_boutique.domain.model.Employe
 import com.jc2.jdrcompagnon.feature_boutique.domain.model.RoleEmploye
 
 @Composable
@@ -26,16 +27,18 @@ fun AjouterEmployeDialog(
     onGenererNom: () -> String,
     onGenererTrait: () -> String,
     onDismiss: () -> Unit,
-    onConfirmer: (nom: String, role: RoleEmploye, trait: String) -> Unit
+    onConfirmer: (nom: String, role: RoleEmploye, trait: String) -> Unit,
+    // Non null : modification d'un employé existant (champs pré-remplis).
+    initial: Employe? = null,
 ) {
-    var nom by remember { mutableStateOf("") }
-    var role by remember { mutableStateOf(RoleEmploye.VENDEUR) }
-    var trait by remember { mutableStateOf(onGenererTrait()) }
+    var nom by remember { mutableStateOf(initial?.nom ?: "") }
+    var role by remember { mutableStateOf(initial?.role ?: RoleEmploye.VENDEUR) }
+    var trait by remember { mutableStateOf(initial?.trait ?: onGenererTrait()) }
     var menuOuvert by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Nouvel employé") },
+        title = { Text(if (initial == null) "Nouvel employé" else "Modifier l'employé") },
         text = {
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -69,7 +72,7 @@ fun AjouterEmployeDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirmer(nom, role, trait) }, enabled = nom.isNotBlank()) { Text("Ajouter") }
+            TextButton(onClick = { onConfirmer(nom, role, trait) }, enabled = nom.isNotBlank()) { Text(if (initial == null) "Ajouter" else "Enregistrer") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } }
     )

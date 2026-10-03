@@ -1,17 +1,42 @@
 package com.jc2.jdrcompagnon.ui.screens.mj.scenario
 
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.filled.Close
+import com.jc2.jdrcompagnon.feature_exploration.ExplorationSession
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.window.Dialog
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.ClickableText
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.RecordVoiceOver
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -21,176 +46,245 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 
 /**
- * Rendu alternatif des scénarios markdown si le Markdown de mikepenz ne conserve pas
- * les attributs style des balises HTML.
+ * Style d'un nom (#type:nom) pendant la lecture : mis en avant, dans la couleur de son type
+ * (voir couleurLien) — un lien cliquable est en plus souligné, une simple mention (#lieu,
+ * #perso, #faction) ne l'est pas.
+ */
+private fun styleLien(type: String) = SpanStyle(
+    color = couleurLien(type),
+    fontWeight = FontWeight.SemiBold,
+    textDecoration = if (type in TYPES_MENTION) null else TextDecoration.Underline,
+)
+
+/** Zones "à lire aux joueurs" ({lire}…{/lire}) : fond vert, même teinte que dans l'éditeur. */
+internal val ReadAloudGreen = Color(0xFF2E7D32)
+
+private const val LINK_TAG = "internal"
+private val InternalLinkRegex = Regex(INTERNAL_LINK_PATTERN)
+private val ColorTagRegex = Regex("""\{color:[^}]+\}|\{/color\}""")
+private val NumberedItemRegex = Regex("""^\d+\.\s+""")
+private const val READ_OPEN = "{lire}"
+private const val READ_CLOSE = "{/lire}"
+
+/**
+ * Rendu des scénarios markdown pendant la lecture (le Markdown de mikepenz ne conserve pas les
+ * balises couleur). Supporte : titres (# ## ###), gras (**…**), italique (*…*), code (`…`),
+ * listes (- et 1.), balises couleur {color:…}…{/color} — imbriquables dans les titres, le gras,
+ * les listes et sur plusieurs lignes —, liens internes cliquables et mentions (#lieu, #perso,
+ * #faction) colorés selon leur type, et zones à lire aux joueurs
+ * {lire}…{/lire} (fond vert + bouton de synthèse vocale).
  *
- * Découpe le texte en segments colorés et segments normaux, sans utiliser Markdown.
- * Supporte en plus : gras (**texte**), italique (*texte*), code (`texte`),
- * listes (- et 1.), titres (# ## ###), balises couleur et liens internes cliquables.
+ * Chaque titre peut être replié (flèche) : tout ce qui suit jusqu'au titre suivant de même
+ * niveau ou supérieur est masqué. L'état replié est mémorisé par [collapseKey] (une scène).
  */
 @Composable
 fun PlainScenarioRenderer(
     content: String,
     onLinkClick: (type: String, name: String) -> Unit = { _, _ -> },
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    collapseKey: String? = null,
 ) {
-    val segments = rememberSegmentedContent(content)
-    Column(modifier = modifier) {
-        segments.forEach { segment ->
-            when (segment) {
-                is Segment.Text -> {
-                    if (segment.parts.isNotEmpty()) {
-                        val annotatedString = buildAnnotatedString {
-                            segment.parts.forEach { part ->
-                                when (part) {
-                                    is TextPart.Normal -> append(part.text)
-                                    is TextPart.Bold -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(part.text) }
-                                    is TextPart.Italic -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { append(part.text) }
-                                    is TextPart.Code -> withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = Color(0xFFE0E0E0))) { append(part.text) }
-                                    is TextPart.Link -> {
-                                        withStyle(
-                                            SpanStyle(
-                                                color = Color(0xFF2196F3),
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        ) {
-                                            append(part.name)
-                                        }
-                                    }
-                                    is TextPart.Colored -> {
-                                        withStyle(SpanStyle(color = part.color)) {
-                                            append(part.text)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        val clickableAnnotations = rememberClickableAnnotations(segment.parts)
-                        if (clickableAnnotations.isNotEmpty()) {
-                            ClickableText(
-                                text = annotatedString,
-                                onClick = { offset ->
-                                    clickableAnnotations.firstOrNull { offset in it.range }?.let {
-                                        onLinkClick(it.type, it.name)
-                                    }
-                                },
-                                style = MaterialTheme.typography.bodyLarge
-                            )
-                        } else {
-                            Text(text = annotatedString, style = MaterialTheme.typography.bodyLarge)
-                        }
-                    }
-                }
-                is Segment.Header -> {
-                    Text(
-                        text = segment.text,
-                        style = when (segment.level) {
-                            1 -> MaterialTheme.typography.headlineMedium
-                            2 -> MaterialTheme.typography.headlineSmall
-                            3 -> MaterialTheme.typography.titleLarge
-                            else -> MaterialTheme.typography.titleMedium
-                        },
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
-                    )
-                }
-                is Segment.BulletList -> {
-                    Column(modifier = Modifier.padding(start = 8.dp, top = 4.dp, bottom = 4.dp)) {
-                        segment.items.forEach { item ->
-                            Row(modifier = Modifier.padding(vertical = 2.dp)) {
-                                Text("• ", style = MaterialTheme.typography.bodyLarge)
-                                RenderAnnotatedLine(item, onLinkClick)
-                            }
-                        }
-                    }
-                }
-                is Segment.NumberedList -> {
-                    Column(modifier = Modifier.padding(start = 8.dp, top = 4.dp, bottom = 4.dp)) {
-                        segment.items.forEachIndexed { index, item ->
-                            Row(modifier = Modifier.padding(vertical = 2.dp)) {
-                                Text("${index + 1}. ", style = MaterialTheme.typography.bodyLarge)
-                                RenderAnnotatedLine(item, onLinkClick)
-                            }
-                        }
-                    }
-                }
-                is Segment.Link -> {
-                    Surface(
-                        onClick = { onLinkClick(segment.type, segment.name) },
-                        shape = RoundedCornerShape(16.dp),
-                        color = Color(0xFF2196F3).copy(alpha = 0.15f),
-                        border = BorderStroke(1.dp, Color(0xFF2196F3)),
-                        modifier = Modifier.padding(vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = "#${segment.type}:${segment.name}",
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            color = Color(0xFF2196F3),
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun RenderAnnotatedLine(item: Pair<AnnotatedString, List<ClickableAnnotation>>, onLinkClick: (type: String, name: String) -> Unit) {
-    val (annotatedString, annotations) = item
-    if (annotations.isNotEmpty()) {
-        ClickableText(
-            text = annotatedString,
-            onClick = { offset ->
-                annotations.firstOrNull { offset in it.range }?.let {
-                    onLinkClick(it.type, it.name)
-                }
-            },
-            style = MaterialTheme.typography.bodyLarge
+    val context = LocalContext.current
+    val segments = remember(content) { parseSegments(content) }
+    val prefs = remember { context.getSharedPreferences("scenario_reader", Context.MODE_PRIVATE) }
+    val prefKey = collapseKey?.let { "collapsed_$it" }
+    var collapsed by remember(prefKey) {
+        mutableStateOf(
+            prefKey?.let { key -> prefs.getStringSet(key, emptySet()).orEmpty().mapNotNull { it.toIntOrNull() }.toSet() }
+                ?: emptySet()
         )
-    } else {
-        Text(text = annotatedString, style = MaterialTheme.typography.bodyLarge)
+    }
+    fun toggleCollapsed(index: Int) {
+        collapsed = if (index in collapsed) collapsed - index else collapsed + index
+        prefKey?.let { prefs.edit().putStringSet(it, collapsed.map(Int::toString).toSet()).apply() }
+    }
+    val tts = rememberScenarioTts()
+
+    Column(modifier = modifier) {
+        // Niveau du titre replié en cours : tout ce qui suit est masqué jusqu'à un titre
+        // de niveau égal ou supérieur.
+        var hiddenUnderLevel: Int? = null
+        segments.forEachIndexed { index, segment ->
+            if (segment is Segment.Header) {
+                val hiddenLevel = hiddenUnderLevel
+                if (hiddenLevel != null && segment.level <= hiddenLevel) hiddenUnderLevel = null
+                if (hiddenUnderLevel == null) {
+                    val isCollapsed = index in collapsed
+                    CollapsibleHeader(segment, isCollapsed, onToggle = { toggleCollapsed(index) }, onLinkClick = onLinkClick)
+                    if (isCollapsed) hiddenUnderLevel = segment.level
+                }
+            } else if (hiddenUnderLevel == null) {
+                RenderSegment(segment, onLinkClick, tts)
+            }
+        }
     }
 }
 
-private data class ClickableAnnotation(val range: IntRange, val type: String, val name: String)
+@Composable
+private fun RenderSegment(segment: Segment, onLinkClick: (String, String) -> Unit, tts: ScenarioTts) {
+    val bodyStyle = MaterialTheme.typography.bodyLarge
+    when (segment) {
+        is Segment.Paragraph -> LinkedText(segment.text, bodyStyle, onLinkClick)
+        is Segment.Header -> LinkedText(
+            segment.text,
+            headerStyle(segment.level).copy(fontWeight = FontWeight.Bold),
+            onLinkClick,
+            Modifier.padding(top = 12.dp, bottom = 6.dp)
+        )
+        is Segment.BulletList -> Column(modifier = Modifier.padding(start = 8.dp, top = 4.dp, bottom = 4.dp)) {
+            segment.items.forEach { item ->
+                Row(modifier = Modifier.padding(vertical = 2.dp)) {
+                    Text("• ", style = bodyStyle, color = Color.White)
+                    LinkedText(item, bodyStyle, onLinkClick)
+                }
+            }
+        }
+        is Segment.NumberedList -> Column(modifier = Modifier.padding(start = 8.dp, top = 4.dp, bottom = 4.dp)) {
+            segment.items.forEachIndexed { index, item ->
+                Row(modifier = Modifier.padding(vertical = 2.dp)) {
+                    Text("${index + 1}. ", style = bodyStyle, color = Color.White)
+                    LinkedText(item, bodyStyle, onLinkClick)
+                }
+            }
+        }
+        is Segment.ReadAloud -> ReadAloudBlock(segment, onLinkClick, tts)
+        is Segment.Image -> ScenarioImageBlock(segment.fileName)
+    }
+}
+
+/**
+ * Image d'une scène (carte, plan...) en pleine largeur, proportions conservées. Un appui ouvre
+ * directement son exploration (brouillard de la page table, cf. feature_exploration), qui sert
+ * aussi à la voir en grand : zoom au pincement.
+ */
+@Composable
+private fun ScenarioImageBlock(fileName: String) {
+    val context = LocalContext.current
+    val bitmap = remember(fileName) {
+        runCatching {
+            val file = ScenarioImageStore.fichier(context, fileName)
+            if (file.exists()) android.graphics.BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap() else null
+        }.getOrNull()
+    }
+    if (bitmap == null) {
+        Text("Image introuvable : $fileName", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.7f))
+        return
+    }
+    Image(
+        bitmap = bitmap,
+        contentDescription = "Carte de la scène (appuyer pour l'exploration)",
+        contentScale = ContentScale.FillWidth,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable {
+                ExplorationSession.ouvrirEcran(
+                    context, "scenario-image:$fileName", "Carte du scénario", ScenarioImageStore.fichier(context, fileName)
+                )
+            }
+    )
+}
 
 @Composable
-private fun rememberClickableAnnotations(parts: List<TextPart>): List<ClickableAnnotation> {
-    val annotations = mutableListOf<ClickableAnnotation>()
-    var currentIndex = 0
-    parts.forEach { part ->
-        when (part) {
-            is TextPart.Normal -> currentIndex += part.text.length
-            is TextPart.Bold -> currentIndex += part.text.length
-            is TextPart.Italic -> currentIndex += part.text.length
-            is TextPart.Code -> currentIndex += part.text.length
-            is TextPart.Link -> {
-                annotations += ClickableAnnotation(currentIndex until currentIndex + part.name.length, part.type, part.name)
-                currentIndex += part.name.length
+private fun ReadAloudBlock(segment: Segment.ReadAloud, onLinkClick: (String, String) -> Unit, tts: ScenarioTts) {
+    val context = LocalContext.current
+    val speaking = tts.speakingText == segment.speechText
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = ReadAloudGreen.copy(alpha = 0.35f),
+        border = BorderStroke(1.dp, ReadAloudGreen),
+        contentColor = Color.White,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
+    ) {
+        Row(modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 8.dp, end = 4.dp)) {
+            Column(modifier = Modifier.weight(1f)) {
+                segment.children.forEach { RenderSegment(it, onLinkClick, tts) }
             }
-            is TextPart.Colored -> currentIndex += part.text.length
+            IconButton(onClick = {
+                if (!tts.toggle(segment.speechText)) {
+                    Toast.makeText(context, "Synthèse vocale indisponible sur cet appareil", Toast.LENGTH_SHORT).show()
+                }
+            }) {
+                Icon(
+                    if (speaking) Icons.Default.Stop else Icons.Default.RecordVoiceOver,
+                    contentDescription = if (speaking) "Arrêter la lecture" else "Lire à voix haute",
+                    tint = Color.White
+                )
+            }
         }
     }
-    return annotations
+}
+
+@Composable
+private fun CollapsibleHeader(
+    segment: Segment.Header,
+    isCollapsed: Boolean,
+    onToggle: () -> Unit,
+    onLinkClick: (String, String) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onToggle)
+            .padding(top = 12.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(modifier = Modifier.weight(1f)) {
+            LinkedText(segment.text, headerStyle(segment.level).copy(fontWeight = FontWeight.Bold), onLinkClick)
+        }
+        Icon(
+            if (isCollapsed) Icons.Default.KeyboardArrowRight else Icons.Default.ExpandMore,
+            contentDescription = if (isCollapsed) "Déplier" else "Replier",
+            tint = Color.White
+        )
+    }
+}
+
+@Composable
+private fun headerStyle(level: Int): TextStyle = when (level) {
+    1 -> MaterialTheme.typography.headlineMedium
+    2 -> MaterialTheme.typography.headlineSmall
+    3 -> MaterialTheme.typography.titleLarge
+    else -> MaterialTheme.typography.titleMedium
+}
+
+/** Texte blanc ; cliquable sur ses liens internes s'il en contient. */
+@Composable
+private fun LinkedText(
+    text: AnnotatedString,
+    style: TextStyle,
+    onLinkClick: (String, String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (text.getStringAnnotations(LINK_TAG, 0, text.length).isEmpty()) {
+        Text(text = text, style = style, color = Color.White, modifier = modifier)
+    } else {
+        ClickableText(
+            text = text,
+            style = style.copy(color = Color.White),
+            modifier = modifier,
+            onClick = { offset ->
+                text.getStringAnnotations(LINK_TAG, offset, offset).firstOrNull()?.let { annotation ->
+                    val (type, name) = annotation.item.split(":", limit = 2)
+                    onLinkClick(type, name)
+                }
+            }
+        )
+    }
 }
 
 private sealed class Segment {
-    data class Text(val parts: List<TextPart>) : Segment()
-    data class Header(val level: Int, val text: String) : Segment()
-    data class BulletList(val items: List<Pair<AnnotatedString, List<ClickableAnnotation>>>) : Segment()
-    data class NumberedList(val items: List<Pair<AnnotatedString, List<ClickableAnnotation>>>) : Segment()
-    data class Link(val type: String, val name: String) : Segment()
+    data class Paragraph(val text: AnnotatedString) : Segment()
+    data class Header(val level: Int, val text: AnnotatedString) : Segment()
+    data class BulletList(val items: List<AnnotatedString>) : Segment()
+    data class NumberedList(val items: List<AnnotatedString>) : Segment()
+    data class ReadAloud(val children: List<Segment>, val speechText: String) : Segment()
+    /** Ligne `{image:fichier}` : image du scénario (ScenarioImageStore), ex. une carte. */
+    data class Image(val fileName: String) : Segment()
 }
 
-private sealed class TextPart {
-    data class Normal(val text: String) : TextPart()
-    data class Bold(val text: String) : TextPart()
-    data class Italic(val text: String) : TextPart()
-    data class Code(val text: String) : TextPart()
-    data class Link(val type: String, val name: String) : TextPart()
-    data class Colored(val text: String, val color: Color) : TextPart()
-}
+private val ImageLineRegex = Regex("""^\{image:\s*([^}]+?)\s*\}$""")
 
 private val namedColorMap = mapOf(
     "red" to Color(0xFFF44336),
@@ -215,195 +309,184 @@ private fun parseColorSpec(spec: String): Color? {
     return null
 }
 
-private fun rememberSegmentedContent(content: String): List<Segment> {
-    val lines = content.lines()
+private fun parseSegments(content: String): List<Segment> {
+    // Balises de lecture sur leur propre ligne, pour pouvoir les écrire en ligne ou en bloc.
+    val prepared = content.replace(READ_OPEN, "\n$READ_OPEN\n").replace(READ_CLOSE, "\n$READ_CLOSE\n")
+    return segmentLines(normalizeMultilineColors(prepared).lines())
+}
+
+/**
+ * Une couleur ouverte sur une ligne et fermée plus loin est refermée en fin de ligne et rouverte
+ * au début de la suivante (après l'éventuel marqueur de titre/liste), pour que chaque ligne se
+ * rende seule.
+ */
+private fun normalizeMultilineColors(content: String): String {
+    val open = kotlin.collections.ArrayDeque<String>()
+    val markerRegex = Regex("""^\s*(#{1,6}\s+|-\s+|\d+\.\s+)?""")
+    return content.lines().joinToString("\n") { line ->
+        val trimmed = line.trim()
+        if (trimmed.isEmpty() || trimmed == READ_OPEN || trimmed == READ_CLOSE) return@joinToString line
+        val reopen = open.joinToString("")
+        ColorTagRegex.findAll(line).forEach { match ->
+            if (match.value == "{/color}") open.removeLastOrNull() else open.addLast(match.value)
+        }
+        val marker = markerRegex.find(line)?.value.orEmpty()
+        marker + reopen + line.substring(marker.length) + "{/color}".repeat(open.size)
+    }
+}
+
+private fun segmentLines(lines: List<String>): List<Segment> {
     val result = mutableListOf<Segment>()
     var i = 0
     while (i < lines.size) {
-        val line = lines[i]
-        val trimmed = line.trimEnd()
+        val trimmed = lines[i].trim()
         when {
-            trimmed.startsWith("# ") -> {
-                result += Segment.Header(1, trimmed.removePrefix("# ").trim())
+            trimmed == READ_OPEN -> {
+                var end = i + 1
+                while (end < lines.size && lines[end].trim() != READ_CLOSE) end++
+                val inner = lines.subList(i + 1, end)
+                result += Segment.ReadAloud(segmentLines(inner), speechText(inner.joinToString("\n")))
+                i = end + 1
+            }
+            trimmed == READ_CLOSE || trimmed.isBlank() -> i++
+            ImageLineRegex.matches(trimmed) -> {
+                result += Segment.Image(ImageLineRegex.find(trimmed)!!.groupValues[1])
                 i++
             }
-            trimmed.startsWith("## ") -> {
-                result += Segment.Header(2, trimmed.removePrefix("## ").trim())
-                i++
-            }
-            trimmed.startsWith("### ") -> {
-                result += Segment.Header(3, trimmed.removePrefix("### ").trim())
-                i++
-            }
-            trimmed.matches(Regex("^#(monster|pnj|npc|equipment|spell|rule):(\\[[^\\]]+\\]|[^\\s]+)\$")) -> {
-                val match = Regex("^#(monster|pnj|npc|equipment|spell|rule):(?:\\[([^\\]]+)\\]|([^\\s]+))\$").find(trimmed)!!
-                val name = match.groupValues[2].ifEmpty { match.groupValues[3] }
-                result += Segment.Link(match.groupValues[1], name)
-                i++
-            }
+            trimmed.startsWith("# ") -> { result += Segment.Header(1, inline(trimmed.removePrefix("# ").trim())); i++ }
+            trimmed.startsWith("## ") -> { result += Segment.Header(2, inline(trimmed.removePrefix("## ").trim())); i++ }
+            trimmed.startsWith("### ") -> { result += Segment.Header(3, inline(trimmed.removePrefix("### ").trim())); i++ }
             trimmed.startsWith("- ") -> {
-                val items = mutableListOf<String>()
-                while (i < lines.size && lines[i].trimStart().startsWith("- ")) {
-                    items += lines[i].trimStart().removePrefix("- ").trimEnd()
+                val items = mutableListOf<AnnotatedString>()
+                while (i < lines.size && lines[i].trim().startsWith("- ")) {
+                    items += inline(lines[i].trim().removePrefix("- "))
                     i++
                 }
-                result += Segment.BulletList(items.map { parseInlineAnnotated(it) })
+                result += Segment.BulletList(items)
             }
-            trimmed.matches(Regex("^\\d+\\.\\s+")) -> {
-                val items = mutableListOf<String>()
-                val regex = Regex("^\\d+\\.\\s+(.*)")
-                while (i < lines.size && lines[i].trimStart().matches(Regex("^\\d+\\.\\s+"))) {
-                    items += regex.find(lines[i].trimStart())?.groupValues?.get(1)?.trimEnd() ?: lines[i]
+            NumberedItemRegex.containsMatchIn(trimmed) -> {
+                val items = mutableListOf<AnnotatedString>()
+                while (i < lines.size && NumberedItemRegex.containsMatchIn(lines[i].trim())) {
+                    items += inline(lines[i].trim().replaceFirst(NumberedItemRegex, ""))
                     i++
                 }
-                result += Segment.NumberedList(items.map { parseInlineAnnotated(it) })
+                result += Segment.NumberedList(items)
             }
-            trimmed.isBlank() -> i++
-            else -> {
-                result += segmentLine(trimmed)
-                i++
-            }
+            else -> { result += Segment.Paragraph(inline(trimmed)); i++ }
         }
     }
     return result
 }
 
-private fun segmentLine(line: String): Segment.Text {
-    val parts = mutableListOf<TextPart>()
-    var remaining = line
+private fun inline(text: String): AnnotatedString = buildAnnotatedString { appendInline(text) }
 
-    // 1. Parse couleurs {color:...}...
-    val colorRegex = Regex("""\{color:([^}]+)\}(.*?)\{/color\}""", RegexOption.DOT_MATCHES_ALL)
-    var last = 0
-    colorRegex.findAll(line).forEach { match ->
-        if (match.range.first > last) {
-            parts.addAll(parseInlineMarkdown(line.substring(last, match.range.first)))
+/**
+ * Analyse récursive de la mise en forme en ligne : chaque balise (couleur, gras, italique) peut
+ * contenir les autres, et les liens internes sont reconnus à tous les niveaux.
+ */
+private fun AnnotatedString.Builder.appendInline(text: String) {
+    val plain = StringBuilder()
+    fun flush() {
+        if (plain.isNotEmpty()) {
+            append(plain.toString())
+            plain.clear()
         }
-        val color = parseColorSpec(match.groupValues[1])
-        if (color != null) {
-            parts.add(TextPart.Colored(match.groupValues[2], color))
-        } else {
-            parts.addAll(parseInlineMarkdown(match.groupValues[2]))
-        }
-        last = match.range.last + 1
     }
-    if (last < line.length) {
-        parts.addAll(parseInlineMarkdown(line.substring(last)))
-    }
-
-    // 2. Parse liens internes dans chaque partie texte
-    val partsWithLinks = mutableListOf<TextPart>()
-    parts.forEach { part ->
-        when (part) {
-            is TextPart.Normal -> partsWithLinks.addAll(parseInlineLinks(part.text) { TextPart.Normal(it) })
-            is TextPart.Bold -> partsWithLinks.addAll(parseInlineLinks(part.text) { TextPart.Bold(it) })
-            is TextPart.Italic -> partsWithLinks.addAll(parseInlineLinks(part.text) { TextPart.Italic(it) })
-            is TextPart.Code -> partsWithLinks.addAll(parseInlineLinks(part.text) { TextPart.Code(it) })
-            is TextPart.Colored -> {
-                val subParts = parseInlineLinks(part.text) { TextPart.Normal(it) }
-                subParts.forEach { sub ->
-                    when (sub) {
-                        is TextPart.Normal -> partsWithLinks.add(TextPart.Colored(sub.text, part.color))
-                        is TextPart.Link -> partsWithLinks.add(sub)
-                        else -> partsWithLinks.add(sub)
-                    }
-                }
+    var i = 0
+    while (i < text.length) {
+        if (text.startsWith("{color:", i)) {
+            val specEnd = text.indexOf('}', i)
+            val close = if (specEnd > 0) findColorClose(text, specEnd + 1) else -1
+            if (close >= 0) {
+                flush()
+                val color = parseColorSpec(text.substring(i + "{color:".length, specEnd).trim())
+                val inner = text.substring(specEnd + 1, close)
+                if (color != null) withStyle(SpanStyle(color = color)) { appendInline(inner) } else appendInline(inner)
+                i = close + "{/color}".length
+                continue
             }
-            else -> partsWithLinks.add(part)
         }
-    }
-
-    return Segment.Text(partsWithLinks)
-}
-
-private fun parseInlineMarkdown(text: String): List<TextPart> {
-    val parts = mutableListOf<TextPart>()
-    var pos = 0
-    while (pos < text.length) {
-        val remaining = text.substring(pos)
-        // Cherche le prochain délimiteur parmi **, *, `
-        val nextBold = remaining.indexOf("**")
-        val nextItalic = remaining.indexOf("*")
-        val nextCode = remaining.indexOf("`")
-
-        val candidates = mutableListOf<Pair<String, Int>>()
-        if (nextBold >= 0) candidates += "**" to nextBold
-        if (nextItalic >= 0 && nextItalic != nextBold) candidates += "*" to nextItalic
-        if (nextCode >= 0) candidates += "`" to nextCode
-
-        if (candidates.isEmpty()) {
-            if (remaining.isNotEmpty()) parts.add(TextPart.Normal(remaining))
-            break
-        }
-
-        // Priorité au plus proche. Pour *, si ** est au même index on ignore * (géré par **).
-        val (delimiter, start) = candidates.minByOrNull { it.second }!!
-        if (start > 0) parts.add(TextPart.Normal(remaining.substring(0, start)))
-        val end = remaining.indexOf(delimiter, start + delimiter.length)
-        if (end < 0) {
-            // Pas de fermeture : traiter le délimiteur comme texte normal
-            parts.add(TextPart.Normal(remaining.substring(start, start + delimiter.length)))
-            pos += start + delimiter.length
+        if (text.startsWith("{/color}", i)) {
+            i += "{/color}".length
             continue
         }
-        val inner = remaining.substring(start + delimiter.length, end)
-        when (delimiter) {
-            "**" -> parts.add(TextPart.Bold(inner))
-            "*" -> parts.add(TextPart.Italic(inner))
-            "`" -> parts.add(TextPart.Code(inner))
-        }
-        pos += end + delimiter.length
-    }
-    return parts
-}
-
-private fun parseInlineLinks(text: String, wrap: (String) -> TextPart): List<TextPart> {
-    val parts = mutableListOf<TextPart>()
-    val regex = Regex("""(?<!\\)#(monster|pnj|npc|equipment|spell|rule):(?:\[([^\]\n]+)\]|([^\s\n\]]+))""")
-    var last = 0
-    regex.findAll(text).forEach { match ->
-        if (match.range.first > last) {
-            parts.add(wrap(text.substring(last, match.range.first)))
-        }
-        val name = match.groupValues[2].ifEmpty { match.groupValues[3] }
-        parts.add(TextPart.Link(match.groupValues[1], name))
-        last = match.range.last + 1
-    }
-    if (last < text.length) {
-        parts.add(wrap(text.substring(last)))
-    }
-    return parts
-}
-
-private fun parseInlineAnnotated(text: String): Pair<AnnotatedString, List<ClickableAnnotation>> {
-    val parts = segmentLine(text).parts
-    val annotatedString = buildAnnotatedString {
-        parts.forEach { part ->
-            when (part) {
-                is TextPart.Normal -> append(part.text)
-                is TextPart.Bold -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(part.text) }
-                is TextPart.Italic -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { append(part.text) }
-                is TextPart.Code -> withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = Color(0xFFE0E0E0))) { append(part.text) }
-                is TextPart.Link -> withStyle(SpanStyle(color = Color(0xFF2196F3), fontWeight = FontWeight.Bold, textDecoration = TextDecoration.Underline)) { append(part.name) }
-                is TextPart.Colored -> withStyle(SpanStyle(color = part.color)) { append(part.text) }
+        if (text.startsWith("**", i)) {
+            val close = text.indexOf("**", i + 2)
+            if (close > i + 2) {
+                flush()
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { appendInline(text.substring(i + 2, close)) }
+                i = close + 2
+                continue
             }
         }
-    }
-    val annotations = mutableListOf<ClickableAnnotation>()
-    var index = 0
-    parts.forEach { part ->
-        val length = when (part) {
-            is TextPart.Normal -> part.text.length
-            is TextPart.Bold -> part.text.length
-            is TextPart.Italic -> part.text.length
-            is TextPart.Code -> part.text.length
-            is TextPart.Link -> {
-                annotations += ClickableAnnotation(index until index + part.name.length, part.type, part.name)
-                part.name.length
+        if (text[i] == '*') {
+            val close = text.indexOf('*', i + 1)
+            if (close > i + 1) {
+                flush()
+                withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { appendInline(text.substring(i + 1, close)) }
+                i = close + 1
+                continue
             }
-            is TextPart.Colored -> part.text.length
         }
-        index += length
+        if (text[i] == '`') {
+            val close = text.indexOf('`', i + 1)
+            if (close > i + 1) {
+                flush()
+                withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = Color(0x33FFFFFF))) {
+                    append(text.substring(i + 1, close))
+                }
+                i = close + 1
+                continue
+            }
+        }
+        if (text[i] == '#') {
+            val match = InternalLinkRegex.find(text, i)
+            if (match != null && match.range.first == i) {
+                flush()
+                val type = match.groupValues[1]
+                val name = match.groupValues[2].ifEmpty { match.groupValues[3] }
+                if (type in TYPES_MENTION) {
+                    withStyle(styleLien(type)) { append(name) }
+                } else {
+                    pushStringAnnotation(tag = LINK_TAG, annotation = "$type:$name")
+                    withStyle(styleLien(type)) { append(internalLinkLabel(type, name)) }
+                    pop()
+                }
+                i = match.range.last + 1
+                continue
+            }
+        }
+        plain.append(text[i])
+        i++
     }
-    return annotatedString to annotations
+    flush()
 }
+
+/** Position du {/color} qui ferme la balise ouverte juste avant [from], en tenant compte des imbrications. */
+private fun findColorClose(text: String, from: Int): Int {
+    var depth = 1
+    var j = from
+    while (true) {
+        val close = text.indexOf("{/color}", j)
+        if (close < 0) return -1
+        val open = text.indexOf("{color:", j)
+        if (open in 0 until close) {
+            depth++
+            j = open + "{color:".length
+        } else {
+            depth--
+            if (depth == 0) return close
+            j = close + "{/color}".length
+        }
+    }
+}
+
+/** Texte brut d'une zone à lire, sans balises, pour la synthèse vocale. */
+private fun speechText(text: String): String =
+    text.replace(Regex("""\{/?color[^}]*\}"""), "")
+        .replace(InternalLinkRegex) { it.groupValues[2].ifEmpty { it.groupValues[3] } }
+        .replace(Regex("""^\s*(#{1,6}\s+|-\s+|\d+\.\s+)""", RegexOption.MULTILINE), "")
+        .replace("**", "")
+        .replace("*", "")
+        .replace("`", "")
+        .trim()

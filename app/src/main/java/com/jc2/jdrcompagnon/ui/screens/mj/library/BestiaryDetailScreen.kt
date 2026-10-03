@@ -1,9 +1,26 @@
 package com.jc2.jdrcompagnon.ui.screens.mj.library
 
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.filled.AddPhotoAlternate
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.collectAsState
+import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.MonsterImages
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -30,13 +47,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jc2.jdrcompagnon.ui.WorldState
+import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.MonsterImage
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdEntry
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdRepository
 import com.mikepenz.markdown.m3.Markdown
 
 /**
  * Écran de détail d'un monstre du bestiaire.
- * Affiche le stat block du monstre en markdown.
+ * Affiche le profil du monstre en bloc de stats façon manuel (MonsterStatBlock), dans une carte.
  *
  * @param monsterName Le nom du monstre à afficher
  * @param currentWorld Le monde actuellement sélectionné (détermine dans quelle bibliothèque chercher)
@@ -54,6 +72,12 @@ fun BestiaryDetailScreen(
     var monster by remember { mutableStateOf<SrdEntry?>(null) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        val entry = monster ?: return@rememberLauncherForActivityResult
+        if (uri != null && !MonsterImages.importer(context, uri, entry)) {
+            Toast.makeText(context, "Impossible d'importer cette image", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     LaunchedEffect(monsterName, currentWorld?.id) {
         loading = true
@@ -126,7 +150,47 @@ fun BestiaryDetailScreen(
                         .verticalScroll(rememberScrollState())
                         .padding(16.dp)
                 ) {
-                    Markdown(content = monster!!.rawMarkdown)
+                    val entry = monster!!
+                    // Même carte que les autres écrans (fond translucide arrondi), avec l'image,
+                    // les boutons d'image puis le bloc de stats façon manuel.
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            MonsterImage(entry, modifier = Modifier.padding(bottom = 8.dp))
+                            // Image personnelle du MJ (galerie du téléphone), gardée sur l'appareil :
+                            // fonctionne aussi pour les monstres des livres personnalisés.
+                            val imageVersion by MonsterImages.version.collectAsState()
+                            val hasImport = remember(entry.name, imageVersion) { MonsterImages.hasImport(context, entry) }
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 12.dp)) {
+                                OutlinedButton(onClick = { imagePicker.launch("image/*") }) {
+                                    Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(if (hasImport) "Changer l'image" else "Choisir une image")
+                                }
+                                if (hasImport) {
+                                    TextButton(onClick = { MonsterImages.supprimerImport(context, entry) }) {
+                                        Text("Retirer mon image")
+                                    }
+                                }
+                            }
+                            // Comportement de l'IA en combat : réservé au MJ.
+                            val role by com.jc2.jdrcompagnon.ui.GameState.appRole.collectAsState()
+                            if (role == com.jc2.jdrcompagnon.ui.AppRole.MJ) {
+                                Box(modifier = Modifier.padding(bottom = 12.dp)) {
+                                    com.jc2.jdrcompagnon.feature_combat.ui.ComportementIaMonstreCard(entry.rawMarkdown)
+                                }
+                            }
+                            if (entry.aUnBlocDeStats()) {
+                                MonsterStatBlock(entry, modifier = Modifier.clip(RoundedCornerShape(4.dp)))
+                            } else {
+                                // Monstre d'un livre personnalisé sans champs structurés : texte brut.
+                                Markdown(content = entry.rawMarkdown)
+                            }
+                        }
+                    }
                 }
             }
         }

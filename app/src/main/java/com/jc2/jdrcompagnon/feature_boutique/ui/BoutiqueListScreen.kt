@@ -5,7 +5,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Surface
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import com.jc2.jdrcompagnon.ui.components.forgetCollapsibleSections
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -53,6 +58,7 @@ fun BoutiqueListScreen(
     onBack: () -> Unit,
     onOpenMenu: () -> Unit = {},
 ) {
+    val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var afficherDialogCreation by remember { mutableStateOf(false) }
     var boutiqueAModifier by remember { mutableStateOf<Boutique?>(null) }
@@ -61,7 +67,7 @@ fun BoutiqueListScreen(
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("BOUTIQUES") },
+                title = { Text("BOUTIQUES", color = Color.White) },
                 navigationIcon = {
                     IconButton(onClick = onOpenMenu) {
                         Icon(Icons.Default.Menu, contentDescription = "Menu")
@@ -86,6 +92,7 @@ fun BoutiqueListScreen(
                 )
                 is BoutiqueListUiState.Error -> Text(
                     text = "Erreur : ${state.message}",
+                    color = Color.White,
                     modifier = Modifier.align(Alignment.Center)
                 )
                 is BoutiqueListUiState.Success -> BoutiqueListContent(
@@ -131,6 +138,7 @@ fun BoutiqueListScreen(
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.onSupprimerBoutique(boutique.id)
+                    forgetCollapsibleSections(context, "boutique:${boutique.id}")
                     boutiqueASupprimer = null
                 }) {
                     Text("Supprimer", color = MaterialTheme.colorScheme.error)
@@ -153,6 +161,7 @@ private fun BoutiqueListContent(
     if (boutiques.isEmpty()) {
         Text(
             text = "Aucune boutique pour l'instant. Créez-en une avec le bouton +.",
+            color = Color.White,
             modifier = Modifier.padding(16.dp)
         )
         return
@@ -172,6 +181,7 @@ private fun BoutiqueListContent(
     }
 }
 
+/** Carte d'une boutique : même fond translucide arrondi que le reste de l'app, texte blanc. */
 @Composable
 private fun BoutiqueCard(
     boutique: Boutique,
@@ -179,27 +189,39 @@ private fun BoutiqueCard(
     onModifierClick: () -> Unit,
     onSupprimerClick: () -> Unit
 ) {
-    // TODO : reprendre le style de carte existant du projet (SheetSurface, bordures dorées, etc.)
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .then(Modifier.clickable(onClick = onClick))
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
+        contentColor = Color.White,
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp)
         ) {
-            Text(text = boutique.nom)
-            Text(text = "${boutique.type.label} · ${boutique.standing.label} · ${boutique.marchand.nom}")
-            Text(
-                text = if (boutique.type == TypeBoutique.MARCHAND)
-                    "${boutique.inventaire.size} articles · ${boutique.employes.size} employés · ${boutique.argentDisponibleEnPo} po"
-                else
-                    "${boutique.services.size} services · ${boutique.employes.size} employés · ${boutique.argentDisponibleEnPo} po"
-            )
-        }
-        IconButton(onClick = onModifierClick) {
-            Icon(Icons.Default.Edit, contentDescription = "Modifier ${boutique.nom}")
-        }
-        IconButton(onClick = onSupprimerClick) {
-            Icon(Icons.Default.Delete, contentDescription = "Supprimer ${boutique.nom}")
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = boutique.nom, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    text = "${boutique.type.label} · ${boutique.standing.label} · ${boutique.marchand.nom}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.8f)
+                )
+                Text(
+                    text = if (boutique.type == TypeBoutique.MARCHAND)
+                        "${boutique.inventaire.size} articles · ${boutique.employes.size} employés · ${boutique.argentDisponibleEnPo} po"
+                    else
+                        "${boutique.services.size} services · ${boutique.employes.size} employés · ${boutique.argentDisponibleEnPo} po",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.8f)
+                )
+            }
+            IconButton(onClick = onModifierClick) {
+                Icon(Icons.Default.Edit, contentDescription = "Modifier ${boutique.nom}")
+            }
+            IconButton(onClick = onSupprimerClick) {
+                Icon(Icons.Default.Delete, contentDescription = "Supprimer ${boutique.nom}", tint = MaterialTheme.colorScheme.error)
+            }
         }
     }
 }

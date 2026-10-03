@@ -1717,7 +1717,7 @@
 
 ### Beaux habits
 
-**Type** Matériel
+**Type** Vêtements
 **Poids** 3 kg
 **Coût** 15 po
 **Consommable** Non
@@ -1885,7 +1885,7 @@
 
 ### Costume
 
-**Type** Matériel
+**Type** Vêtements
 **Poids** 2 kg
 **Coût** 5 po
 **Consommable** Non
@@ -1951,6 +1951,18 @@
 **Consommable** Oui
 **Icône** 🖋️
 **Description** Fiole d'encre pour écrire.
+**Contenu** -
+
+---
+
+### Grimoire
+
+**Type** Matériel
+**Poids** 1,5 kg
+**Coût** 50 po
+**Consommable** Non
+**Icône** 📖
+**Description** Livre relié de cuir de 100 pages vierges en vélin, où un magicien consigne ses sorts. Contient aussi son matériel d'écriture (encre, parchemins, matériel de calligraphe) pour recopier de nouveaux sorts : 2 heures et 50 po par niveau du sort.
 **Contenu** -
 
 ---
@@ -2413,7 +2425,7 @@
 
 ### Robe
 
-**Type** Matériel
+**Type** Vêtements
 **Poids** 2 kg
 **Coût** 1 po
 **Consommable** Non
@@ -2533,7 +2545,7 @@
 
 ### Tenue de voyage
 
-**Type** Matériel
+**Type** Vêtements
 **Poids** 2 kg
 **Coût** 2 po
 **Consommable** Non

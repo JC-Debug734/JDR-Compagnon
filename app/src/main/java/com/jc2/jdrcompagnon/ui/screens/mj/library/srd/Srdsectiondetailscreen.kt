@@ -3,6 +3,7 @@ package com.jc2.jdrcompagnon.ui.screens.mj.library
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -32,7 +33,7 @@ import androidx.compose.ui.unit.dp
 import com.jc2.jdrcompagnon.ui.WorldState
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdRepository
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdSectionEntry
-import com.mikepenz.markdown.m3.Markdown
+import com.jc2.jdrcompagnon.ui.components.SrdMarkdownAvecTables
 
 /**
  * Écran de détail générique pour une entrée [SrdSectionEntry] (nom + catégorie +
@@ -41,7 +42,7 @@ import com.mikepenz.markdown.m3.Markdown
  * (contrairement aux sorts/monstres/équipement qui ont leur propre écran).
  *
  * @param kind Identifie la collection dans laquelle chercher l'entrée :
- * "don", "arme_magique", "classe", "espece" ou "historique".
+ * "don", "arme_magique", "classe", "espece", "historique", "regle", "glossaire" ou "etat".
  * @param entryName Nom exact de l'entrée à afficher.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -73,6 +74,9 @@ fun SrdSectionDetailScreen(
                 "classe" -> SrdRepository.getClasseByName(context, entryName, currentWorld?.id)
                 "espece" -> SrdRepository.getEspeceByName(context, entryName, currentWorld?.id)
                 "historique" -> SrdRepository.getHistoriqueByName(context, entryName, currentWorld?.id)
+                "regle" -> SrdRepository.getRuleEntryByName(context, entryName, currentWorld?.id)
+                "glossaire" -> SrdRepository.getGlossaryEntryByName(context, entryName, currentWorld?.id)
+                "etat" -> SrdRepository.getEtatByName(context, entryName, currentWorld?.id)
                 else -> null
             }
             if (entry == null) {
@@ -132,16 +136,25 @@ fun SrdSectionDetailScreen(
                         .verticalScroll(rememberScrollState())
                         .padding(16.dp)
                 ) {
-                    entry!!.category.ifBlank { null }?.let { category ->
-                        Text(
-                            text = category,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(bottom = 8.dp),
-                        )
+                    // Même carte translucide arrondie que le reste de l'app.
+                    androidx.compose.material3.Surface(
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            entry!!.category.ifBlank { null }?.let { category ->
+                                Text(
+                                    text = category,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(bottom = 8.dp),
+                                )
+                            }
+                            SrdMarkdownAvecTables(markdown = entry!!.rawMarkdown)
+                        }
                     }
-                    Markdown(content = entry!!.rawMarkdown)
                 }
             }
         }

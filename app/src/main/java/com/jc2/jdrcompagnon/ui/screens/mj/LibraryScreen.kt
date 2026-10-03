@@ -3,6 +3,16 @@ package com.jc2.jdrcompagnon.ui.screens.mj
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.InputChipDefaults
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.material3.InputChip
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -14,6 +24,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import java.io.File
+import java.util.zip.ZipInputStream
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -47,6 +58,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.FilterList
@@ -61,10 +73,13 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -80,6 +95,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -99,20 +115,30 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.LibrarySearch
 import com.jc2.jdrcompagnon.R
 import com.jc2.jdrcompagnon.ui.WorldState
 import com.jc2.jdrcompagnon.ui.theme.ForcedDarkPalette
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.RuleSection
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdEntry
+import com.jc2.jdrcompagnon.feature_environnement.domain.model.TERRAINS_SRD
+import com.jc2.jdrcompagnon.feature_environnement.domain.model.rencontrableDans
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.EquipmentItem
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdSectionEntry
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdDocSection
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdRepository
-import com.mikepenz.markdown.m3.Markdown
+import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.CustomContentParser
+import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.CustomContentSummary
+import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.CustomBookImages
+import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.PnjImport
+import com.jc2.jdrcompagnon.ui.screens.mj.scenario.ScenarioImport
+import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.ReferenceEntryParser
+import com.jc2.jdrcompagnon.ui.components.SrdMarkdownAvecTables
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -173,7 +199,7 @@ private object LibraryBookSettingsStore {
  * [copyPickedFileToInternalStorage]) — la donnée reste disponible même si le fichier
  * d'origine est supprimé ou son URI révoquée.
  */
-private data class CustomBook(
+internal data class CustomBook(
     val id: String,
     val name: String,
     val fileName: String,
@@ -185,7 +211,7 @@ private data class CustomBook(
  * personnalisé réutilisent [LibraryBookSettingsStore] avec sa clé "custom_<id>", comme
  * n'importe quel autre livre — seuls le nom et le fichier associé sont propres à ce store.
  */
-private object CustomBooksStore {
+internal object CustomBooksStore {
     private const val PREFS_NAME = "library_custom_books"
 
     private fun prefs(context: Context) =
@@ -216,6 +242,15 @@ private object CustomBooksStore {
     }
 
     fun remove(context: Context, worldId: String?, id: String) {
+        // Fichiers du livre : dossier d'extraction d'un livre .zip ("<id>/…", images comprises),
+        // sinon le fichier copié à l'ajout ("<id>.md", PDF...).
+        prefs(context).getString(fileKey(worldId, id), null)?.let { fileName ->
+            val dossier = fileName.substringBefore('/', "")
+            when {
+                dossier == id -> File(customBooksDir(context), dossier).deleteRecursively()
+                '/' !in fileName -> File(customBooksDir(context), fileName).delete()
+            }
+        }
         val ids = prefs(context).getStringSet(idsKey(worldId), emptySet()).orEmpty().toMutableSet()
         ids.remove(id)
         prefs(context).edit()
@@ -226,8 +261,33 @@ private object CustomBooksStore {
     }
 }
 
+/**
+ * Normalise une catégorie déclarée dans le `Categories:` d'un `reference.md` d'univers
+ * importé (français libre, ex. "objets", "règles") vers une clé d'onglet de bibliothèque
+ * (ex. "equipment", "rules") — voir [WorldSelectionScreen] / `allTabKeys` ci-dessus.
+ * Une clé déjà au format anglais (ou inconnue) est renvoyée telle quelle.
+ */
+private val categoryKeyAliases = mapOf(
+    "monstres" to "monsters", "monster" to "monsters",
+    "sorts" to "spells", "spell" to "spells",
+    "regles" to "rules", "règles" to "rules", "rule" to "rules",
+    "objets" to "equipment", "equipement" to "equipment", "équipement" to "equipment",
+    "glossaire" to "glossary",
+    "états" to "etats", "etat" to "etats", "état" to "etats", "conditions" to "etats",
+    "espece" to "especes", "espèces" to "especes", "espece" to "especes",
+    "historique" to "historiques",
+    "don" to "dons",
+    "armes magiques" to "armes_magiques", "armes_magique" to "armes_magiques",
+    "monture" to "montures", "montures_vehicules" to "montures",
+)
+
+private fun normalizeCategoryKey(raw: String): String {
+    val key = raw.trim().lowercase()
+    return categoryKeyAliases[key] ?: key
+}
+
 /** Dossier interne où sont copiés les fichiers des livres personnalisés. */
-private fun customBooksDir(context: Context): File =
+internal fun customBooksDir(context: Context): File =
     File(context.filesDir, "custom_books").apply { mkdirs() }
 
 /**
@@ -251,8 +311,137 @@ private fun copyPickedFileToInternalStorage(context: Context, uri: Uri, id: Stri
     }
 }
 
+/** Contenu d'une archive .zip extraite dans [dossier] : le .md du livre (s'il y en a un) et les scénarios. */
+private class ArchiveExtraite(val dossier: File, val livre: File?, val scenarios: List<File>)
+
+/**
+ * Archive .zip : un livre (.md de bibliothèque accompagné de ses images, ex. un bestiaire
+ * illustré, voir [CustomBookImages]) et/ou des scénarios. L'archive est extraite dans
+ * `custom_books/<id>/` — les entrées qui tenteraient d'écrire hors de ce dossier ("zip slip")
+ * et les métadonnées macOS sont ignorées. Un .md est un scénario s'il est rangé dans un dossier
+ * `Scenarios/` (ou `Scénarios/`) ou s'il ne contient aucune entrée `<!-- type: ... -->` ;
+ * les autres forment le livre (plusieurs sont réunis en un seul `livre.md`). Null si l'archive
+ * est illisible ou ne contient aucun .md.
+ */
+private fun extraireArchive(context: Context, uri: Uri, id: String): ArchiveExtraite? {
+    val dir = File(customBooksDir(context), id).apply { mkdirs() }
+    val dirPath = dir.canonicalPath
+    return try {
+        val input = context.contentResolver.openInputStream(uri) ?: return null
+        ZipInputStream(input).use { zip ->
+            var entry = zip.nextEntry
+            while (entry != null) {
+                // Compress-Archive (Windows PowerShell 5.1) écrit "images\gobelin.png" : on
+                // rétablit le séparateur standard pour recréer les sous-dossiers.
+                val name = entry.name.replace('\\', '/')
+                val target = File(dir, name)
+                val safe = target.canonicalPath.startsWith(dirPath + File.separator)
+                if (safe && !entry.isDirectory && !name.endsWith("/") && !name.startsWith("__MACOSX")) {
+                    target.parentFile?.mkdirs()
+                    target.outputStream().use { out -> zip.copyTo(out) }
+                }
+                zip.closeEntry()
+                entry = zip.nextEntry
+            }
+        }
+        val mdFiles = dir.walkTopDown()
+            .filter { it.isFile && it.extension.equals("md", ignoreCase = true) }
+            .sortedBy { it.path }
+            .toList()
+        if (mdFiles.isEmpty()) {
+            dir.deleteRecursively()
+            return null
+        }
+        val (scenarios, livres) = mdFiles.partition { fichier ->
+            val dossiers = fichier.relativeTo(dir).invariantSeparatorsPath.split('/').dropLast(1)
+            dossiers.any { it.equals("Scenarios", ignoreCase = true) || it.equals("Scénarios", ignoreCase = true) } ||
+                CustomContentParser.parse(fichier.readText()).summary.total == 0
+        }
+        val livre = when (livres.size) {
+            0 -> null
+            1 -> livres.first()
+            else -> File(dir, "livre.md").apply { writeText(livres.joinToString("\n\n") { it.readText() }) }
+        }
+        ArchiveExtraite(dir, livre, scenarios)
+    } catch (e: Exception) {
+        dir.deleteRecursively()
+        null
+    }
+}
+
+/** Ce qu'a apporté l'ajout d'un livre : contenu reconnu, fiches PNJ et scénarios créés. */
+internal data class LivreAjoute(
+    // Null si l'archive ne contenait que des scénarios (aucun livre ajouté à la bibliothèque).
+    val id: String?,
+    val fileName: String?,
+    val summary: CustomContentSummary?,
+    val pnjCrees: Int,
+    val scenarios: List<String> = emptyList(),
+    val pnjScenarios: Int = 0,
+    // Scénarios importés (titre -> id), fiches non-PJ créées et campagne livrée par l'archive
+    // (CampagneArchive), que l'outil Import crée ensuite pour relier le tout.
+    val scenarioIds: Map<String, String> = emptyMap(),
+    val pnjIds: List<String> = emptyList(),
+    val campagne: com.jc2.jdrcompagnon.feature_import.CampagneArchive.Contenu? = null,
+)
+
+/**
+ * Ajoute [uri] (.md, .zip avec images et scénarios, ou tout autre fichier) comme livre
+ * personnalisé de [worldId] sous le nom [nom] : copie dans le stockage interne, enregistrement,
+ * puis — pour un livre markdown — création des fiches PNJ de ses entrées `<!-- type: pnj -->`
+ * (voir [PnjImport]). Les scénarios d'une archive sont importés ensuite (voir [ScenarioImport]),
+ * pour que leurs liens retrouvent les monstres, PNJ et objets du livre. Utilisé par l'outil
+ * Import. Retourne null si le fichier est illisible.
+ */
+internal fun ajouterLivrePersonnalise(context: Context, uri: Uri, worldId: String?, nom: String): LivreAjoute? {
+    val id = "${System.currentTimeMillis()}"
+    val nomFichier = queryDisplayName(context, uri)
+    val monde = worldId ?: "donjon_et_dragon"
+    if (nomFichier?.endsWith(".zip", ignoreCase = true) != true) {
+        val fileName = copyPickedFileToInternalStorage(context, uri, id, nomFichier) ?: return null
+        return enregistrerLivre(context, id, fileName, worldId, nom)
+    }
+
+    val fichesAvant = com.jc2.jdrcompagnon.ui.GameState.characters.value.map { it.id }.toSet()
+    val archive = extraireArchive(context, uri, id) ?: return null
+    val booksDir = customBooksDir(context)
+    val livre = archive.livre?.let { enregistrerLivre(context, id, it.relativeTo(booksDir).invariantSeparatorsPath, worldId, nom) }
+    var pnjScenarios = 0
+    val scenarioIds = linkedMapOf<String, String>()
+    archive.scenarios.forEach { fichier ->
+        val texte = runCatching { fichier.readText() }.getOrNull()?.takeIf { it.isNotBlank() } ?: return@forEach
+        val (scenario, pnj) = ScenarioImport.importer(context, texte, monde)
+        pnjScenarios += pnj
+        scenarioIds[scenario.title] = scenario.id
+    }
+    val campagne = com.jc2.jdrcompagnon.feature_import.CampagneArchive.lire(archive.dossier)
+    val pnjIds = com.jc2.jdrcompagnon.ui.GameState.characters.value.filter { it.id !in fichesAvant && it.type != "PJ" }.map { it.id }
+    // Les scénarios sont copiés dans l'app (images comprises) : leurs .md extraits ne servent plus.
+    if (livre == null) archive.dossier.deleteRecursively() else archive.scenarios.forEach { it.delete() }
+    return (livre ?: LivreAjoute(null, null, null, 0)).copy(
+        scenarios = scenarioIds.keys.toList(), pnjScenarios = pnjScenarios,
+        scenarioIds = scenarioIds, pnjIds = pnjIds, campagne = campagne,
+    )
+}
+
+/** Enregistre le livre déjà copié ([fileName], relatif à [customBooksDir]) et crée ses fiches PNJ. */
+private fun enregistrerLivre(context: Context, id: String, fileName: String, worldId: String?, nom: String): LivreAjoute {
+    CustomBooksStore.add(context, worldId, id, nom, fileName)
+    SrdRepository.invalidateWorld(worldId)
+    if (!fileName.endsWith(".md", ignoreCase = true)) return LivreAjoute(id, fileName, null, 0)
+
+    val content = readCustomBookContent(context, fileName) ?: return LivreAjoute(id, fileName, null, 0)
+    val parsed = CustomContentParser.parse(content)
+    val booksDir = customBooksDir(context)
+    val pnjs = fileName.substringBefore('/', "").ifBlank { null }
+        ?.let { CustomBookImages.resolve(parsed.pnjs, File(booksDir, fileName), File(booksDir, it)) }
+        ?: parsed.pnjs
+    val pnjCrees = PnjImport.creerFiches(context, pnjs, worldId ?: "donjon_et_dragon", nom)
+    return LivreAjoute(id, fileName, parsed.summary, pnjCrees)
+}
+
 /** Lit le contenu texte d'un livre personnalisé depuis le stockage interne. */
-private fun readCustomBookContent(context: Context, fileName: String): String? =
+internal fun readCustomBookContent(context: Context, fileName: String): String? =
     try {
         File(customBooksDir(context), fileName).readText()
     } catch (e: Exception) {
@@ -298,6 +487,26 @@ fun challengeSortKey(cr: String): Double = when (cr) {
     "1/2" -> 0.5
     else -> cr.toDoubleOrNull() ?: 999.0
 }
+
+/**
+ * Tranches de défi du filtre des monstres (une puce chacune au lieu d'une ligne par FP), alignées
+ * sur les paliers de niveau des personnages, avec leurs PX : [max] = FP le plus haut inclus.
+ */
+internal enum class TrancheDefi(val label: String, val max: Double) {
+    MINEURE("FP 0 à ½ · jusqu'à 100 PX", 0.5),
+    PALIER_1("FP 1 à 4 · 200 à 1 100 PX", 4.0),
+    PALIER_2("FP 5 à 10 · 1 800 à 5 900 PX", 10.0),
+    PALIER_3("FP 11 à 16 · 7 200 à 15 000 PX", 16.0),
+    PALIER_4("FP 17 et + · 18 000 PX et plus", Double.MAX_VALUE);
+
+    companion object {
+        fun de(cr: String): TrancheDefi = challengeSortKey(cr).let { v -> entries.first { v <= it.max } }
+    }
+}
+
+/** Classes qui ont accès à un sort (« Barde, Clerc, Druide »), sans espaces superflus. */
+internal fun classesDuSort(entry: SrdSectionEntry): List<String> =
+    entry.classes.split(',').map { it.trim() }.filter { it.isNotEmpty() }
 
 /**
  * Extrait le niveau d'un sort depuis la ligne italique qui suit son titre
@@ -384,13 +593,12 @@ private fun CheckableFilterRow(
  * @param onSpellClick Callback naviguant vers le détail d'un sort
  * @param onEquipmentClick Callback naviguant vers le détail d'un équipement
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun LibraryScreen(
     currentWorld: WorldState?,
     onBack: () -> Unit,
     initialTab: String = "monsters",
-    initialSectionTitle: String? = null,
     onMonsterClick: (String) -> Unit = {},
     onSpellClick: (String) -> Unit = {},
     onEquipmentClick: (EquipmentItem) -> Unit = {},
@@ -399,13 +607,16 @@ fun LibraryScreen(
     onHistoriqueClick: (String) -> Unit = {},
     onDonClick: (String) -> Unit = {},
     onArmeArmureMagiqueClick: (String) -> Unit = {},
+    onRuleClick: (String) -> Unit = {},
+    onGlossaryClick: (String) -> Unit = {},
+    onEtatClick: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
-    val tabs = listOf(
+    val allTabs = listOf(
         "Monstres", "Sorts", "Règles", "Équipement", "Glossaire",
-        "Classes", "Espèces", "Historiques", "Dons", "Armes magiques", "Montures",
+        "Classes", "Espèces", "Historiques", "Dons", "Armes magiques", "Montures", "États",
     )
-    val tabIcons = listOf(
+    val allTabIcons = listOf(
         Icons.Filled.Pets,
         Icons.Filled.AutoAwesome,
         Icons.Filled.Gavel,
@@ -417,11 +628,25 @@ fun LibraryScreen(
         Icons.Filled.Star,
         Icons.Filled.Bolt,
         Icons.Filled.DirectionsCar,
+        Icons.Filled.HealthAndSafety,
     )
-    val tabKeys = listOf(
+    val allTabKeys = listOf(
         "monsters", "spells", "rules", "equipment", "glossary",
-        "classes", "especes", "historiques", "dons", "armes_magiques", "montures",
+        "classes", "especes", "historiques", "dons", "armes_magiques", "montures", "etats",
     )
+    // Un univers importé peut limiter les onglets affichés via `Categories:` dans son
+    // reference.md (voir CustomWorldsRepository/ReferenceMdParser) — ex. Naheulbeuk-like,
+    // sans Monstres/Sorts/Classes. Absent ou vide = tous les onglets, comme avant.
+    val enabledCategoryKeys = currentWorld?.enabledCategories
+        ?.takeIf { it.isNotEmpty() }
+        ?.map { normalizeCategoryKey(it) }
+        ?.toSet()
+    val visibleTabIndices = allTabKeys.indices.filter { index ->
+        enabledCategoryKeys == null || allTabKeys[index] in enabledCategoryKeys
+    }
+    val tabs = visibleTabIndices.map { allTabs[it] }
+    val tabIcons = visibleTabIndices.map { allTabIcons[it] }
+    val tabKeys = visibleTabIndices.map { allTabKeys[it] }
     // Livres personnalisés ajoutés par l'utilisateur (fichier .md ou autre, couverture et
     // nom choisis depuis l'écran de gestion des livres) ; rechargés à chaque changement de
     // monde ou de réglages (voir plus bas). Déclaré ici, avant `libraryBooks`, qui en a
@@ -445,13 +670,18 @@ fun LibraryScreen(
     // autre que celui par défaut ("monsters"), on considère que c'est un lien direct
     // et on saute l'étagère pour aller droit au contenu.
     var showShelf by rememberSaveable { mutableStateOf(initialTab == "monsters") }
+    var hasVisitedShelf by rememberSaveable { mutableStateOf(showShelf) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     // Filtre par catégorie pour l'onglet Équipement : vide = toutes les catégories affichées
     var selectedEquipmentCategories by rememberSaveable { mutableStateOf(setOf<String>()) }
     // Filtre par école de magie pour l'onglet Sorts : vide = toutes les écoles affichées
     var selectedSpellLevels by rememberSaveable { mutableStateOf(setOf<String>()) }
+    // Classes ayant accès au sort (Barde, Clerc…) : un sort est gardé s'il est accessible à l'une d'elles.
+    var selectedSpellClasses by rememberSaveable { mutableStateOf(setOf<String>()) }
     // Filtre par niveau de défi pour l'onglet Monstres : vide = tous les défis affichés
     var selectedChallenges by rememberSaveable { mutableStateOf(setOf<String>()) }
+    // Filtre par terrain (ligne "Environnement:" du SRD) pour l'onglet Monstres : vide = tous
+    var selectedMonsterTerrains by rememberSaveable { mutableStateOf(setOf<String>()) }
     // Filtre par catégorie pour l'onglet Dons : vide = toutes les catégories affichées
     var selectedDonCategories by rememberSaveable { mutableStateOf(setOf<String>()) }
     // Filtre par catégorie pour l'onglet Armes magiques : vide = toutes les catégories affichées
@@ -466,10 +696,23 @@ fun LibraryScreen(
     // false ailleurs dans ce fichier, seul son texte se vide.
     var showGlobalSearch by rememberSaveable { mutableStateOf(true) }
     var globalSearchQuery by rememberSaveable { mutableStateOf("") }
+    // Catégorie à laquelle la recherche globale est restreinte ("Monstres"...), null = tout.
+    var globalSearchScope by rememberSaveable { mutableStateOf<String?>(null) }
+    var globalSearchFocused by remember { mutableStateOf(false) }
+    // Bas de la bibliothécaire (px, repère racine) : le contenu qui défile commence sous elle.
+    var librarianBottomPx by remember { mutableStateOf(0f) }
+    // Bord gauche de la bibliothécaire : les champs de recherche s'arrêtent avant elle (sinon
+    // leur croix d'effacement passait sous l'avatar, qui captait le clic).
+    var librarianLeftPx by remember { mutableStateOf(-1f) }
+    val librarianReserveEnd = run {
+        val density = LocalDensity.current
+        val screenWidth = LocalConfiguration.current.screenWidthDp.dp
+        if (librarianLeftPx < 0f) 170.dp
+        else (screenWidth - with(density) { librarianLeftPx.toDp() } + 8.dp).coerceAtLeast(16.dp)
+    }
     // Cible de défilement pour les livres à page unique (Règles, Montures) : initialisée
     // par le lien profond éventuel, puis mise à jour quand on clique un résultat de
     // recherche globale pointant vers une section de l'un de ces deux livres.
-    var activeRuleSectionTarget by remember { mutableStateOf(initialSectionTitle) }
     var activeMontureSectionTarget by remember { mutableStateOf<String?>(null) }
 
     // Écran de gestion des livres, désormais ouvert en cliquant la bibliothécaire :
@@ -485,13 +728,19 @@ fun LibraryScreen(
     // déclaré plus haut, avant `libraryBooks` qui en a besoin) : pilote l'affichage de son
     // contenu, en parallèle du mécanisme `selectedTab`/`tabKeys` réservé aux livres intégrés.
     var selectedCustomBookId by rememberSaveable { mutableStateOf<String?>(null) }
+    // Fiche ouverte depuis un livre personnalisé sans marqueurs `<!-- type: -->` (texte libre
+    // découpé par titres) : affichée sur place, faute d'écran de détail dédié ailleurs.
+    var openedCustomEntry by remember { mutableStateOf<SrdSectionEntry?>(null) }
 
     // États de chargement
     var monsters by remember { mutableStateOf<List<SrdEntry>?>(null) }
     var spells by remember { mutableStateOf<List<SrdSectionEntry>?>(null) }
-    var ruleSections by remember { mutableStateOf<List<RuleSection>?>(null) }
     var equipment by remember { mutableStateOf<List<EquipmentItem>?>(null) }
-    var glossaryMarkdown by remember { mutableStateOf<String?>(null) }
+    // Règles et glossaire découpés en entrées (une règle = une fiche), voir ReferenceEntryParser.
+    var ruleEntries by remember { mutableStateOf<List<SrdSectionEntry>?>(null) }
+    var glossaryEntries by remember { mutableStateOf<List<SrdSectionEntry>?>(null) }
+    // Livre États : généré depuis le catalogue des états (voir LivreEtats).
+    var etatsEntries by remember { mutableStateOf<List<SrdSectionEntry>?>(null) }
     var classes by remember { mutableStateOf<List<SrdSectionEntry>?>(null) }
     var especes by remember { mutableStateOf<List<SrdSectionEntry>?>(null) }
     var historiques by remember { mutableStateOf<List<SrdSectionEntry>?>(null) }
@@ -518,9 +767,10 @@ fun LibraryScreen(
         SrdRepository.forceRefreshFromAssets(context)
         monsters = null
         spells = null
-        ruleSections = null
         equipment = null
-        glossaryMarkdown = null
+        ruleEntries = null
+        glossaryEntries = null
+        etatsEntries = null
         classes = null
         especes = null
         historiques = null
@@ -533,8 +783,30 @@ fun LibraryScreen(
     // Recharge la liste des livres personnalisés à chaque changement de monde et à chaque
     // ajout/suppression (bookSettingsVersion, incrémenté par onSettingChanged côté écran
     // de gestion des livres).
-    LaunchedEffect(worldIdKey, bookSettingsVersion) {
+    // Livres d'une campagne non sélectionnée masqués (PorteeCampagne) ; versionLivres change
+    // quand on sélectionne une autre campagne : liste et contenu déjà chargé sont rafraîchis.
+    val versionLivres by com.jc2.jdrcompagnon.ui.PorteeCampagne.versionLivres.collectAsState()
+    LaunchedEffect(worldIdKey, bookSettingsVersion, versionLivres) {
         customBooks = CustomBooksStore.list(context, worldIdKey)
+            .filter { com.jc2.jdrcompagnon.ui.PorteeCampagne.livreVisible(it.id, worldIdKey) }
+    }
+    var versionLivresChargee by remember { mutableStateOf(versionLivres) }
+    LaunchedEffect(versionLivres) {
+        if (versionLivres == versionLivresChargee) return@LaunchedEffect
+        versionLivresChargee = versionLivres
+        monsters = null
+        spells = null
+        equipment = null
+        ruleEntries = null
+        glossaryEntries = null
+        etatsEntries = null
+        classes = null
+        especes = null
+        historiques = null
+        dons = null
+        armesMagiques = null
+        montures = null
+        srdRefreshTrigger++
     }
 
     // Chargement des données selon l'onglet sélectionné ET du monde (+ srdRefreshTrigger,
@@ -546,9 +818,10 @@ fun LibraryScreen(
         if (worldIdKey == null || worldId != worldIdKey) {
             monsters = null
             spells = null
-            ruleSections = null
             equipment = null
-            glossaryMarkdown = null
+            ruleEntries = null
+            glossaryEntries = null
+            etatsEntries = null
             classes = null
             especes = null
             historiques = null
@@ -557,10 +830,11 @@ fun LibraryScreen(
             montures = null
             selectedEquipmentCategories = emptySet()
             selectedSpellLevels = emptySet()
+            selectedSpellClasses = emptySet()
             selectedChallenges = emptySet()
+            selectedMonsterTerrains = emptySet()
             selectedDonCategories = emptySet()
             selectedArmeMagiqueCategories = emptySet()
-            activeRuleSectionTarget = null
             activeMontureSectionTarget = null
         }
         when (tabKeys[selectedTab]) {
@@ -583,9 +857,9 @@ fun LibraryScreen(
                 }
             }
             "rules" -> {
-                if (ruleSections == null) {
+                if (ruleEntries == null) {
                     try {
-                        ruleSections = SrdRepository.loadRuleSections(context, worldId)
+                        ruleEntries = SrdRepository.loadRuleEntries(context, worldId)
                     } catch (e: Exception) {
                         loadError = "Erreur de chargement : ${e.message}"
                     }
@@ -601,9 +875,18 @@ fun LibraryScreen(
                 }
             }
             "glossary" -> {
-                if (glossaryMarkdown == null) {
+                if (glossaryEntries == null) {
                     try {
-                        glossaryMarkdown = SrdRepository.loadGlossary(context, worldId)
+                        glossaryEntries = SrdRepository.loadGlossaryEntries(context, worldId)
+                    } catch (e: Exception) {
+                        loadError = "Erreur de chargement : ${e.message}"
+                    }
+                }
+            }
+            "etats" -> {
+                if (etatsEntries == null) {
+                    try {
+                        etatsEntries = SrdRepository.loadEtats(context, worldId)
                     } catch (e: Exception) {
                         loadError = "Erreur de chargement : ${e.message}"
                     }
@@ -676,9 +959,10 @@ fun LibraryScreen(
         try {
             if (monsters == null) monsters = SrdRepository.loadMonsters(context, worldId)
             if (spells == null) spells = SrdRepository.loadSpellsIndex(context, worldId)
-            if (ruleSections == null) ruleSections = SrdRepository.loadRuleSections(context, worldId)
+            if (ruleEntries == null) ruleEntries = SrdRepository.loadRuleEntries(context, worldId)
             if (equipment == null) equipment = SrdRepository.loadEquipmentList(context, worldId)
-            if (glossaryMarkdown == null) glossaryMarkdown = SrdRepository.loadGlossary(context, worldId)
+            if (glossaryEntries == null) glossaryEntries = SrdRepository.loadGlossaryEntries(context, worldId)
+            if (etatsEntries == null) etatsEntries = SrdRepository.loadEtats(context, worldId)
             if (classes == null) classes = SrdRepository.loadClasses(context, worldId)
             if (especes == null) especes = SrdRepository.loadEspeces(context, worldId)
             if (historiques == null) historiques = SrdRepository.loadHistoriques(context, worldId)
@@ -694,7 +978,7 @@ fun LibraryScreen(
     // contenu de chaque entrée, toutes catégories confondues. `onSelect` sait exactement
     // où naviguer pour chaque type de livre.
     val globalSearchResults = remember(
-        globalSearchQuery, monsters, spells, ruleSections, equipment, glossaryMarkdown,
+        globalSearchQuery, globalSearchScope, monsters, spells, ruleEntries, equipment, glossaryEntries, etatsEntries,
         classes, especes, historiques, dons, armesMagiques, montures,
     ) {
         val query = globalSearchQuery.trim()
@@ -702,8 +986,8 @@ fun LibraryScreen(
 
         buildList {
             monsters?.forEach { entry ->
-                if (entry.name.contains(query, ignoreCase = true) || entry.rawMarkdown.contains(query, ignoreCase = true)) {
-                    add(GlobalSearchResult(entry.name, "Monstres") {
+                LibrarySearch.score(query, entry.name, entry.rawMarkdown)?.let { score ->
+                    add(GlobalSearchResult(entry.name, "Monstres", score) {
                         selectedTab = tabKeys.indexOf("monsters")
                         showShelf = false
                         globalSearchQuery = ""
@@ -712,8 +996,8 @@ fun LibraryScreen(
                 }
             }
             spells?.forEach { entry ->
-                if (entry.name.contains(query, ignoreCase = true) || entry.rawMarkdown.contains(query, ignoreCase = true)) {
-                    add(GlobalSearchResult(entry.name, "Sorts") {
+                LibrarySearch.score(query, entry.name, entry.rawMarkdown)?.let { score ->
+                    add(GlobalSearchResult(entry.name, "Sorts", score) {
                         selectedTab = tabKeys.indexOf("spells")
                         showShelf = false
                         globalSearchQuery = ""
@@ -721,19 +1005,19 @@ fun LibraryScreen(
                     })
                 }
             }
-            ruleSections?.forEach { section ->
-                if (section.title.contains(query, ignoreCase = true) || section.content.contains(query, ignoreCase = true)) {
-                    add(GlobalSearchResult(section.title, "Règles") {
+            ruleEntries?.forEach { entry ->
+                LibrarySearch.score(query, entry.name, entry.rawMarkdown)?.let { score ->
+                    add(GlobalSearchResult(entry.name, "Règles", score) {
                         selectedTab = tabKeys.indexOf("rules")
                         showShelf = false
                         globalSearchQuery = ""
-                        activeRuleSectionTarget = section.title
+                        onRuleClick(entry.name)
                     })
                 }
             }
             equipment?.forEach { item ->
-                if (item.name.contains(query, ignoreCase = true) || item.rawMarkdown.contains(query, ignoreCase = true)) {
-                    add(GlobalSearchResult(item.name, "Équipement") {
+                LibrarySearch.score(query, item.name, item.rawMarkdown)?.let { score ->
+                    add(GlobalSearchResult(item.name, "Équipement", score) {
                         selectedTab = tabKeys.indexOf("equipment")
                         showShelf = false
                         globalSearchQuery = ""
@@ -741,18 +1025,29 @@ fun LibraryScreen(
                     })
                 }
             }
-            glossaryMarkdown?.let { md ->
-                if (md.contains(query, ignoreCase = true)) {
-                    add(GlobalSearchResult("Glossaire", "Glossaire") {
+            glossaryEntries?.forEach { entry ->
+                LibrarySearch.score(query, entry.name, entry.rawMarkdown)?.let { score ->
+                    add(GlobalSearchResult(entry.name, "Glossaire", score) {
                         selectedTab = tabKeys.indexOf("glossary")
                         showShelf = false
                         globalSearchQuery = ""
+                        onGlossaryClick(entry.name)
+                    })
+                }
+            }
+            etatsEntries?.forEach { entry ->
+                LibrarySearch.score(query, entry.name, entry.rawMarkdown)?.let { score ->
+                    add(GlobalSearchResult(entry.name, "États", score) {
+                        selectedTab = tabKeys.indexOf("etats")
+                        showShelf = false
+                        globalSearchQuery = ""
+                        onEtatClick(entry.name)
                     })
                 }
             }
             classes?.forEach { entry ->
-                if (entry.name.contains(query, ignoreCase = true) || entry.rawMarkdown.contains(query, ignoreCase = true)) {
-                    add(GlobalSearchResult(entry.name, "Classes") {
+                LibrarySearch.score(query, entry.name, entry.rawMarkdown)?.let { score ->
+                    add(GlobalSearchResult(entry.name, "Classes", score) {
                         selectedTab = tabKeys.indexOf("classes")
                         showShelf = false
                         globalSearchQuery = ""
@@ -761,8 +1056,8 @@ fun LibraryScreen(
                 }
             }
             especes?.forEach { entry ->
-                if (entry.name.contains(query, ignoreCase = true) || entry.rawMarkdown.contains(query, ignoreCase = true)) {
-                    add(GlobalSearchResult(entry.name, "Espèces") {
+                LibrarySearch.score(query, entry.name, entry.rawMarkdown)?.let { score ->
+                    add(GlobalSearchResult(entry.name, "Espèces", score) {
                         selectedTab = tabKeys.indexOf("especes")
                         showShelf = false
                         globalSearchQuery = ""
@@ -771,8 +1066,8 @@ fun LibraryScreen(
                 }
             }
             historiques?.forEach { entry ->
-                if (entry.name.contains(query, ignoreCase = true) || entry.rawMarkdown.contains(query, ignoreCase = true)) {
-                    add(GlobalSearchResult(entry.name, "Historiques") {
+                LibrarySearch.score(query, entry.name, entry.rawMarkdown)?.let { score ->
+                    add(GlobalSearchResult(entry.name, "Historiques", score) {
                         selectedTab = tabKeys.indexOf("historiques")
                         showShelf = false
                         globalSearchQuery = ""
@@ -781,8 +1076,8 @@ fun LibraryScreen(
                 }
             }
             dons?.forEach { entry ->
-                if (entry.name.contains(query, ignoreCase = true) || entry.rawMarkdown.contains(query, ignoreCase = true)) {
-                    add(GlobalSearchResult(entry.name, "Dons") {
+                LibrarySearch.score(query, entry.name, entry.rawMarkdown)?.let { score ->
+                    add(GlobalSearchResult(entry.name, "Dons", score) {
                         selectedTab = tabKeys.indexOf("dons")
                         showShelf = false
                         globalSearchQuery = ""
@@ -791,8 +1086,8 @@ fun LibraryScreen(
                 }
             }
             armesMagiques?.forEach { entry ->
-                if (entry.name.contains(query, ignoreCase = true) || entry.rawMarkdown.contains(query, ignoreCase = true)) {
-                    add(GlobalSearchResult(entry.name, "Armes magiques") {
+                LibrarySearch.score(query, entry.name, entry.rawMarkdown)?.let { score ->
+                    add(GlobalSearchResult(entry.name, "Armes magiques", score) {
                         selectedTab = tabKeys.indexOf("armes_magiques")
                         showShelf = false
                         globalSearchQuery = ""
@@ -801,8 +1096,8 @@ fun LibraryScreen(
                 }
             }
             montures?.forEach { section ->
-                if (section.title.contains(query, ignoreCase = true) || section.content.contains(query, ignoreCase = true)) {
-                    add(GlobalSearchResult(section.title, "Montures") {
+                LibrarySearch.score(query, section.title, section.content)?.let { score ->
+                    add(GlobalSearchResult(section.title, "Montures", score) {
                         selectedTab = tabKeys.indexOf("montures")
                         showShelf = false
                         globalSearchQuery = ""
@@ -810,8 +1105,28 @@ fun LibraryScreen(
                     })
                 }
             }
-        }
+        }.filter { globalSearchScope == null || it.categoryLabel == globalSearchScope }
+            .sortedByDescending { it.score }
     }
+
+    // Fenêtre de catégories de la recherche globale : nombre d'entrées de chaque livre visible
+    // (null = encore en chargement). Un clic sur une catégorie restreint la recherche à elle
+    // (globalSearchScope), en utilisant les mêmes libellés que GlobalSearchResult.categoryLabel.
+    val globalSearchCategories: List<Pair<String, Int?>> = listOf(
+        Triple("monsters", "Monstres", monsters?.size),
+        Triple("spells", "Sorts", spells?.size),
+        Triple("rules", "Règles", ruleEntries?.size),
+        Triple("equipment", "Équipement", equipment?.size),
+        Triple("glossary", "Glossaire", glossaryEntries?.size),
+        Triple("etats", "États", etatsEntries?.size),
+        Triple("classes", "Classes", classes?.size),
+        Triple("especes", "Espèces", especes?.size),
+        Triple("historiques", "Historiques", historiques?.size),
+        Triple("dons", "Dons", dons?.size),
+        Triple("armes_magiques", "Armes magiques", armesMagiques?.size),
+        Triple("montures", "Montures", montures?.size),
+    ).filter { (key, _, count) -> key in tabKeys && count != 0 }
+        .map { (_, label, count) -> label to count }
 
     // Fond dédié à la bibliothèque, fourni en asset (comme ic_acceuil dans AppBottomBar) ;
     // repli silencieux sur le fond sombre uniforme (ForcedDarkPalette) si le fichier est
@@ -831,6 +1146,28 @@ fun LibraryScreen(
                 contentScale = ContentScale.Crop
             )
         }
+        // Retour système (bouton/geste) : même logique que la flèche de la barre du haut —
+        // depuis un livre ou les réglages on revient à l'étagère de tous les livres, au lieu
+        // de quitter la Bibliothèque (ce qui ramenait à l'accueil). Seule l'étagère sans
+        // recherche en cours laisse le retour à la navigation.
+        // Bibliothèque ouverte directement sur un livre (ex. lien #rule: d'un scénario) sans être
+        // passée par l'étagère : le retour ramène alors à l'écran d'origine.
+        LaunchedEffect(showShelf) { if (showShelf) hasVisitedShelf = true }
+        BackHandler(enabled = showBookSettings || (!showShelf && hasVisitedShelf) || (showShelf && globalSearchQuery.isNotBlank())) {
+            when {
+                showBookSettings -> showBookSettings = false
+                showShelf -> globalSearchQuery = ""
+                openedCustomEntry != null -> openedCustomEntry = null
+                else -> {
+                    selectedCustomBookId = null
+                    showShelf = true
+                }
+            }
+        }
+        // Fenêtre des catégories de recherche ouverte : le retour la referme d'abord (prioritaire
+        // sur le BackHandler ci-dessus, déclaré avant).
+        val focusManager = LocalFocusManager.current
+        BackHandler(enabled = showShelf && globalSearchFocused) { focusManager.clearFocus() }
         Scaffold(
             topBar = {
                 TopAppBar(
@@ -840,6 +1177,7 @@ fun LibraryScreen(
                                 text = when {
                                     showBookSettings -> "Réglages des livres"
                                     showShelf -> "Bibliothèque"
+                                    openedCustomEntry != null -> openedCustomEntry?.name.orEmpty()
                                     selectedCustomBookId != null ->
                                         customBooks.find { it.id == selectedCustomBookId }?.name.orEmpty()
                                     else -> tabs.getOrNull(selectedTab).orEmpty()
@@ -861,6 +1199,8 @@ fun LibraryScreen(
                                 showBookSettings -> showBookSettings = false
                                 showShelf && globalSearchQuery.isNotBlank() -> globalSearchQuery = ""
                                 showShelf -> onBack()
+                                openedCustomEntry != null -> openedCustomEntry = null
+                                !hasVisitedShelf -> onBack()
                                 else -> {
                                     selectedCustomBookId = null
                                     showShelf = true
@@ -901,12 +1241,14 @@ fun LibraryScreen(
                         .padding(innerPadding)
                 ) {
                     if (showBookSettings) {
-                        LibraryBookSettingsScreen(
-                            books = libraryBooks,
-                            worldId = currentWorld?.id,
-                            onSettingChanged = { bookSettingsVersion++ },
-                            onForceRefresh = onForceSrdRefresh,
-                        )
+                        BelowLibrarian(librarianBottomPx) {
+                            LibraryBookSettingsScreen(
+                                books = libraryBooks,
+                                worldId = currentWorld?.id,
+                                onSettingChanged = { bookSettingsVersion++ },
+                                onForceRefresh = onForceSrdRefresh,
+                            )
+                        }
                     } else {
                         if (showGlobalSearch) {
                             // Réserve de l'espace à droite (padding end) pour que le champ ne
@@ -917,13 +1259,15 @@ fun LibraryScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(start = 16.dp, end = 132.dp, top = 8.dp, bottom = 8.dp),
+                                    .padding(start = 16.dp, end = librarianReserveEnd, top = 8.dp, bottom = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 OutlinedTextField(
                                     value = globalSearchQuery,
                                     onValueChange = { globalSearchQuery = it },
-                                    placeholder = { Text("Comment puis-je vous aider ?") },
+                                    placeholder = {
+                                        Text(globalSearchScope?.let { "Rechercher dans : $it" } ?: "Comment puis-je vous aider ?")
+                                    },
                                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Rechercher") },
                                     trailingIcon = {
                                         if (globalSearchQuery.isNotEmpty()) {
@@ -932,69 +1276,113 @@ fun LibraryScreen(
                                             }
                                         }
                                     },
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .onFocusChanged { globalSearchFocused = it.isFocused },
                                     singleLine = true,
                                     shape = RoundedCornerShape(24.dp),
+                                    colors = librarySearchFieldColors(),
+                                )
+                            }
+                            // Catégorie choisie : rappel sous le champ, avec une croix pour
+                            // revenir à une recherche dans toute la bibliothèque.
+                            globalSearchScope?.let { scope ->
+                                InputChip(
+                                    selected = true,
+                                    onClick = { globalSearchScope = null },
+                                    label = { Text("Dans : $scope", color = Color.White) },
+                                    trailingIcon = { Icon(Icons.Default.Close, contentDescription = "Chercher partout", tint = Color.White, modifier = Modifier.size(16.dp)) },
+                                    colors = InputChipDefaults.inputChipColors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
+                                    ),
+                                    modifier = Modifier.padding(start = 16.dp),
                                 )
                             }
                         }
 
-                        if (showGlobalSearch && trimmedGlobalQuery.length >= 2) {
+                        if (showGlobalSearch && globalSearchFocused && trimmedGlobalQuery.length < 2) {
+                            // Fenêtre ouverte au clic sur la recherche : nombre d'entrées par
+                            // catégorie ; un clic restreint la recherche à cette catégorie.
+                            BelowLibrarian(librarianBottomPx) {
+                                GlobalSearchCategoryPanel(
+                                    categories = globalSearchCategories,
+                                    selected = globalSearchScope,
+                                    onSelect = { globalSearchScope = it },
+                                )
+                            }
+                        } else if (showGlobalSearch && trimmedGlobalQuery.length >= 2) {
+                            BelowLibrarian(librarianBottomPx) {
                             if (globalSearchResults.isEmpty()) {
-                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Surface(
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
+                                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                ) {
                                     Text(
                                         text = "Aucun résultat pour « $trimmedGlobalQuery ».",
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        color = Color.White,
                                         textAlign = TextAlign.Center,
                                         modifier = Modifier.padding(24.dp),
                                     )
                                 }
                             } else {
-                                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                                // Une case par résultat (fond translucide arrondi comme les autres
+                                // listes de l'app), texte en blanc pour rester lisible sur le fond.
+                                LazyColumn(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
                                     items(
                                         globalSearchResults,
                                         key = { it.categoryLabel + "_" + it.entryName },
                                     ) { result ->
                                         Surface(
                                             onClick = result.onSelect,
-                                            color = Color.Transparent,
+                                            shape = RoundedCornerShape(12.dp),
+                                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
                                             modifier = Modifier.fillMaxWidth(),
                                         ) {
                                             Column(
-                                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                                             ) {
                                                 Text(
                                                     text = result.entryName,
                                                     style = MaterialTheme.typography.bodyLarge,
                                                     fontWeight = FontWeight.Bold,
+                                                    color = Color.White,
                                                 )
                                                 Text(
                                                     text = result.categoryLabel,
                                                     style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.primary,
+                                                    color = Color.White.copy(alpha = 0.8f),
                                                 )
                                             }
                                         }
-                                        HorizontalDivider()
                                     }
                                 }
                             }
+                            }
                         } else {
-                            LibraryBookshelf(
-                                books = libraryBooks,
-                                modifier = Modifier.fillMaxSize(),
-                                worldId = currentWorld?.id,
-                                settingsVersion = bookSettingsVersion,
-                                onBookClick = { index ->
-                                    if (index < tabs.size) {
-                                        selectedTab = index
-                                        selectedCustomBookId = null
-                                    } else {
-                                        selectedCustomBookId = customBooks.getOrNull(index - tabs.size)?.id
-                                    }
-                                    showShelf = false
-                                },
-                            )
+                            BelowLibrarian(librarianBottomPx) {
+                                LibraryBookshelf(
+                                    books = libraryBooks,
+                                    modifier = Modifier.fillMaxSize(),
+                                    worldId = currentWorld?.id,
+                                    settingsVersion = bookSettingsVersion,
+                                    onBookClick = { index ->
+                                        if (index < tabs.size) {
+                                            selectedTab = index
+                                            selectedCustomBookId = null
+                                        } else {
+                                            selectedCustomBookId = customBooks.getOrNull(index - tabs.size)?.id
+                                        }
+                                        openedCustomEntry = null
+                                        searchQuery = ""
+                                        showShelf = false
+                                    },
+                                )
+                            }
                         }
                     }
                 }
@@ -1006,23 +1394,53 @@ fun LibraryScreen(
                 val content = remember(book?.fileName) {
                     book?.fileName?.let { readCustomBookContent(context, it) }
                 }
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                        .verticalScroll(rememberScrollState())
-                        .padding(16.dp)
-                ) {
+                // Même présentation que les livres intégrés : une liste d'entrées cliquables
+                // groupées par type, chacune ouvrant sa fiche (plutôt qu'un long texte brut).
+                val rows = remember(content) { content?.let { customBookRows(it) }.orEmpty() }
+                val rowsByEntry = remember(rows) { rows.associateBy { it.entry } }
+                val openedEntry = openedCustomEntry
+                Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+                    if (openedEntry == null && rows.isNotEmpty()) {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            placeholder = { Text("Rechercher...") },
+                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Rechercher") },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 16.dp, end = librarianReserveEnd, top = 8.dp, bottom = 8.dp),
+                            singleLine = true,
+                            shape = RoundedCornerShape(24.dp),
+                            colors = librarySearchFieldColors(),
+                        )
+                    }
+                    LibrarianClearance(librarianBottomPx)
                     when {
-                        book == null -> Text(
-                            text = "Ce livre n'existe plus.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        book == null -> CustomBookMessage("Ce livre n'existe plus.")
+                        content == null -> CustomBookMessage("Impossible de lire le contenu de ce fichier.")
+                        openedEntry != null -> CustomBookEntryCard(openedEntry.category, openedEntry.rawMarkdown)
+                        // Aucun titre exploitable : le texte entier dans une seule fiche.
+                        rows.isEmpty() -> CustomBookEntryCard("", content)
+                        else -> SectionEntryByCategoryList(
+                            entries = rows.map { it.entry }
+                                .filter { searchQuery.isBlank() || LibrarySearch.matchesName(searchQuery, it.name) },
+                            onItemClick = { entry ->
+                                val row = rowsByEntry[entry]
+                                when (row?.kind) {
+                                    CustomBookRowKind.MONSTRE -> onMonsterClick(entry.name)
+                                    CustomBookRowKind.SORT -> onSpellClick(entry.name)
+                                    CustomBookRowKind.OBJET -> row.equipment?.let(onEquipmentClick)
+                                    CustomBookRowKind.CLASSE -> onClasseClick(entry.name)
+                                    CustomBookRowKind.ESPECE -> onEspeceClick(entry.name)
+                                    CustomBookRowKind.HISTORIQUE -> onHistoriqueClick(entry.name)
+                                    CustomBookRowKind.DON -> onDonClick(entry.name)
+                                    CustomBookRowKind.REGLE -> onRuleClick(entry.name)
+                                    CustomBookRowKind.LIBRE, null -> openedCustomEntry = entry
+                                }
+                            },
+                            subtitle = { rowsByEntry[it]?.subtitle.orEmpty() },
+                            keepFileOrder = rows.all { it.kind == CustomBookRowKind.LIBRE },
                         )
-                        content == null -> Text(
-                            text = "Impossible de lire le contenu de ce fichier.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        else -> Markdown(content = content)
                     }
                 }
                 return@Scaffold
@@ -1042,10 +1460,13 @@ fun LibraryScreen(
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Rechercher") },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 16.dp, end = 132.dp, top = 8.dp, bottom = 8.dp),
+                        .padding(start = 16.dp, end = librarianReserveEnd, top = 8.dp, bottom = 8.dp),
                     singleLine = true,
                     shape = RoundedCornerShape(24.dp),
+                    colors = librarySearchFieldColors(),
                 )
+                // Filtres et liste commencent sous la bibliothécaire (en-têtes de lettre, etc.).
+                LibrarianClearance(librarianBottomPx)
 
                 // Le bandeau d'onglets a été abandonné : la navigation entre catégories
                 // se fait uniquement via l'étagère (retour avec la flèche du haut).
@@ -1067,9 +1488,9 @@ fun LibraryScreen(
                     val availableChallenges = monsters?.mapNotNull { monsterChallenge(it)?.first }?.distinct().orEmpty()
                     if (availableChallenges.isNotEmpty()) {
                         FilterButtonRow(
-                            activeFilterCount = selectedChallenges.size,
+                            activeFilterCount = selectedChallenges.size + selectedMonsterTerrains.size,
                             onOpen = { showFilterSheet = true },
-                            onReset = { selectedChallenges = emptySet() },
+                            onReset = { selectedChallenges = emptySet(); selectedMonsterTerrains = emptySet() },
                         )
                     }
                 }
@@ -1079,9 +1500,9 @@ fun LibraryScreen(
                     val availableSpellLevels = spells?.map { it.category }?.distinct().orEmpty()
                     if (availableSpellLevels.isNotEmpty()) {
                         FilterButtonRow(
-                            activeFilterCount = selectedSpellLevels.size,
+                            activeFilterCount = selectedSpellLevels.size + selectedSpellClasses.size,
                             onOpen = { showFilterSheet = true },
-                            onReset = { selectedSpellLevels = emptySet() },
+                            onReset = { selectedSpellLevels = emptySet(); selectedSpellClasses = emptySet() },
                         )
                     }
                 }
@@ -1121,12 +1542,16 @@ fun LibraryScreen(
                                 val filtered = if (selectedChallenges.isEmpty()) {
                                     monsterList
                                 } else {
-                                    monsterList.filter { monsterChallenge(it)?.first in selectedChallenges }
+                                    // selectedChallenges contient des noms de tranches (TrancheDefi).
+                                    monsterList.filter { m -> monsterChallenge(m)?.first?.let { TrancheDefi.de(it).name } in selectedChallenges }
+                                }.let { parDefi ->
+                                    if (selectedMonsterTerrains.isEmpty()) parDefi
+                                    else parDefi.filter { it.rencontrableDans(selectedMonsterTerrains) }
                                 }
                                 val bySearch = if (searchQuery.isBlank()) {
                                     filtered
                                 } else {
-                                    filtered.filter { it.name.contains(searchQuery, ignoreCase = true) }
+                                    filtered.filter { LibrarySearch.matchesName(searchQuery, it.name) }
                                 }
                                 AlphabeticalEntryList(
                                     entries = bySearch,
@@ -1143,28 +1568,30 @@ fun LibraryScreen(
                                 val bySearch = if (searchQuery.isBlank()) {
                                     spellList
                                 } else {
-                                    spellList.filter { it.name.contains(searchQuery, ignoreCase = true) }
+                                    spellList.filter { LibrarySearch.matchesName(searchQuery, it.name) }
                                 }
-                                val filtered = if (selectedSpellLevels.isEmpty()) {
-                                    bySearch
-                                } else {
-                                    bySearch.filter { it.category in selectedSpellLevels }
-                                }
+                                val filtered = bySearch
+                                    .filter { selectedSpellLevels.isEmpty() || it.category in selectedSpellLevels }
+                                    .filter { s -> selectedSpellClasses.isEmpty() || classesDuSort(s).any { it in selectedSpellClasses } }
                                 SectionEntryByCategoryList(
                                     entries = filtered,
                                     onItemClick = { onSpellClick(it.name) },
                                     subtitle = { it.rawMarkdown },
+                                    secondaryText = { entry -> entry.classes.ifBlank { null }?.let { "Classes : $it" } },
                                 )
                             }
                         }
+                        // Règles et glossaire : une entrée par règle, groupées par section dans
+                        // l'ordre du livre, chacune ouvrant sa fiche (comme l'équipement).
                         "rules" -> {
-                            val sections = ruleSections
-                            if (sections == null) {
+                            val list = ruleEntries
+                            if (list == null) {
                                 LoadingBox()
                             } else {
-                                RulesTocScreen(
-                                    sections = sections,
-                                    initialSectionTitle = activeRuleSectionTarget
+                                SectionEntryByCategoryList(
+                                    entries = list.filter { searchQuery.isBlank() || LibrarySearch.matchesName(searchQuery, it.name) },
+                                    onItemClick = { onRuleClick(it.name) },
+                                    keepFileOrder = true,
                                 )
                             }
                         }
@@ -1176,7 +1603,7 @@ fun LibraryScreen(
                                 val bySearch = if (searchQuery.isBlank()) {
                                     equipmentList
                                 } else {
-                                    equipmentList.filter { it.name.contains(searchQuery, ignoreCase = true) }
+                                    equipmentList.filter { LibrarySearch.matchesName(searchQuery, it.name) }
                                 }
                                 val filtered = if (selectedEquipmentCategories.isEmpty()) {
                                     bySearch
@@ -1190,11 +1617,27 @@ fun LibraryScreen(
                             }
                         }
                         "glossary" -> {
-                            val md = glossaryMarkdown
-                            if (md == null) {
+                            val list = glossaryEntries
+                            if (list == null) {
                                 LoadingBox()
                             } else {
-                                MarkdownScrollColumn(md)
+                                SectionEntryByCategoryList(
+                                    entries = list.filter { searchQuery.isBlank() || LibrarySearch.matchesName(searchQuery, it.name) },
+                                    onItemClick = { onGlossaryClick(it.name) },
+                                    keepFileOrder = true,
+                                )
+                            }
+                        }
+                        "etats" -> {
+                            val list = etatsEntries
+                            if (list == null) {
+                                LoadingBox()
+                            } else {
+                                SectionEntryByCategoryList(
+                                    entries = list.filter { searchQuery.isBlank() || LibrarySearch.matchesName(searchQuery, it.name) },
+                                    onItemClick = { onEtatClick(it.name) },
+                                    keepFileOrder = true,
+                                )
                             }
                         }
                         "classes" -> {
@@ -1205,7 +1648,7 @@ fun LibraryScreen(
                                 val bySearch = if (searchQuery.isBlank()) {
                                     list
                                 } else {
-                                    list.filter { it.name.contains(searchQuery, ignoreCase = true) }
+                                    list.filter { LibrarySearch.matchesName(searchQuery, it.name) }
                                 }
                                 SectionEntryAlphabeticalList(
                                     entries = bySearch,
@@ -1221,7 +1664,7 @@ fun LibraryScreen(
                                 val bySearch = if (searchQuery.isBlank()) {
                                     list
                                 } else {
-                                    list.filter { it.name.contains(searchQuery, ignoreCase = true) }
+                                    list.filter { LibrarySearch.matchesName(searchQuery, it.name) }
                                 }
                                 SectionEntryAlphabeticalList(
                                     entries = bySearch,
@@ -1237,7 +1680,7 @@ fun LibraryScreen(
                                 val bySearch = if (searchQuery.isBlank()) {
                                     list
                                 } else {
-                                    list.filter { it.name.contains(searchQuery, ignoreCase = true) }
+                                    list.filter { LibrarySearch.matchesName(searchQuery, it.name) }
                                 }
                                 SectionEntryAlphabeticalList(
                                     entries = bySearch,
@@ -1253,7 +1696,7 @@ fun LibraryScreen(
                                 val bySearch = if (searchQuery.isBlank()) {
                                     list
                                 } else {
-                                    list.filter { it.name.contains(searchQuery, ignoreCase = true) }
+                                    list.filter { LibrarySearch.matchesName(searchQuery, it.name) }
                                 }
                                 val filtered = if (selectedDonCategories.isEmpty()) {
                                     bySearch
@@ -1274,7 +1717,7 @@ fun LibraryScreen(
                                 val bySearch = if (searchQuery.isBlank()) {
                                     list
                                 } else {
-                                    list.filter { it.name.contains(searchQuery, ignoreCase = true) }
+                                    list.filter { LibrarySearch.matchesName(searchQuery, it.name) }
                                 }
                                 val filtered = if (selectedArmeMagiqueCategories.isEmpty()) {
                                     bySearch
@@ -1319,11 +1762,13 @@ fun LibraryScreen(
                 val activeTabKey = tabKeys[selectedTab]
                 val availableCategories = equipment?.map { it.category }?.distinct().orEmpty()
                 val availableSpellLevels = spells?.map { it.category }?.distinct().orEmpty()
-                val availableChallenges = monsters
-                    ?.mapNotNull { monsterChallenge(it)?.first }
+                // Seules les tranches et classes présentes dans le livre du monde sont proposées.
+                val availableTranches = monsters
+                    ?.mapNotNull { monsterChallenge(it)?.first?.let(TrancheDefi::de) }
                     ?.distinct()
-                    ?.sortedBy { challengeSortKey(it) }
+                    ?.sortedBy { it.ordinal }
                     .orEmpty()
+                val availableSpellClasses = spells?.flatMap(::classesDuSort)?.distinct()?.sorted().orEmpty()
                 val availableDonCategories = dons?.map { it.category }?.distinct().orEmpty()
                 val availableArmeCategories = armesMagiques?.map { it.category }?.distinct().orEmpty()
                 ModalBottomSheet(
@@ -1352,43 +1797,75 @@ fun LibraryScreen(
 
                         when (activeTabKey) {
                             "spells" -> {
+                                // Puces plutôt qu'une ligne par option : tout tient sur un écran.
+                                Text(
+                                    text = "Classe",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    availableSpellClasses.forEach { classe ->
+                                        FilterChip(
+                                            selected = classe in selectedSpellClasses,
+                                            onClick = {
+                                                selectedSpellClasses = if (classe in selectedSpellClasses) selectedSpellClasses - classe else selectedSpellClasses + classe
+                                            },
+                                            label = { Text(classe) },
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(16.dp))
                                 Text(
                                     text = "Niveau",
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Bold,
                                 )
-                                availableSpellLevels.forEach { level ->
-                                    CheckableFilterRow(
-                                        label = level,
-                                        checked = level in selectedSpellLevels,
-                                        onToggle = { checked ->
-                                            selectedSpellLevels = if (checked) {
-                                                selectedSpellLevels + level
-                                            } else {
-                                                selectedSpellLevels - level
-                                            }
-                                        },
-                                    )
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    availableSpellLevels.forEach { level ->
+                                        FilterChip(
+                                            selected = level in selectedSpellLevels,
+                                            onClick = {
+                                                selectedSpellLevels = if (level in selectedSpellLevels) selectedSpellLevels - level else selectedSpellLevels + level
+                                            },
+                                            label = { Text(level) },
+                                        )
+                                    }
                                 }
                             }
                             "monsters" -> {
+                                // Cinq tranches de défi (FP et PX) au lieu d'une ligne par FP.
                                 Text(
                                     text = "Niveau de défi",
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Bold,
                                 )
-                                availableChallenges.forEach { challenge ->
-                                    CheckableFilterRow(
-                                        label = challenge,
-                                        checked = challenge in selectedChallenges,
-                                        onToggle = { checked ->
-                                            selectedChallenges = if (checked) {
-                                                selectedChallenges + challenge
-                                            } else {
-                                                selectedChallenges - challenge
-                                            }
-                                        },
-                                    )
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    availableTranches.forEach { tranche ->
+                                        FilterChip(
+                                            selected = tranche.name in selectedChallenges,
+                                            onClick = {
+                                                selectedChallenges = if (tranche.name in selectedChallenges) selectedChallenges - tranche.name else selectedChallenges + tranche.name
+                                            },
+                                            label = { Text(tranche.label) },
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text(
+                                    text = "Environnement",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    TERRAINS_SRD.forEach { terrain ->
+                                        FilterChip(
+                                            selected = terrain in selectedMonsterTerrains,
+                                            onClick = {
+                                                selectedMonsterTerrains = if (terrain in selectedMonsterTerrains) selectedMonsterTerrains - terrain else selectedMonsterTerrains + terrain
+                                            },
+                                            label = { Text(terrain) },
+                                        )
+                                    }
                                 }
                             }
                             "dons" -> {
@@ -1460,8 +1937,8 @@ fun LibraryScreen(
                         ) {
                             TextButton(onClick = {
                                 when (activeTabKey) {
-                                    "spells" -> selectedSpellLevels = emptySet()
-                                    "monsters" -> selectedChallenges = emptySet()
+                                    "spells" -> { selectedSpellLevels = emptySet(); selectedSpellClasses = emptySet() }
+                                    "monsters" -> { selectedChallenges = emptySet(); selectedMonsterTerrains = emptySet() }
                                     "dons" -> selectedDonCategories = emptySet()
                                     "armes_magiques" -> selectedArmeMagiqueCategories = emptySet()
                                     else -> selectedEquipmentCategories = emptySet()
@@ -1495,11 +1972,145 @@ fun LibraryScreen(
                 .align(Alignment.TopEnd)
                 .padding(top = 50.dp, end = 1.dp)
                 .size(161.dp)
+                .onGloballyPositioned {
+                    librarianBottomPx = it.positionInRoot().y + it.size.height
+                    librarianLeftPx = it.positionInRoot().x
+                }
                 .clickable {
                     showShelf = true
                     showBookSettings = true
                 },
         )
+    }
+}
+
+/**
+ * Couleurs des champs de recherche de la bibliothèque : texte, indication et icônes en blanc
+ * sur une case de fond translucide (comme les cartes de l'app), lisibles sur le décor.
+ */
+@Composable
+private fun librarySearchFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedTextColor = Color.White,
+    unfocusedTextColor = Color.White,
+    focusedPlaceholderColor = Color.White.copy(alpha = 0.8f),
+    unfocusedPlaceholderColor = Color.White.copy(alpha = 0.8f),
+    focusedLeadingIconColor = Color.White,
+    unfocusedLeadingIconColor = Color.White,
+    focusedTrailingIconColor = Color.White,
+    unfocusedTrailingIconColor = Color.White,
+    focusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
+    unfocusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
+    focusedBorderColor = Color.White,
+    unfocusedBorderColor = Color.White.copy(alpha = 0.5f),
+    focusedLabelColor = Color.White,
+    unfocusedLabelColor = Color.White.copy(alpha = 0.8f),
+    cursorColor = Color.White,
+)
+
+/** Boutons texte des dialogues de la bibliothèque : libellés en blanc, comme le reste. */
+@Composable
+private fun libraryDialogButtonColors() = ButtonDefaults.textButtonColors(
+    contentColor = Color.White,
+    disabledContentColor = Color.White.copy(alpha = 0.4f),
+)
+
+/**
+ * Espace vide qui s'étend jusqu'au bas de la bibliothécaire (superposée en haut à droite de
+ * l'écran) : placé au-dessus d'un contenu qui prend toute la largeur (listes, étagère...), il
+ * garantit que rien ne passe sous elle. Hauteur nulle si le contenu commence déjà plus bas.
+ */
+@Composable
+private fun LibrarianClearance(librarianBottomPx: Float) {
+    val density = LocalDensity.current
+    var topPx by remember { mutableStateOf(Float.MAX_VALUE) }
+    val height = with(density) { (librarianBottomPx - topPx).coerceAtLeast(0f).toDp() }
+    Spacer(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(height)
+            // positionInRoot et non boundsInRoot : pour un espace de hauteur nulle, boundsInRoot
+            // renvoie Rect.Zero (top = 0), ce qui faisait osciller la hauteur à chaque image
+            // (les livres montaient et descendaient en boucle). Seuil de 1 px contre le bruit.
+            .onGloballyPositioned { coords ->
+                val y = coords.positionInRoot().y
+                if (kotlin.math.abs(y - topPx) > 1f) topPx = y
+            }
+    )
+}
+
+/** [content] placé sous la bibliothécaire (voir [LibrarianClearance]). */
+@Composable
+private fun BelowLibrarian(librarianBottomPx: Float, content: @Composable () -> Unit) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        LibrarianClearance(librarianBottomPx)
+        content()
+    }
+}
+
+/**
+ * Fenêtre ouverte au clic sur la recherche globale : nombre d'entrées de chaque catégorie
+ * (ex. "Monstres — 318"). Choisir une catégorie restreint la recherche à elle ; "Toute la
+ * bibliothèque" lève la restriction.
+ */
+@Composable
+private fun GlobalSearchCategoryPanel(
+    categories: List<Pair<String, Int?>>,
+    selected: String?,
+    onSelect: (String?) -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
+        tonalElevation = 3.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+    ) {
+        Column(modifier = Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
+            Text(
+                "Où chercher ?",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+            )
+            val total = categories.sumOf { it.second ?: 0 }
+            GlobalSearchCategoryRow("Toute la bibliothèque", total, selected == null) { onSelect(null) }
+            categories.forEach { (label, count) ->
+                GlobalSearchCategoryRow(label, count, selected == label) { onSelect(label) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GlobalSearchCategoryRow(label: String, count: Int?, isSelected: Boolean, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        color = if (isSelected) Color.White.copy(alpha = 0.18f) else Color.Transparent,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                label,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                color = Color.White,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                when (count) {
+                    null -> "…"
+                    1 -> "1 entrée"
+                    else -> "$count entrées"
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White.copy(alpha = 0.8f),
+            )
+        }
     }
 }
 
@@ -1573,70 +2184,6 @@ private fun CollapsibleTableOfContents(
     }
 }
 
-/**
- * Écran des règles avec table des matières cliquable et contenu par section.
- */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun RulesTocScreen(
-    sections: List<RuleSection>,
-    initialSectionTitle: String? = null
-) {
-    val listState = rememberLazyListState()
-    val coroutineScope = rememberCoroutineScope()
-    var tocExpanded by remember { mutableStateOf(true) }
-
-    LaunchedEffect(sections, initialSectionTitle) {
-        initialSectionTitle?.let { target ->
-            val index = sections.indexOfFirst { it.title.equals(target, ignoreCase = true) }
-            if (index >= 0) {
-                listState.animateScrollToItem(index)
-            }
-        }
-    }
-
-    Column(modifier = Modifier.fillMaxSize()) {
-        // Table des matières : toujours visible en haut, pliable/dépliable au clic.
-        CollapsibleTableOfContents(
-            titles = sections.map { it.title },
-            expanded = tocExpanded,
-            onToggleExpanded = { tocExpanded = !tocExpanded },
-            onEntryClick = { index ->
-                coroutineScope.launch {
-                    listState.animateScrollToItem(index)
-                }
-            },
-        )
-
-        HorizontalDivider()
-
-        // Sections : weight(1f) indispensable ici pour que cette liste dispose toujours
-        // de tout l'espace restant (et donc défile correctement), quelle que soit la
-        // taille de la table des matières au-dessus.
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            items(sections, key = { it.title }) { section ->
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 1.dp,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Markdown(content = section.content)
-                    }
-                }
-            }
-        }
-    }
-}
-
 @Composable
 private fun HorizontalDivider() {
     androidx.compose.material3.HorizontalDivider(
@@ -1649,30 +2196,6 @@ private fun HorizontalDivider() {
 }
 
 /**
- * Colonne scrollable affichant du contenu markdown, avec un avertissement
- * indiquant que le contenu SRD est en anglais (traduction en cours).
- */
-@Composable
-private fun MarkdownScrollColumn(markdownContent: String) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp)
-    ) {
-        Text(
-            text = "⚠️ Contenu en anglais (SRD D&D 5.1). Traduction en cours.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 12.dp),
-        )
-        Markdown(content = markdownContent)
-    }
-}
-
-/**
  * Box centrée avec CircularProgressIndicator.
  */
 @Composable
@@ -1682,6 +2205,104 @@ private fun LoadingBox() {
         contentAlignment = Alignment.Center,
     ) {
         CircularProgressIndicator()
+    }
+}
+
+/** Type d'une entrée listée dans un livre personnalisé : détermine l'écran de fiche ouvert. */
+private enum class CustomBookRowKind { MONSTRE, SORT, OBJET, CLASSE, ESPECE, HISTORIQUE, DON, REGLE, LIBRE }
+
+/**
+ * Une entrée d'un livre personnalisé telle qu'affichée dans sa liste : [entry] porte le nom
+ * et la catégorie (le type, ex. "Monstres"), [subtitle] la ligne grise sous le nom.
+ */
+private data class CustomBookRow(
+    val entry: SrdSectionEntry,
+    val kind: CustomBookRowKind,
+    val subtitle: String = "",
+    val equipment: EquipmentItem? = null,
+)
+
+/**
+ * Entrées d'un livre personnalisé, groupées par type comme dans les livres intégrés. Les
+ * entrées annotées `<!-- type: ... -->` (voir [CustomContentParser]) ouvrent la fiche de leur
+ * type (monstre, sort...) ; un fichier sans aucune annotation est découpé par titres (voir
+ * [ReferenceEntryParser]), chaque section devenant une fiche de texte libre.
+ */
+private fun customBookRows(content: String): List<CustomBookRow> {
+    val parsed = CustomContentParser.parse(content)
+    fun row(name: String, category: String, kind: CustomBookRowKind, subtitle: String = "", equipment: EquipmentItem? = null) =
+        CustomBookRow(SrdSectionEntry(name = name, category = category, rawMarkdown = ""), kind, subtitle, equipment)
+
+    val typed = buildList {
+        parsed.monsters.forEach { add(row(it.name, "Monstres", CustomBookRowKind.MONSTRE, monsterChallengeLabel(it).orEmpty())) }
+        // PNJ : devenus des fiches à l'import ; leur profil reste consultable ici en texte.
+        parsed.pnjs.forEach {
+            add(CustomBookRow(SrdSectionEntry(name = it.name, category = "PNJ", rawMarkdown = it.rawMarkdown), CustomBookRowKind.LIBRE))
+        }
+        parsed.spellsIndex.forEach { add(row(it.name, "Sorts", CustomBookRowKind.SORT, it.rawMarkdown)) }
+        parsed.equipment.forEach { add(row(it.name, "Objets", CustomBookRowKind.OBJET, it.category, equipment = it)) }
+        parsed.classes.forEach { add(row(it.name, "Classes", CustomBookRowKind.CLASSE)) }
+        // Sous-classes : fusionnées dans leur classe pour le jeu ; consultables ici en texte.
+        parsed.sousClasses.forEach {
+            add(CustomBookRow(SrdSectionEntry(name = it.name, category = "Sous-classes", rawMarkdown = it.rawMarkdown), CustomBookRowKind.LIBRE, it.category))
+        }
+        parsed.especes.forEach { add(row(it.name, "Espèces", CustomBookRowKind.ESPECE)) }
+        parsed.historiques.forEach { add(row(it.name, "Historiques", CustomBookRowKind.HISTORIQUE)) }
+        parsed.dons.forEach { add(row(it.name, "Dons", CustomBookRowKind.DON, it.category)) }
+        parsed.rules.forEach { add(row(it.title, "Règles", CustomBookRowKind.REGLE)) }
+    }
+    if (typed.isNotEmpty()) return typed
+
+    return ReferenceEntryParser.parse(content).map {
+        CustomBookRow(it.copy(category = it.category.ifBlank { "Contenu" }), CustomBookRowKind.LIBRE)
+    }
+}
+
+/** Message centré (livre introuvable, fichier illisible) dans la vue d'un livre personnalisé. */
+@Composable
+private fun CustomBookMessage(text: String) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyLarge,
+            color = Color.White,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(24.dp),
+        )
+    }
+}
+
+/**
+ * Fiche d'une entrée de texte libre d'un livre personnalisé : même carte translucide arrondie
+ * que les écrans de détail (règles, dons...), texte en blanc.
+ */
+@Composable
+private fun CustomBookEntryCard(category: String, markdown: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp)
+    ) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
+            contentColor = Color.White,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                if (category.isNotBlank()) {
+                    Text(
+                        text = category,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
+                }
+                SrdMarkdownAvecTables(markdown = markdown)
+            }
+        }
     }
 }
 
@@ -1869,6 +2490,10 @@ private fun SectionEntryByCategoryList(
     entries: List<SrdSectionEntry>,
     onItemClick: (SrdSectionEntry) -> Unit,
     subtitle: ((SrdSectionEntry) -> String)? = null,
+    secondaryText: ((SrdSectionEntry) -> String?)? = null,
+    // true : entrées dans l'ordre du fichier (règles, glossaire, qui se lisent dans l'ordre)
+    // plutôt que triées alphabétiquement dans chaque catégorie.
+    keepFileOrder: Boolean = false,
 ) {
     if (entries.isEmpty()) {
         Box(
@@ -1913,13 +2538,14 @@ private fun SectionEntryByCategoryList(
                 }
             }
             itemsIndexed(
-                items = items.sortedBy { it.name.lowercase() },
+                items = if (keepFileOrder) items else items.sortedBy { it.name.lowercase() },
                 key = { index, entry -> "entry_${entry.category}_${entry.name}_${index}" }
             ) { _, entry ->
                 SectionEntryRow(
                     name = entry.name,
                     category = subtitle?.invoke(entry).orEmpty(),
                     onClick = { onItemClick(entry) },
+                    secondaryText = secondaryText?.invoke(entry).orEmpty(),
                 )
             }
         }
@@ -1929,7 +2555,7 @@ private fun SectionEntryByCategoryList(
 /**
  * Écran de sections libres (titre + contenu Markdown) avec table des matières
  * cliquable, pour les documents SRD 5.2.1 sans entrées nommées individuelles
- * (ex. montures et véhicules). Reprend la structure de [RulesTocScreen].
+ * (ex. montures et véhicules) : table des matières cliquable + contenu par section.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -1980,12 +2606,12 @@ private fun DocSectionTocScreen(
             items(sections, key = { it.title }) { section ->
                 Surface(
                     shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surface,
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
                     tonalElevation = 1.dp,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Markdown(content = section.content)
+                        SrdMarkdownAvecTables(markdown = section.content)
                     }
                 }
             }
@@ -2002,11 +2628,12 @@ private fun SectionEntryRow(
     name: String,
     category: String,
     onClick: () -> Unit,
+    secondaryText: String = "",
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surface,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
         tonalElevation = 1.dp,
         onClick = onClick,
     ) {
@@ -2037,6 +2664,14 @@ private fun SectionEntryRow(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                if (secondaryText.isNotBlank()) {
+                    Text(
+                        text = secondaryText,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontStyle = FontStyle.Italic,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }
@@ -2064,6 +2699,8 @@ private data class LibraryBook(
 private data class GlobalSearchResult(
     val entryName: String,
     val categoryLabel: String,
+    // Pertinence (LibrarySearch.score) : les résultats sont triés du plus au moins pertinent.
+    val score: Int = 0,
     val onSelect: () -> Unit,
 )
 
@@ -2091,22 +2728,25 @@ private fun LibraryBookSettingsScreen(
     onForceRefresh: () -> Unit,
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    // Livre dont la suppression attend confirmation.
+    var bookToRemove by remember { mutableStateOf<LibraryBook?>(null) }
 
-    // Fichier en attente de confirmation (nom + couverture) après sélection dans le
-    // sélecteur système, avant d'être copié et enregistré comme nouveau livre.
-    var pendingUri by remember { mutableStateOf<Uri?>(null) }
-    var pendingName by remember { mutableStateOf("") }
-    var pendingSkin by remember { mutableStateOf(0) }
-
-    val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument(),
-    ) { uri ->
-        if (uri != null) {
-            val displayName = queryDisplayName(context, uri)
-            pendingName = displayName?.substringBeforeLast('.').orEmpty().ifBlank { displayName.orEmpty() }
-            pendingSkin = 0
-            pendingUri = uri
-        }
+    bookToRemove?.let { book ->
+        AlertDialog(
+            onDismissRequest = { bookToRemove = null },
+            title = { Text("Retirer ce livre ?") },
+            text = { Text("« ${book.label} » sera retiré de la bibliothèque, avec ses fichiers.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    bookToRemove = null
+                    CustomBooksStore.remove(context, worldId, book.tabKey.removePrefix("custom_"))
+                    SrdRepository.invalidateWorld(worldId)
+                    onSettingChanged()
+                }) { Text("Retirer", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { bookToRemove = null }) { Text("Annuler") } },
+        )
     }
 
     LazyColumn(
@@ -2116,9 +2756,12 @@ private fun LibraryBookSettingsScreen(
     ) {
         item(key = "add_book") {
             Surface(
-                onClick = { filePickerLauncher.launch(arrayOf("*/*")) },
+                // Ajout d'un livre (.md, .zip illustré, PDF...) : via l'outil IMPORT. La couverture
+                // se choisit ensuite ci-dessous, comme pour n'importe quel livre.
+                onClick = { com.jc2.jdrcompagnon.feature_import.ImportNavigation.ouvrir() },
                 shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f),
+                contentColor = Color.White,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Row(
@@ -2154,7 +2797,8 @@ private fun LibraryBookSettingsScreen(
                     justRefreshed = true
                 },
                 shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f),
+                contentColor = Color.White,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Row(
@@ -2179,7 +2823,7 @@ private fun LibraryBookSettingsScreen(
                             color = if (justRefreshed) {
                                 MaterialTheme.colorScheme.primary
                             } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
+                                Color.White.copy(alpha = 0.8f)
                             },
                         )
                     }
@@ -2198,7 +2842,8 @@ private fun LibraryBookSettingsScreen(
 
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f),
+                contentColor = Color.White,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -2216,10 +2861,7 @@ private fun LibraryBookSettingsScreen(
                             modifier = Modifier.weight(1f),
                         )
                         if (isCustom) {
-                            IconButton(onClick = {
-                                CustomBooksStore.remove(context, worldId, book.tabKey.removePrefix("custom_"))
-                                onSettingChanged()
-                            }) {
+                            IconButton(onClick = { bookToRemove = book }) {
                                 Icon(
                                     Icons.Default.Delete,
                                     contentDescription = "Retirer ce livre",
@@ -2233,7 +2875,7 @@ private fun LibraryBookSettingsScreen(
                     Text(
                         text = "Couverture",
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = Color.White.copy(alpha = 0.8f),
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -2313,102 +2955,6 @@ private fun LibraryBookSettingsScreen(
         }
     }
 
-    // Dialogue de confirmation après sélection d'un fichier : nom du livre et couverture,
-    // avant copie du fichier dans le stockage interne et enregistrement définitif.
-    val uri = pendingUri
-    if (uri != null) {
-        AlertDialog(
-            onDismissRequest = { pendingUri = null },
-            title = { Text("Ajouter un livre") },
-            text = {
-                Column {
-                    OutlinedTextField(
-                        value = pendingName,
-                        onValueChange = { pendingName = it },
-                        label = { Text("Nom du livre") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "Couverture",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        bookSkinDrawables.forEachIndexed { index, drawableRes ->
-                            val isSelected = pendingSkin == index
-                            Box(
-                                modifier = Modifier
-                                    .size(width = 36.dp, height = 52.dp)
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .border(
-                                        width = if (isSelected) 3.dp else 1.dp,
-                                        color = if (isSelected) {
-                                            MaterialTheme.colorScheme.primary
-                                        } else {
-                                            MaterialTheme.colorScheme.outline
-                                        },
-                                        shape = RoundedCornerShape(4.dp),
-                                    )
-                                    .clickable { pendingSkin = index },
-                            ) {
-                                Image(
-                                    painter = painterResource(drawableRes),
-                                    contentDescription = "Couverture ${index + 1}",
-                                    contentScale = ContentScale.FillBounds,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
-                                if (isSelected) {
-                                    Box(
-                                        modifier = Modifier
-                                            .align(Alignment.TopEnd)
-                                            .padding(2.dp)
-                                            .size(14.dp)
-                                            .clip(CircleShape)
-                                            .background(MaterialTheme.colorScheme.primary),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Check,
-                                            contentDescription = "Sélectionnée",
-                                            tint = MaterialTheme.colorScheme.onPrimary,
-                                            modifier = Modifier.size(10.dp),
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = pendingName.isNotBlank(),
-                    onClick = {
-                        val id = "${System.currentTimeMillis()}"
-                        val fileName = copyPickedFileToInternalStorage(
-                            context, uri, id, queryDisplayName(context, uri),
-                        )
-                        if (fileName != null) {
-                            CustomBooksStore.add(context, worldId, id, pendingName.trim(), fileName)
-                            LibraryBookSettingsStore.setSkinIndex(context, worldId, "custom_$id", pendingSkin)
-                            onSettingChanged()
-                        }
-                        pendingUri = null
-                    },
-                ) {
-                    Text("Ajouter")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingUri = null }) {
-                    Text("Annuler")
-                }
-            },
-        )
-    }
 }
 
 /**
@@ -2615,7 +3161,7 @@ private fun SrdEntryRow(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surface,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
         tonalElevation = 1.dp,
         onClick = onClick,
     ) {
@@ -2707,7 +3253,7 @@ private fun EquipmentItemRow(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surface,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
         tonalElevation = 1.dp,
         onClick = onClick,
     ) {

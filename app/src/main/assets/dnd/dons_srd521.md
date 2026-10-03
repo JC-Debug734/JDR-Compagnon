@@ -1,10 +1,15 @@
 # Dons — SRD 5.2.1
 
+<!-- Balises de choix (choix:, effet:, options:, remplace:, categorie:...) : voir l'en-tête de especes_srd521.md. -->
+
 **Univers** D&D 5e SRD 5.2.1
 
 ---
 
 ### Doué
+
+<!-- id: doue; categorie: Origines -->
+<!-- id: doue-maitrises; choix: 3; effet: competences-ou-outils; options: toutes | equipement: Outil -->
 
 **Type** Don
 **Prérequis** -
@@ -16,6 +21,12 @@
 ---
 
 ### Initié à la magie
+
+<!-- id: initie-a-la-magie; categorie: Origines -->
+<!-- id: initie-liste; choix: 1; effet: note; libelle: Liste de sorts choisie; options: Clerc, Druide, Magicien -->
+<!-- id: initie-incantation; choix: 1; effet: incantation; options: Intelligence, Sagesse, Charisme -->
+<!-- id: initie-sorts-mineurs; choix: 2; effet: sorts; options: sorts-mineurs; liste: initie-liste; libelle: Sorts mineurs choisis -->
+<!-- id: initie-sort-1; choix: 1; effet: sorts; options: sorts-niveau-1; liste: initie-liste; libelle: Sort du 1er niveau choisi -->
 
 **Type** Don
 **Prérequis** -
@@ -55,6 +66,8 @@
 
 ### Sauvagerie martiale
 
+<!-- id: sauvagerie-martiale; categorie: Origines -->
+
 **Type** Don
 **Prérequis** -
 **Répétable** Non
@@ -74,6 +87,8 @@
 ---
 
 ### Vigilant
+
+<!-- id: vigilant; categorie: Origines -->
 
 **Type** Don
 **Prérequis** -
@@ -104,6 +119,8 @@
 
 ### Amélioration de caractéristique
 
+<!-- id: amelioration-de-caracteristique; categorie: Général -->
+
 **Type** Don
 **Prérequis** Niveau 4 ou supérieur
 **Répétable** Oui
@@ -123,6 +140,8 @@
 ---
 
 ### Empoigneur
+
+<!-- id: empoigneur; categorie: Général -->
 
 **Type** Don
 **Prérequis** Niveau 4 ou supérieur, Force ou Dextérité 13 ou plus
@@ -162,6 +181,8 @@
 
 ### Archerie
 
+<!-- id: archerie; categorie: Style de combat -->
+
 **Type** Don
 **Prérequis** Aptitude Style de combat
 **Répétable** Non
@@ -181,6 +202,8 @@
 ---
 
 ### Armes à deux mains
+
+<!-- id: armes-a-deux-mains; categorie: Style de combat -->
 
 **Type** Don
 **Prérequis** Aptitude Style de combat
@@ -202,6 +225,8 @@
 
 ### Combat à deux armes
 
+<!-- id: combat-a-deux-armes; categorie: Style de combat -->
+
 **Type** Don
 **Prérequis** Aptitude Style de combat
 **Répétable** Non
@@ -222,6 +247,8 @@
 
 ### Défense
 
+<!-- id: defense; categorie: Style de combat -->
+
 **Type** Don
 **Prérequis** Aptitude Style de combat
 **Répétable** Non
@@ -241,6 +268,8 @@
 ---
 
 ### Faveur d'attaque irrésistible
+
+<!-- id: faveur-d-attaque-irresistible; categorie: Faveur épique -->
 
 **Type** Don
 **Prérequis** Niveau 19 ou supérieur
@@ -271,6 +300,8 @@
 
 ### Faveur de déplacement dimensionnel
 
+<!-- id: faveur-de-deplacement-dimensionnel; categorie: Faveur épique -->
+
 **Type** Don
 **Prérequis** Niveau 19 ou supérieur
 **Répétable** Non
@@ -290,6 +321,8 @@
 ---
 
 ### Faveur de l'esprit nocturne
+
+<!-- id: faveur-de-l-esprit-nocturne; categorie: Faveur épique -->
 
 **Type** Don
 **Prérequis** Niveau 19 ou supérieur
@@ -320,6 +353,8 @@
 
 ### Faveur de prouesse martiale
 
+<!-- id: faveur-de-prouesse-martiale; categorie: Faveur épique -->
+
 **Type** Don
 **Prérequis** Niveau 19 ou supérieur
 **Répétable** Non
@@ -339,6 +374,8 @@
 ---
 
 ### Faveur de mémoire magique
+
+<!-- id: faveur-de-memoire-magique; categorie: Faveur épique -->
 
 **Type** Don
 **Prérequis** Niveau 19 ou supérieur, aptitude Sorts
@@ -360,6 +397,8 @@
 
 ### Faveur de Vision lucide
 
+<!-- id: faveur-de-vision-lucide; categorie: Faveur épique -->
+
 **Type** Don
 **Prérequis** Niveau 19 ou supérieur
 **Répétable** Non
@@ -379,6 +418,8 @@
 ---
 
 ### Faveur du destin
+
+<!-- id: faveur-du-destin; categorie: Faveur épique -->
 
 **Type** Don
 **Prérequis** Niveau 19 ou supérieur

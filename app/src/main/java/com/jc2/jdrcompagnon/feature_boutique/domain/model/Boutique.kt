@@ -1,11 +1,15 @@
 package com.jc2.jdrcompagnon.feature_boutique.domain.model
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 data class Marchand(
     val nom: String,
     val description: String = "",
     val trait: String = "" // courte description de caractère générée (ex: "gentil et peu enclin à la négociation")
 )
 
+@Serializable
 data class Boutique(
     val id: String,
     val nom: String,

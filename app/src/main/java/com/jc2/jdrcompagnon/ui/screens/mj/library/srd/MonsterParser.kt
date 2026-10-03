@@ -23,6 +23,7 @@ package com.jc2.jdrcompagnon.ui.screens.mj.library.srd
  *   Sens: Vision aveugle 18 m, Vision dans le noir 36 m ; Perception passive 23
  *   Langues: commun, draconique
  *   FP: 17 (18 000 PX, ou 20 000 dans son antre ; BM +6)
+ *   Image: dragon_rouge_adulte.png                     (optionnel, voir [MonsterImages])
  *
  *   ## Traits
  *   Nom du trait. Description...
@@ -72,6 +73,7 @@ object MonsterParser {
 
             val categorie = fields["Catégorie"].orEmpty()
             val type = fields["Type"].orEmpty()
+            val environnement = fields["Environnement"].orEmpty()
             val taille = fields["Taille"].orEmpty()
             val alignement = fields["Alignement"].orEmpty()
             val ca = fields["CA"].orEmpty()
@@ -97,6 +99,7 @@ object MonsterParser {
                     appendLine("*$typeLine*")
                     appendLine()
                 }
+                if (environnement.isNotBlank()) appendLine("**Environnement :** $environnement")
                 if (ca.isNotBlank()) appendLine("**CA :** $ca")
                 if (pv.isNotBlank()) appendLine("**Pv :** $pv")
                 if (vitesse.isNotBlank()) appendLine("**Vitesse :** $vitesse")
@@ -118,6 +121,10 @@ object MonsterParser {
                     name = name,
                     category = categorie,
                     rawMarkdown = rawContent,
+                    environments = environnement.split(",").map { it.trim() }.filter { it.isNotBlank() },
+                    image = fields["Image"]?.ifBlank { null },
+                    fields = fields.toMap(),
+                    body = description,
                 )
             )
         }

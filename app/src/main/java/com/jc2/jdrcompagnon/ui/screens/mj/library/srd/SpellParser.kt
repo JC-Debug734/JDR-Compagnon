@@ -54,6 +54,10 @@ object SpellParser {
                     name = p.name,
                     category = p.ecole,
                     rawMarkdown = buildDetailMarkdown(p),
+                    niveauSort = niveauCourt(p.niveau),
+                    typeSort = classifierType(p.description),
+                    tempsIncantation = p.temps,
+                    portee = p.portee,
                 )
             }
             .sortedBy { it.name.lowercase() }
@@ -70,7 +74,9 @@ object SpellParser {
             .map { p -> p to levelCategory(p.niveau) }
             .sortedWith(compareBy({ levelSortKey(it.second) }, { it.first.name.lowercase() }))
             .map { (p, category) ->
-                SrdSectionEntry(name = p.name, category = category, rawMarkdown = p.ecole)
+                val ecoleNiveau = listOfNotNull(p.ecole.ifBlank { null }, niveauCourt(p.niveau).ifBlank { null })
+                    .joinToString(" — ")
+                SrdSectionEntry(name = p.name, category = category, rawMarkdown = ecoleNiveau, classes = p.classes)
             }
 
     /**
@@ -153,5 +159,44 @@ object SpellParser {
     private fun levelSortKey(category: String): Int {
         if (category == "Sorts mineurs") return 0
         return Regex("""\d+""").find(category)?.value?.toIntOrNull() ?: 99
+    }
+
+    /**
+     * Normalise le champ "Niveau" ("2e niveau", "sort mineur") en badge compact affiché
+     * sur la carte d'un sort de la fiche de personnage ("Niveau 2", "Sort mineur").
+     */
+    private fun niveauCourt(niveau: String): String {
+        if (niveau.isBlank()) return ""
+        if (niveau.contains("mineur", ignoreCase = true)) return "Sort mineur"
+        val n = Regex("""\d+""").find(niveau)?.value
+        return if (n != null) "Niveau $n" else niveau
+    }
+
+    // Mots-clés (texte de description en minuscules) indiquant un sort de SOUTIEN — soin,
+    // amélioration ou protection d'un allié — vérifiés en priorité, car certains de ces
+    // effets mentionnent aussi "dégâts" (ex. "Résistance aux dégâts") sans être offensifs.
+    private val MOTS_SOUTIEN = listOf(
+        "points de vie", "regagne", "récupère", "récupèrent", "guéri", "guérit", "soin",
+        "avantage aux", "avantage sur", "résistance aux dégâts", "immunisée aux dégâts",
+        "bouclier", "invisible", "protection", "bénédiction", "vitesse augmente",
+    )
+    // Mots-clés indiquant un sort d'ATTAQUE (offensif), vérifiés seulement si aucun
+    // mot-clé de soutien n'a matché avant.
+    private val MOTS_ATTAQUE = listOf(
+        "jet d'attaque", "inflige", "dégâts",
+    )
+
+    /**
+     * Classe un sort en "Soutien" (soin/buff/protection d'un allié), "Attaque" (offensif)
+     * ou "Autre" (utilitaire, détection, déplacement...), à partir de mots-clés dans sa
+     * description en texte libre — le SRD n'a pas de champ dédié pour ce classement,
+     * affiché comme repère rapide sur la carte du sort (cf. SpellRow), pas comme règle
+     * absolue.
+     */
+    private fun classifierType(description: String): String {
+        val texte = description.lowercase()
+        if (MOTS_SOUTIEN.any { texte.contains(it) }) return "Soutien"
+        if (MOTS_ATTAQUE.any { texte.contains(it) }) return "Attaque"
+        return "Autre"
     }
 }

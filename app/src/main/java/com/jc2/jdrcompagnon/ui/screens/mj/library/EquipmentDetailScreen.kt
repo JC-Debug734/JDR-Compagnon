@@ -92,7 +92,16 @@ fun EquipmentDetailScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState())
-                        .padding(16.dp),
+                        .padding(16.dp)
+                ) {
+                // Même carte translucide arrondie que le reste de l'app.
+                androidx.compose.material3.Surface(
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     // Catégorie
@@ -123,6 +132,8 @@ fun EquipmentDetailScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                }
+                }
                 }
             }
 
@@ -224,10 +235,14 @@ private fun EquipmentStatsGrid(
         if (isMagicItem) {
             if (item.properties.isNotBlank()) add("Type" to item.properties)
         }
-        if (isWeapon) {
+        // Dégâts aussi pour un objet utilisable comme arme hors catégorie "Armes" (ex. un bâton magique).
+        if (isWeapon || item.damage.isNotBlank()) {
             if (item.damage.isNotBlank()) add("Dégâts" to item.damage)
-            if (item.properties.isNotBlank()) add("Propriétés" to item.properties)
+            if (item.properties.isNotBlank() && item.properties != "-") add("Propriétés" to item.properties)
         }
+        item.charges?.let { add("Charges" to "$it") }
+        if (item.recharge.isNotBlank()) add("Recharge (repos long)" to item.recharge)
+        if (item.harmonisation) add("Harmonisation" to item.harmonisationPrerequis.ifBlank { "Requise" }.replaceFirstChar { it.uppercase() })
         if (isArmor) {
             if (item.ac.isNotBlank()) add("CA" to item.ac)
             if (item.strength.isNotBlank()) add("Force" to item.strength)
@@ -280,15 +295,12 @@ private fun EquipmentStatsGrid(
         maxItemsInEachRow = 2
     ) {
         stats.forEach { (label, value) ->
-            // Poids et Prix sont tous deux mis en avant en doré : ce sont les deux
-            // informations qu'on veut repérer d'un coup d'œil (contrairement à
-            // Dégâts/Propriétés/CA, qui restent en style neutre).
-            val isHighlighted = label == "Prix" || label == "Poids"
+            // Toutes les cases (Poids, Prix, Dégâts, CA...) dans le même style neutre, texte
+            // en blanc — plus de mise en avant dorée de Poids/Prix.
             ElevatedCard(
                 modifier = Modifier.weight(1f),
                 colors = CardDefaults.elevatedCardColors(
-                    containerColor = if (isHighlighted) Color(0xFFFFD700).copy(alpha = 0.2f)
-                    else MaterialTheme.colorScheme.surfaceVariant
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
                 )
             ) {
                 Column(
@@ -298,18 +310,13 @@ private fun EquipmentStatsGrid(
                     Text(
                         text = label,
                         style = MaterialTheme.typography.labelMedium,
-                        color = if (isHighlighted) Color(0xFFFFD700)
-                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        color = Color.White.copy(alpha = 0.7f)
                     )
                     Text(
                         text = value,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = if (isHighlighted) Color(0xFFFFD700)
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = if (isHighlighted) TextAlign.End else TextAlign.Start,
-                        modifier = if (isHighlighted) Modifier.fillMaxWidth()
-                        else Modifier
+                        color = Color.White,
                     )
                 }
             }

@@ -1,9 +1,7 @@
 package com.jc2.jdrcompagnon.ui.screens.joueur
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -29,7 +27,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
@@ -57,6 +54,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,13 +62,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jc2.jdrcompagnon.ui.Character
+import com.jc2.jdrcompagnon.ui.CharacterExport
 import com.jc2.jdrcompagnon.ui.CharacterProgression
 import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.NaheulbeukCharacter
 import com.jc2.jdrcompagnon.ui.WorldState
+import com.jc2.jdrcompagnon.ui.screens.mj.PnjProfileDialog
 
 // ─────────────────────────────────────────────────────────────
 // Sélection de personnage : routeur (CharacterSelectionScreen)
@@ -85,23 +86,32 @@ fun CharacterSelectionScreen(
     currentWorld: WorldState?,
     onViewCharacter: (Character) -> Unit,
     onViewNaheulbeukCharacter: (NaheulbeukCharacter) -> Unit = {},
-    onCreateQuick: () -> Unit = {},
+    onCreateQuick: (type: String) -> Unit = {},
     onCreateWizard: () -> Unit = {},
+    onPnjCreated: (Character) -> Unit = {},
+    onImportCharacter: (CharacterExport) -> Unit = {},
     onBack: () -> Unit,
     isMjMode: Boolean = false,
     onOpenMenu: () -> Unit = {},
 ) {
     val allCharacters by GameState.characters.collectAsState()
-    val characters = if (currentWorld != null) {
-        allCharacters.filter { it.worldId == currentWorld.id }
-    } else {
+    val campagnes by GameState.mjCampaigns.collectAsState()
+    val campagneCourante by GameState.currentCampaignId.collectAsState()
+    val mjScenarios by GameState.mjScenarios.collectAsState()
+    val characters = remember(allCharacters, campagnes, campagneCourante, mjScenarios, currentWorld?.id, isMjMode) {
         allCharacters
+            .filter { currentWorld == null || it.worldId == currentWorld.id }
+            // Côté joueur, seules les fiches de PJ sont visibles : PNJ, monstres et boss
+            // restent des fiches du MJ.
+            .filter { isMjMode || it.type == "PJ" }
+            // Fiches d'une campagne non sélectionnée masquées (voir PorteeCampagne).
+            .let { com.jc2.jdrcompagnon.ui.PorteeCampagne.personnagesVisibles(it, currentWorld?.id) }
     }
 
     if (currentWorld?.id == "naheulbeuk") {
         // TODO : écran de sélection dédié à Naheulbeuk — à implémenter plus tard
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Sélection de personnage Naheulbeuk à venir")
+            Text("Sélection de personnage Naheulbeuk à venir", color = Color.White)
         }
     } else {
         // Utilise le nouvel écran avec recherche et filtres
@@ -110,33 +120,69 @@ fun CharacterSelectionScreen(
             onCharacterSelected = onViewCharacter,
             onCreateQuick = if (isMjMode) onCreateQuick else { {} },
             onCreateWizard = if (isMjMode) onCreateWizard else { {} },
+            onPnjCreated = if (isMjMode) onPnjCreated else { {} },
+            onImportCharacter = if (isMjMode) onImportCharacter else { {} },
             onBack = onBack,
             showCreateButton = isMjMode,
+            showTypeFilters = isMjMode,
+            worldId = currentWorld?.id ?: "",
             onOpenMenu = onOpenMenu,
         )
     }
 }
 
 /**
- * Types de personnages disponibles pour le filtrage
+ * Les 4 types de fiches filtrables par le MJ. "Monstre" regroupe aussi les anciennes fiches
+ * "Créature" / "Familier".
  */
-val characterTypes = listOf("Tous", "PJ", "PNJ", "Monstre", "Boss", "Créature", "Familier")
+private val sheetTypeFilters = listOf("Tous", "PJ", "PNJ", "Monstre", "Boss")
+
+private fun matchesTypeFilter(character: Character, filter: String): Boolean = when (filter) {
+    "Tous" -> true
+    "Monstre" -> character.type in setOf("Monstre", "Créature", "Familier")
+    else -> character.type == filter
+}
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun CharacterListWithSearchScreen(
     characters: List<Character>,
     onCharacterSelected: (Character) -> Unit,
-    onCreateQuick: () -> Unit,
+    onCreateQuick: (type: String) -> Unit,
     onCreateWizard: () -> Unit,
+    onPnjCreated: (Character) -> Unit = {},
+    onImportCharacter: (CharacterExport) -> Unit = {},
     onBack: () -> Unit,
     showCreateButton: Boolean = true,
+    showTypeFilters: Boolean = true,
+    worldId: String = "",
     onOpenMenu: () -> Unit = {},
 ) {
+    val context = LocalContext.current
     var searchQuery by remember { mutableStateOf("") }
-    var selectedTypeFilter by remember { mutableStateOf("Tous") }
-    var showFilters by remember { mutableStateOf(false) }
+    var selectedTypeFilter by rememberSaveable { mutableStateOf("Tous") }
     var showChoixCreation by remember { mutableStateOf(false) }
+    var showPnjProfiles by remember { mutableStateOf(false) }
+    var erreurImport by remember { mutableStateOf<String?>(null) }
+
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val texte = try {
+            context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+        } catch (e: Exception) {
+            null
+        }
+        val personnage = texte?.let { GameState.characterFromJson(it) }
+        if (personnage != null) {
+            erreurImport = null
+            showChoixCreation = false
+            onImportCharacter(personnage)
+        } else {
+            erreurImport = "Fichier invalide : ce n'est pas un personnage JDRCompagnon valide."
+        }
+    }
 
     val filteredCharacters = remember(searchQuery, selectedTypeFilter, characters) {
         characters.filter { character ->
@@ -144,8 +190,7 @@ fun CharacterListWithSearchScreen(
                     character.name.contains(searchQuery, ignoreCase = true) ||
                     character.characterClass.contains(searchQuery, ignoreCase = true) ||
                     character.race.contains(searchQuery, ignoreCase = true)
-            val matchesType = selectedTypeFilter == "Tous" || character.type == selectedTypeFilter
-            matchesSearch && matchesType
+            matchesSearch && matchesTypeFilter(character, selectedTypeFilter)
         }
     }
 
@@ -157,21 +202,13 @@ fun CharacterListWithSearchScreen(
                             "Personnages",
                             style = MaterialTheme.typography.titleLarge.copy(
                                 fontWeight = FontWeight.Black
-                            )
+                            ),
+                            color = Color.White
                         )
                     },
                     navigationIcon = {
                         IconButton(onClick = onOpenMenu) {
                             Icon(Icons.Default.Menu, contentDescription = "Menu")
-                        }
-                    },
-                    actions = {
-                        IconButton(onClick = { showFilters = !showFilters }) {
-                            Icon(
-                                Icons.Default.FilterList,
-                                contentDescription = "Filtres",
-                                tint = if (showFilters) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                            )
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
@@ -206,22 +243,20 @@ fun CharacterListWithSearchScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Filtres de type
-                AnimatedVisibility(
-                    visible = showFilters,
-                    enter = slideInVertically { -it } + fadeIn(),
-                    exit = fadeOut()
-                ) {
+                // Filtres rapides par type de fiche (MJ uniquement, toujours visibles), avec
+                // le nombre de fiches de chaque type.
+                if (showTypeFilters) {
                     FlowRow(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        characterTypes.forEach { type ->
+                        sheetTypeFilters.forEach { type ->
+                            val count = characters.count { matchesTypeFilter(it, type) }
                             FilterChip(
                                 selected = selectedTypeFilter == type,
                                 onClick = { selectedTypeFilter = type },
-                                label = { Text(type) },
+                                label = { Text("$type ($count)") },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                                     selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -235,7 +270,7 @@ fun CharacterListWithSearchScreen(
                 Text(
                     text = "${filteredCharacters.size} personnage${if (filteredCharacters.size > 1) "s" else ""}",
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Color.White,
                     modifier = Modifier.padding(vertical = 8.dp)
                 )
 
@@ -267,19 +302,71 @@ fun CharacterListWithSearchScreen(
     if (showChoixCreation) {
         AlertDialog(
             onDismissRequest = { showChoixCreation = false },
-            title = { Text("Créer un personnage") },
-            text = { Text("Comment voulez-vous créer ce personnage ?") },
+            title = { Text("Quelle fiche créer ?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SheetTypeChoice("PJ", "Personnage joueur — création pas à pas") {
+                        showChoixCreation = false; onCreateWizard()
+                    }
+                    SheetTypeChoice("PNJ", "Personnage non-joueur — à partir d'un profil") {
+                        showChoixCreation = false; showPnjProfiles = true
+                    }
+                    SheetTypeChoice("Monstre", "Créature ou monstre") {
+                        showChoixCreation = false; onCreateQuick("Monstre")
+                    }
+                    SheetTypeChoice("Boss", "Boss ou antagoniste") {
+                        showChoixCreation = false; onCreateQuick("Boss")
+                    }
+                    if (erreurImport != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            erreurImport.orEmpty(),
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            },
             confirmButton = {
-                TextButton(onClick = { showChoixCreation = false; onCreateWizard() }) {
-                    Text("Pas à pas (recommandé)")
+                TextButton(onClick = {
+                    erreurImport = null
+                    filePickerLauncher.launch(arrayOf("application/json", "*/*"))
+                }) {
+                    Text("Importer un fichier")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showChoixCreation = false; onCreateQuick() }) {
-                    Text("Rapide")
-                }
+                TextButton(onClick = { showChoixCreation = false }) { Text("Annuler") }
             }
         )
+    }
+
+    if (showPnjProfiles) {
+        PnjProfileDialog(
+            worldId = worldId,
+            onCreate = { pnj ->
+                showPnjProfiles = false
+                GameState.addCharacter(pnj)
+                onPnjCreated(pnj)
+            },
+            onDismiss = { showPnjProfiles = false }
+        )
+    }
+}
+
+@Composable
+private fun SheetTypeChoice(type: String, description: String, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Text(type, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            Text(description, style = MaterialTheme.typography.bodySmall)
+        }
     }
 }
 
@@ -343,7 +430,7 @@ fun EnhancedCharacterListItem(
             .fillMaxWidth()
             .clickable { onClick() },
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f)
         ),
         border = BorderStroke(1.dp, typeColor.copy(alpha = 0.3f)),
         shape = RoundedCornerShape(16.dp)
@@ -376,12 +463,13 @@ fun EnhancedCharacterListItem(
                     Text(
                         text = character.name,
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
                     )
                     Text(
                         text = "${character.characterClass} ${character.level} • ${character.race}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = Color.White
                     )
                 }
 
@@ -411,7 +499,7 @@ fun EnhancedCharacterListItem(
                 Text(
                     text = "PV",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Color.White,
                     modifier = Modifier.width(24.dp)
                 )
                 LinearProgressIndicator(
@@ -430,7 +518,8 @@ fun EnhancedCharacterListItem(
                 Text(
                     text = "${character.currentHitPoints}/${character.maxHitPoints}",
                     style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
                 )
             }
 
@@ -446,7 +535,7 @@ fun EnhancedCharacterListItem(
                 Text(
                     text = "XP",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Color.White,
                     modifier = Modifier.width(24.dp)
                 )
                 LinearProgressIndicator(
@@ -461,7 +550,8 @@ fun EnhancedCharacterListItem(
                 Text(
                     text = if (character.level >= 20) "MAX" else "${character.experience}/$nextXpThreshold",
                     style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
                 )
             }
 
@@ -497,7 +587,7 @@ fun QuickStat(label: String, value: String) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = Color.White
         )
     }
 }
@@ -523,13 +613,13 @@ fun EmptyCharacterList(
         Text(
             text = if (hasSearch) "Aucun résultat" else "Aucun personnage",
             style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            color = Color.White.copy(alpha = 0.8f)
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = if (hasSearch) "Essayez d'autres critères de recherche" else "Créez votre premier héros !",
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+            color = Color.White.copy(alpha = 0.7f),
             textAlign = TextAlign.Center
         )
         if (hasSearch) {

@@ -1,12 +1,10 @@
 package com.jc2.jdrcompagnon.ui.screens.joueur
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -16,7 +14,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Backpack
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Inventory
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Save
@@ -25,20 +22,16 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.boundsInWindow
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.zIndex
+import com.jc2.jdrcompagnon.ui.components.PnjReputationEditor
 import com.jc2.jdrcompagnon.ui.Character
 import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.ProficiencyLevel
@@ -47,7 +40,6 @@ import com.jc2.jdrcompagnon.ui.components.SrdPickerEntry
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdRepository
 import com.jc2.jdrcompagnon.ui.theme.MysticPurple
 import com.jc2.jdrcompagnon.ui.theme.RadiantCyan
-import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -85,13 +77,27 @@ fun CharacterEditScreen(
                 .padding(innerPadding)
                 .padding(horizontal = 24.dp)
         ) {
+            // Onglet "PNJ" ajouté uniquement pour un PNJ : c'est là (et nulle part ailleurs) que
+            // le MJ règle le briefing (comportement/intentions/objectif) utilisé par l'événement
+            // de scène "#event:[Nom]" — sinon perdu au milieu de l'onglet Combat, pas assez
+            // visible.
+            val tabs = remember(editedCharacter.type) {
+                if (editedCharacter.type == "PNJ") {
+                    listOf("Stats", "Combat", "Inventaire", "Histoire", "PNJ")
+                } else {
+                    listOf("Stats", "Combat", "Inventaire", "Histoire")
+                }
+            }
+            LaunchedEffect(tabs) {
+                if (selectedTabIndex >= tabs.size) selectedTabIndex = 0
+            }
+
             TabRow(
                 selectedTabIndex = selectedTabIndex,
                 containerColor = Color.Transparent,
                 contentColor = MaterialTheme.colorScheme.primary,
                 divider = {}
             ) {
-                val tabs = listOf("Stats", "Combat", "Inventaire", "Histoire")
                 tabs.forEachIndexed { index, title ->
                     Tab(
                         selected = selectedTabIndex == index,
@@ -108,11 +114,12 @@ fun CharacterEditScreen(
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
             ) {
-                when (selectedTabIndex) {
-                    0 -> CompetenceTab(editedCharacter) { editedCharacter = it }
-                    1 -> CombatTab(editedCharacter) { editedCharacter = it }
-                    2 -> InventoryTab(editedCharacter) { editedCharacter = it }
-                    3 -> HistoryTab(editedCharacter) { editedCharacter = it }
+                when (tabs.getOrNull(selectedTabIndex)) {
+                    "Stats" -> CompetenceTab(editedCharacter) { editedCharacter = it }
+                    "Combat" -> CombatTab(editedCharacter) { editedCharacter = it }
+                    "Inventaire" -> InventoryTab(editedCharacter) { editedCharacter = it }
+                    "Histoire" -> HistoryTab(editedCharacter) { editedCharacter = it }
+                    "PNJ" -> PnjTab(editedCharacter) { editedCharacter = it }
                 }
                 Spacer(modifier = Modifier.height(32.dp))
             }
@@ -180,11 +187,35 @@ private fun CombatTab(character: Character, onUpdate: (Character) -> Unit) {
             StatEditField("VIT", character.speed.toString(), Modifier.weight(1f)) { onUpdate(character.copy(speed = it.toIntOrNull() ?: character.speed)) }
         }
 
-        EditSectionTitle("CAPACITÉS & TRAITS")
+        EditSectionTitle("MAÎTRISES DE COMBAT")
+        OutlinedTextField(
+            value = character.weaponArmorTraining,
+            onValueChange = { onUpdate(character.copy(weaponArmorTraining = it)) },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp),
+            shape = RoundedCornerShape(20.dp)
+        )
+
+        EditSectionTitle("CAPACITÉS DE CLASSE")
+        OutlinedTextField(
+            value = character.classFeatures,
+            onValueChange = { onUpdate(character.copy(classFeatures = it)) },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 150.dp),
+            shape = RoundedCornerShape(20.dp)
+        )
+
+        EditSectionTitle("TRAITS D'ESPÈCE")
         OutlinedTextField(
             value = character.traits,
             onValueChange = { onUpdate(character.copy(traits = it)) },
             modifier = Modifier.fillMaxWidth().heightIn(min = 150.dp),
+            shape = RoundedCornerShape(20.dp)
+        )
+
+        EditSectionTitle("DONS")
+        OutlinedTextField(
+            value = character.feats,
+            onValueChange = { onUpdate(character.copy(feats = it)) },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp),
             shape = RoundedCornerShape(20.dp)
         )
 
@@ -199,135 +230,157 @@ private fun CombatTab(character: Character, onUpdate: (Character) -> Unit) {
     }
 }
 
+/**
+ * Onglet visible uniquement pour un PNJ (Character.type == "PNJ") : briefing confidentiel utilisé
+ * par PnjBriefingOverlay quand le MJ clique un lien "#event:[Nom]" dans une scène. Jamais transmis
+ * aux joueurs (seuls le nom et le portrait le sont, voir NetworkSessionManager.sendPnjBriefingToAll).
+ */
+@Composable
+private fun PnjTab(character: Character, onUpdate: (Character) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        EditSectionTitle("BRIEFING PNJ (ÉVÉNEMENT DE SCÈNE, CONFIDENTIEL)")
+        OutlinedTextField(
+            value = character.comportement,
+            onValueChange = { onUpdate(character.copy(comportement = it)) },
+            label = { Text("Comportement") },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp),
+            shape = RoundedCornerShape(20.dp),
+            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.tertiary)
+        )
+        OutlinedTextField(
+            value = character.intentions,
+            onValueChange = { onUpdate(character.copy(intentions = it)) },
+            label = { Text("Intentions") },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp),
+            shape = RoundedCornerShape(20.dp),
+            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.tertiary)
+        )
+        OutlinedTextField(
+            value = character.objectif,
+            onValueChange = { onUpdate(character.copy(objectif = it)) },
+            label = { Text("Objectif") },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp),
+            shape = RoundedCornerShape(20.dp),
+            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.tertiary)
+        )
+
+        PnjReputationEditor(
+            character = character,
+            onUpdate = onUpdate,
+            textColor = Color.White,
+            sectionTitle = { EditSectionTitle(it) }
+        )
+    }
+}
+
 @Composable
 private fun InventoryTab(character: Character, onUpdate: (Character) -> Unit) {
     var showLibraryPicker by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
-    // Drag & Drop State
-    var draggedItem by remember { mutableStateOf<Pair<String, Boolean>?>(null) } // Nom + isFromBackpack
-    var dragOffset by remember { mutableStateOf(Offset.Zero) }
-    var backpackBounds by remember { mutableStateOf(Rect.Zero) }
-    var equippedBounds by remember { mutableStateOf(Rect.Zero) }
+    // Placement au clic (remplace le glisser-déposer) : un clic sur un objet le sélectionne,
+    // un clic sur l'autre zone l'y déplace. Re-cliquer l'objet annule la sélection.
+    var selectedItem by remember { mutableStateOf<Pair<String, Boolean>?>(null) } // Nom + isFromBackpack
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
-            EditSectionTitle("GESTION DES OBJETS")
+    fun toggleSelection(item: String, fromBackpack: Boolean) {
+        selectedItem = if (selectedItem == item to fromBackpack) null else item to fromBackpack
+    }
 
-            // Ajout d'objet depuis la bibliothèque SRD (source unique de l'équipement existant)
-            OutlinedButton(
-                onClick = { showLibraryPicker = true },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Ajouter un objet depuis la bibliothèque")
-            }
+    fun moveSelectionTo(toBackpack: Boolean) {
+        val (itemName, fromBackpack) = selectedItem ?: return
+        if (fromBackpack == toBackpack) {
+            selectedItem = null
+            return
+        }
+        if (fromBackpack) {
+            onUpdate(character.copy(
+                backpackItems = character.backpackItems - itemName,
+                equippedItems = character.equippedItems + itemName
+            ))
+        } else {
+            onUpdate(character.copy(
+                equippedItems = character.equippedItems - itemName,
+                backpackItems = character.backpackItems + itemName
+            ))
+        }
+        selectedItem = null
+    }
 
-            if (showLibraryPicker) {
-                SrdLibraryPickerDialog(
-                    title = "Choisir un objet",
-                    onDismiss = { showLibraryPicker = false },
-                    onSelect = { itemName ->
-                        onUpdate(character.copy(backpackItems = character.backpackItems + itemName))
-                    },
-                    search = { query ->
-                        val items = SrdRepository.loadEquipmentList(context, character.worldId.ifBlank { "donjon_et_dragon" })
-                        val filtered = if (query.isBlank()) items else items.filter { it.name.contains(query, ignoreCase = true) }
-                        filtered.map { SrdPickerEntry(name = it.name) }
-                    }
-                )
-            }
+    Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+        EditSectionTitle("GESTION DES OBJETS")
 
-            Row(
-                modifier = Modifier.fillMaxWidth().height(450.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                // SAC À DOS
-                InventoryZone(
-                    title = "SAC À DOS",
-                    icon = Icons.Default.Backpack,
-                    items = character.backpackItems,
-                    modifier = Modifier
-                        .weight(1f)
-                        .onGloballyPositioned { backpackBounds = it.boundsInWindow() },
-                    onDeleteItem = { item ->
-                        onUpdate(character.copy(backpackItems = character.backpackItems - item))
-                    },
-                    onDragStart = { item -> draggedItem = item to true }
-                )
+        // Ajout d'objet depuis la bibliothèque SRD (source unique de l'équipement existant)
+        OutlinedButton(
+            onClick = { showLibraryPicker = true },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Ajouter un objet depuis la bibliothèque")
+        }
 
-                // PORTÉ
-                InventoryZone(
-                    title = "ÉQUIPÉ",
-                    icon = Icons.Default.Inventory,
-                    items = character.equippedItems,
-                    modifier = Modifier
-                        .weight(1f)
-                        .onGloballyPositioned { equippedBounds = it.boundsInWindow() },
-                    onDeleteItem = { item ->
-                        onUpdate(character.copy(equippedItems = character.equippedItems - item))
-                    },
-                    onDragStart = { item -> draggedItem = item to false }
-                )
-            }
-
-            Text(
-                "Appuyez longuement sur un objet pour le faire glisser vers l'autre zone.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
+        if (showLibraryPicker) {
+            SrdLibraryPickerDialog(
+                title = "Choisir un objet",
+                onDismiss = { showLibraryPicker = false },
+                onSelect = { itemName ->
+                    onUpdate(character.copy(backpackItems = character.backpackItems + itemName))
+                },
+                search = { query ->
+                    val items = SrdRepository.loadEquipmentList(context, character.worldId.ifBlank { "donjon_et_dragon" })
+                    val filtered = if (query.isBlank()) items else items.filter { it.name.contains(query, ignoreCase = true) }
+                    filtered.map { SrdPickerEntry(name = it.name) }
+                }
             )
         }
 
-        // Overlay de l'objet pendant le drag
-        draggedItem?.let { (itemName, isFromBackpack) ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .pointerInput(Unit) {
-                        detectDragGesturesAfterLongPress(
-                            onDragStart = { offset -> dragOffset = offset },
-                            onDrag = { change, dragAmount ->
-                                change.consume()
-                                dragOffset += dragAmount
-                            },
-                            onDragEnd = {
-                                val finalPos = dragOffset
-                                if (isFromBackpack && equippedBounds.contains(finalPos)) {
-                                    onUpdate(character.copy(
-                                        backpackItems = character.backpackItems - itemName,
-                                        equippedItems = character.equippedItems + itemName
-                                    ))
-                                } else if (!isFromBackpack && backpackBounds.contains(finalPos)) {
-                                    onUpdate(character.copy(
-                                        equippedItems = character.equippedItems - itemName,
-                                        backpackItems = character.backpackItems + itemName
-                                    ))
-                                }
-                                draggedItem = null
-                                dragOffset = Offset.Zero
-                            },
-                            onDragCancel = {
-                                draggedItem = null
-                                dragOffset = Offset.Zero
-                            }
-                        )
-                    }
-                    .zIndex(100f)
-            ) {
-                // L'objet qui suit le doigt
-                Box(
-                    modifier = Modifier
-                        .offset { IntOffset(dragOffset.x.roundToInt() - 100, dragOffset.y.roundToInt() - 50) }
-                        .width(150.dp)
-                ) {
-                    ItemCard(name = itemName, onDelete = {}, isDragging = true)
-                }
-            }
+        Row(
+            modifier = Modifier.fillMaxWidth().height(450.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // SAC À DOS
+            InventoryZone(
+                title = "SAC À DOS",
+                icon = Icons.Default.Backpack,
+                items = character.backpackItems,
+                selectedItem = selectedItem?.takeIf { it.second }?.first,
+                isTarget = selectedItem?.second == false,
+                modifier = Modifier.weight(1f),
+                onDeleteItem = { item ->
+                    if (selectedItem == item to true) selectedItem = null
+                    onUpdate(character.copy(backpackItems = character.backpackItems - item))
+                },
+                onItemClick = { item -> toggleSelection(item, fromBackpack = true) },
+                onZoneClick = { moveSelectionTo(toBackpack = true) }
+            )
+
+            // PORTÉ
+            InventoryZone(
+                title = "ÉQUIPÉ",
+                icon = Icons.Default.Inventory,
+                items = character.equippedItems,
+                selectedItem = selectedItem?.takeIf { !it.second }?.first,
+                isTarget = selectedItem?.second == true,
+                modifier = Modifier.weight(1f),
+                onDeleteItem = { item ->
+                    if (selectedItem == item to false) selectedItem = null
+                    onUpdate(character.copy(equippedItems = character.equippedItems - item))
+                },
+                onItemClick = { item -> toggleSelection(item, fromBackpack = false) },
+                onZoneClick = { moveSelectionTo(toBackpack = false) }
+            )
         }
+
+        val selection = selectedItem
+        Text(
+            if (selection == null) "Touchez un objet pour le sélectionner, puis touchez l'autre zone pour l'y placer."
+            else "« ${selection.first} » sélectionné : touchez la zone ${if (selection.second) "ÉQUIPÉ" else "SAC À DOS"} pour l'y placer.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
@@ -336,9 +389,12 @@ private fun InventoryZone(
     title: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     items: List<String>,
+    selectedItem: String?,
+    isTarget: Boolean,
     modifier: Modifier = Modifier,
     onDeleteItem: (String) -> Unit,
-    onDragStart: (String) -> Unit
+    onItemClick: (String) -> Unit,
+    onZoneClick: () -> Unit
 ) {
     Column(modifier = modifier) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
@@ -347,11 +403,15 @@ private fun InventoryZone(
             Text(title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Black)
         }
 
+        // Toute la zone est cliquable : c'est la cible quand un objet de l'autre zone est sélectionné.
         Surface(
+            onClick = onZoneClick,
             modifier = Modifier.fillMaxSize(),
             shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+            color = if (isTarget) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+            border = if (isTarget) BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+            else BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
         ) {
             if (items.isEmpty()) {
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
@@ -363,19 +423,12 @@ private fun InventoryZone(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(items) { item ->
-                        Box(modifier = Modifier.pointerInput(item) {
-                            detectDragGesturesAfterLongPress(
-                                onDragStart = { onDragStart(item) },
-                                onDrag = { _, _ -> },
-                                onDragEnd = {},
-                                onDragCancel = {}
-                            )
-                        }) {
-                            ItemCard(
-                                name = item,
-                                onDelete = { onDeleteItem(item) }
-                            )
-                        }
+                        ItemCard(
+                            name = item,
+                            onDelete = { onDeleteItem(item) },
+                            isSelected = item == selectedItem,
+                            onClick = { onItemClick(item) }
+                        )
                     }
                 }
             }
@@ -387,7 +440,8 @@ private fun InventoryZone(
 private fun ItemCard(
     name: String,
     onDelete: () -> Unit,
-    isDragging: Boolean = false
+    isSelected: Boolean,
+    onClick: () -> Unit
 ) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
     val slot = remember(name) { equipmentSlotFor(name) }
@@ -395,37 +449,32 @@ private fun ItemCard(
     val hands = remember(name) { equipmentHandsRequired(name) }
 
     Surface(
+        onClick = onClick,
         shape = RoundedCornerShape(12.dp),
-        color = (if (isDragging) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface).copy(alpha = if (isDragging) 0.8f else 1f),
-        tonalElevation = if (isDragging) 12.dp else 2.dp,
-        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)),
+        color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.28f) else MaterialTheme.colorScheme.surface,
+        tonalElevation = 2.dp,
+        border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+        else BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)),
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Pastille = couleur de l'emplacement (arme, armure, sac...)
-            Box(
-                modifier = Modifier
-                    .size(10.dp)
-                    .background(slot.slotColor(), CircleShape)
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-
-            Icon(
-                imageVector = Icons.Default.DragHandle,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-                modifier = Modifier.size(20.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = name,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold
-                )
+                // Contour de couleur autour du nom = emplacement où l'objet peut être équipé
+                Box(
+                    modifier = Modifier
+                        .border(1.dp, slot.slotColor(), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = name,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
                 Text(
                     text = if (weightLabel != null) "${slot.slotLabel()} • $weightLabel" else slot.slotLabel(),
                     style = MaterialTheme.typography.labelSmall,
@@ -439,10 +488,8 @@ private fun ItemCard(
                 Spacer(modifier = Modifier.width(8.dp))
             }
 
-            if (!isDragging) {
-                IconButton(onClick = { showDeleteConfirm = true }, modifier = Modifier.size(24.dp)) {
-                    Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
-                }
+            IconButton(onClick = { showDeleteConfirm = true }, modifier = Modifier.size(24.dp)) {
+                Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
             }
         }
     }
@@ -501,6 +548,16 @@ private fun HistoryTab(character: Character, onUpdate: (Character) -> Unit) {
             )
         }
 
+        // Sous-classe : pas de source SRD dédiée (elle apparaît en sous-section des
+        // classes), donc saisie libre plutôt qu'un picker comme RACE/CLASSE.
+        OutlinedTextField(
+            value = character.subclass,
+            onValueChange = { onUpdate(character.copy(subclass = it)) },
+            label = { Text("SOUS-CLASSE") },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp)
+        )
+
         if (showEspecePicker) {
             SrdLibraryPickerDialog(
                 title = "Choisir une espèce",
@@ -524,6 +581,15 @@ private fun HistoryTab(character: Character, onUpdate: (Character) -> Unit) {
                 }
             )
         }
+
+        EditSectionTitle("APPARENCE")
+        OutlinedTextField(
+            value = character.appearance,
+            onValueChange = { onUpdate(character.copy(appearance = it)) },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp),
+            shape = RoundedCornerShape(20.dp),
+            placeholder = { Text("Silhouette, tenue, signes distinctifs...") }
+        )
 
         EditSectionTitle("HISTOIRE & ORIGINES")
         OutlinedTextField(

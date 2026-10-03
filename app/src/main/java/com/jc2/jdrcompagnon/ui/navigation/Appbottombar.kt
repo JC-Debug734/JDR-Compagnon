@@ -126,7 +126,8 @@ fun AppBottomBar(
 
     NavigationBar(
         modifier = modifier,
-        containerColor = Color.Transparent,
+        // Fond uni (même couleur que le menu latéral) : le fond d'écran ne doit pas transparaître.
+        containerColor = ForcedDarkPalette.Surface,
         contentColor = ForcedDarkPalette.Content,
     ) {
         NavigationBarItem(

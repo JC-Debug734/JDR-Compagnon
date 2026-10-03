@@ -1,5 +1,7 @@
 # Historiques — SRD 5.2.1
 
+<!-- Balises de choix (choix:, effet:, options:, remplace:, categorie:...) : voir l'en-tête de especes_srd521.md. -->
+
 Ce fichier recense les 4 historiques (backgrounds) du Document de Référence du Système (D&D 5e, SRD 5.2.1), au format structuré pour import dans JDR Compagnon.
 
 Chaque historique octroie :
@@ -67,8 +69,10 @@ Choisissez A ou B :
 - Don : Sauvagerie martiale
 - Maîtrises de compétence : Athlétisme et Intimidation
 - Maîtrise d'outils : Choisissez un type de boîte de jeux
+<!-- id: soldat-jeux; choix: 1; effet: outils; options: equipement: Boîte de jeux; remplace: boîte de jeux (du même type que ci-dessus) -->
+
 
 ### Équipement
 Choisissez A ou B :
-- **A.** Arc court + 20 flèches, carquois, lance, boîte de jeux (du même type que ci-dessus), trousse de soins, tenue de voyage, 14 po
+- **A.** Arc court, 20 flèches, carquois, lance, boîte de jeux (du même type que ci-dessus), trousse de soins, tenue de voyage, 14 po
 - **B.** 50 po

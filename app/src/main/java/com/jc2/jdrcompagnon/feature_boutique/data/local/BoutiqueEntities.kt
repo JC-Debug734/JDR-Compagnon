@@ -57,7 +57,9 @@ data class ServiceEntity(
     val description: String,
     val prixEnPo: Int,
     val quantiteDisponible: Int?,
-    val actif: Boolean = true
+    val actif: Boolean = true,
+    // Ajoutée en version 14 de la base (AppDatabase.MIGRATION_13_14).
+    val personnalise: Boolean = false
 )
 
 @Entity(

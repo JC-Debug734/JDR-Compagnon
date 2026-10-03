@@ -1,6 +1,7 @@
 ### Aboleth
 Catégorie: Non classé
 Type: Aberration
+Environnement: Aquatique, Souterrain
 Taille: G
 Alignement: Loyale Mauvaise
 CA: 17 Initiative +7 (17)
@@ -32,6 +33,7 @@ Succion psychique. Si l’aboleth maintient au moins une créature Charmée ou A
 ### Ankheg
 Catégorie: Non classé
 Type: Monstruosité
+Environnement: Forêt, Grotte/Souterrain
 Taille: G
 Alignement: non alignée
 CA: 14 Initiative +0 (10)
@@ -52,6 +54,7 @@ Aspersion acide (recharge 6). JS Dextérité : DD 12, chaque créature dans une 
 ### Araignée de phase
 Catégorie: Non classé
 Type: Monstruosité
+Environnement: Forêt, Grotte/Souterrain
 Taille: G
 Alignement: non alignée
 CA: 14 Initiative +3 (13)
@@ -79,6 +82,7 @@ Saut éthéré. L’araignée se téléporte du Plan Matériel vers le Plan Éth
 ### Assassin
 Catégorie: Non classé
 Type: Humanoïde
+Environnement: Urbain, Plaines
 Taille: M ou P
 Alignement: Neutre
 CA: 16 Initiative +10 (20)
@@ -106,6 +110,7 @@ Ruse. L’assassin entreprend l’action Désengagement, Furtivité ou Pointe.
 ### Autrache
 Catégorie: Non classé
 Type: Monstruosité
+Environnement: Forêt, Grotte/Souterrain
 Taille: G
 Alignement: non alignée
 CA: 11 Initiative +1 (11)
@@ -122,6 +127,7 @@ Bec. Corps à corps : +4, allonge 1,50 m. Touché : 6 (1d8 + 2) dégâts trancha
 ### Âme-en-peine
 Catégorie: Non classé
 Type: Mort-vivant
+Environnement: Donjon/Ruines
 Taille: M ou P
 Alignement: Neutre Mauvais
 CA: 13 Initiative +3 (13)
@@ -146,6 +152,7 @@ Création de spectre. L’âme-en-peine cible un Humanoïde dans un rayon de 3 m
 ### Babélien
 Catégorie: Azer
 Type: Aberration
+Environnement: Volcanique, Planaire
 Taille: M
 Alignement: Chaotique Neutre
 CA: 9 Initiative −1 (9)
@@ -169,6 +176,7 @@ Crachat aveuglant (recharge 5–6). JS Dextérité : DD 10, chaque créature dan
 ### Balor
 Catégorie: Azer
 Type: Fiélon (Démon)
+Environnement: Volcanique, Planaire
 Taille: TG
 Alignement: Chaotique Mauvais
 CA: 19 Initiative +14 (24)
@@ -200,6 +208,7 @@ Téléportation. Le balor téléporte un démon consentant situé dans un rayon 
 ### Sentinelle azer
 Catégorie: Azer
 Type: Élémentaire
+Environnement: Volcanique, Planaire
 Taille: M
 Alignement: Loyal Neutre
 CA: 17 Initiative +1 (11)
@@ -221,6 +230,7 @@ Marteau ardent. Corps à corps : +5, allonge 1,50 m. Touché : 8 (1d10 + 3) dég
 ### Bandit
 Catégorie: Bandits
 Type: Humanoïde
+Environnement: Urbain, Plaines
 Taille: M ou P
 Alignement: Neutre
 CA: 12 Initiative +1 (11)
@@ -239,6 +249,7 @@ Arbalète légère. À distance : +3, portée 24/96 m. Touché : 5 (1d8 + 1) dé
 ### Basilic
 Catégorie: Bandits
 Type: Monstruosité
+Environnement: Urbain, Plaines
 Taille: M
 Alignement: non alignée
 CA: 15 Initiative −1 (9)
@@ -259,6 +270,7 @@ DD 12, chaque créature dans un Cône de 9 m. Si le basilic voit son reflet dans
 ### Berserker
 Catégorie: Bandits
 Type: Humanoïde
+Environnement: Urbain, Plaines
 Taille: M ou P
 Alignement: Neutre
 CA: 13 Initiative +1 (11)
@@ -279,6 +291,7 @@ Hache à deux mains. Corps à corps : +5, allonge 1,50 m. Touché : 9 (1d12 + 3)
 ### Blême
 Catégorie: Bandits
 Type: Mort-vivant
+Environnement: Urbain, Plaines
 Taille: M
 Alignement: Chaotique Mauvais
 CA: 13 Initiative +3 (13)
@@ -301,6 +314,7 @@ Morsure. Corps à corps : +5, allonge 1,50 m. Touché : 7 (1d8 + 3) dégâts per
 ### Bulette
 Catégorie: Bandits
 Type: Monstruosité
+Environnement: Urbain, Plaines
 Taille: G
 Alignement: non alignée
 CA: 17 Initiative +0 (10)
@@ -323,6 +337,7 @@ Bond. La bulette effectue un saut d’un maximum de 9 m en dépensant 3 m de dé
 ### Béhir
 Catégorie: Bandits
 Type: Monstruosité
+Environnement: Urbain, Plaines
 Taille: TG
 Alignement: Neutre Mauvaise
 CA: 17 Initiative +3 (13)
@@ -348,6 +363,7 @@ Agrippée. La créature engloutie subit les états Aveuglé et Entravé, bénéf
 ### Chef de bande
 Catégorie: Bandits
 Type: Humanoïde
+Environnement: Urbain, Plaines
 Taille: M ou P
 Alignement: Neutre
 CA: 15 Initiative +3 (13)
@@ -371,6 +387,7 @@ Parade. Déclencheur : le bandit est touché par un jet d’attaque de corps à 
 ### Soldat centaure
 Catégorie: Centaure
 Type: Fée
+Environnement: Forêt, Plaines
 Taille: G
 Alignement: Neutre Bonne
 CA: 16 Initiative +2 (12)
@@ -394,6 +411,7 @@ Charge écrasante (recharge 5–6). Le centaure se déplace dans les limites de 
 ### Chevalier
 Catégorie: Champignons
 Type: Humanoïde
+Environnement: Grotte/Souterrain, Marais
 Taille: M ou P
 Alignement: Neutre
 CA: 18 Initiative +0 (10)
@@ -417,6 +435,7 @@ Parade. Déclencheur : le Chevalier est touché par un jet d’attaque de corps 
 ### Chien du trépas
 Catégorie: Champignons
 Type: Monstruosité
+Environnement: Grotte/Souterrain, Marais
 Taille: M
 Alignement: Neutre Mauvaise
 CA: 12 Initiative +2 (12)
@@ -436,6 +455,7 @@ Morsure. Corps à corps : +4, allonge 1,50 m. Touché : 4 (1d4 + 2) dégâts per
 ### Chien esquiveur
 Catégorie: Champignons
 Type: Fée
+Environnement: Grotte/Souterrain, Marais
 Taille: M
 Alignement: Loyale Bonne
 CA: 13 Initiative +3 (13)
@@ -456,6 +476,7 @@ Téléportation (recharge 4–6). Le chien se téléporte d’un maximum de 12 m
 ### Chimère
 Catégorie: Champignons
 Type: Monstruosité
+Environnement: Grotte/Souterrain, Marais
 Taille: G
 Alignement: Chaotique Mauvaise
 CA: 14 Initiative +0 (10)
@@ -478,6 +499,7 @@ Souffle de feu (recharge 5–6). JS Dextérité : DD 15, chaque créature dans u
 ### Chtuul
 Catégorie: Champignons
 Type: Aberration
+Environnement: Grotte/Souterrain, Marais
 Taille: G
 Alignement: Chaotique Mauvaise
 CA: 16 Initiative +0 (10)
@@ -502,6 +524,7 @@ Tentacules paralysants. JS Constitution : DD 13, une créature Agrippée par le 
 ### Cockatrice
 Catégorie: Champignons
 Type: Monstruosité
+Environnement: Grotte/Souterrain, Marais
 Taille: P
 Alignement: non alignée
 CA: 11 Initiative +1 (11)
@@ -519,6 +542,7 @@ Morsure pétrifiante. Corps à corps : +3, allonge 1,50 m. Touché : 3 (1d4 + 1)
 ### Couatl
 Catégorie: Champignons
 Type: Céleste
+Environnement: Grotte/Souterrain, Marais
 Taille: M
 Alignement: Loyal Bon
 CA: 19 Initiative +5 (15)
@@ -545,6 +569,7 @@ Soutien divin (2/jour). Le couatl lance bénédiction, restauration partielle ou
 ### Criard
 Catégorie: Champignons
 Type: Plante
+Environnement: Grotte/Souterrain, Marais
 Taille: M
 Alignement: non alignée
 CA: 5 Initiative –5 (5)
@@ -562,6 +587,7 @@ Hurlement. Déclencheur : une créature ou une source de Lumière vive se dépla
 ### Cube gélatineux
 Catégorie: Champignons
 Type: Vase
+Environnement: Grotte/Souterrain, Marais
 Taille: G
 Alignement: non alignée
 CA: 6 Initiative –4 (6)
@@ -584,6 +610,7 @@ Enveloppement. Le cube se déplace dans les limites de sa Vitesse sans provoquer
 ### Demi-dragon
 Catégorie: Champignons
 Type: Dragon
+Environnement: Grotte/Souterrain, Marais
 Taille: M
 Alignement: Neutre
 CA: 18 Initiative +5 (15)
@@ -611,6 +638,7 @@ Bond. Le demi-dragon effectue un saut d’un maximum de 9 m en dépensant 3 m de
 ### Diable barbelé
 Catégorie: Champignons
 Type: Fiélon (Diable)
+Environnement: Grotte/Souterrain, Marais
 Taille: M
 Alignement: Loyal Mauvais
 CA: 15 Initiative +3 (13)
@@ -638,6 +666,7 @@ Jet de flammes. À distance : +5, portée 45 m. Touché : 17 (5d6) dégâts de f
 ### Diable barbu
 Catégorie: Champignons
 Type: Fiélon (Diable)
+Environnement: Grotte/Souterrain, Marais
 Taille: M
 Alignement: Loyal Mauvais
 CA: 13 Initiative +2 (12)
@@ -662,6 +691,7 @@ DD 12. Échec : la cible subit une plaie infernale. Ainsi blessée, la cible per
 ### Diable cornu
 Catégorie: Champignons
 Type: Fiélon (Diable)
+Environnement: Grotte/Souterrain, Marais
 Taille: G
 Alignement: Loyal Mauvais
 CA: 18 Initiative +7 (17)
@@ -687,6 +717,7 @@ Queue infernale. JS Dextérité : DD 17, une créature que le diable voit dans u
 ### Diable des chaînes
 Catégorie: Champignons
 Type: Fiélon (Diable)
+Environnement: Grotte/Souterrain, Marais
 Taille: M
 Alignement: Loyal Mauvais
 CA: 15 Initiative +5 (15)
@@ -714,6 +745,7 @@ Regard dérangeant. Déclencheur : une créature que le diable voit commence son
 ### Diable gelé
 Catégorie: Champignons
 Type: Fiélon (Diable)
+Environnement: Grotte/Souterrain, Marais
 Taille: G
 Alignement: Loyal Mauvais
 CA: 18 Initiative +7 (17)
@@ -739,6 +771,7 @@ Mur de glace (recharge 6). Le diable lance mur de glace (au 8e niveau) sans comp
 ### Diable osseux
 Catégorie: Champignons
 Type: Fiélon (Diable)
+Environnement: Grotte/Souterrain, Marais
 Taille: G
 Alignement: Loyal Mauvais
 CA: 16 Initiative +7 (17)
@@ -764,6 +797,7 @@ Griffe. Corps à corps : +8, allonge 3 m. Touché : 13 (2d8 + 4) dégâts tranch
 ### Diablotin
 Catégorie: Champignons
 Type: Fiélon (Diable)
+Environnement: Grotte/Souterrain, Marais
 Taille: TP
 Alignement: Loyal Mauvais
 CA: 13 Initiative +3 (13)
@@ -788,6 +822,7 @@ Invisibilité. Le diablotin lance invisibilité sur lui-même, sans composante m
 ### Diantrefosse
 Catégorie: Champignons
 Type: Fiélon (Diable)
+Environnement: Grotte/Souterrain, Marais
 Taille: G
 Alignement: Loyal Mauvais
 CA: 21 Initiative +14 (24)
@@ -817,6 +852,7 @@ Empoisonné. Ainsi Empoisonnée, la cible ne peut pas récupérer de points de v
 ### Djinn
 Catégorie: Champignons
 Type: Élémentaire (Génie)
+Environnement: Grotte/Souterrain, Marais
 Taille: G
 Alignement: Neutre
 CA: 17 Initiative +2 (12)
@@ -843,6 +879,7 @@ Incantation. Le djinn lance l’un des sorts suivants, sans composantes matérie
 ### Doppelganger
 Catégorie: Champignons
 Type: Monstruosité
+Environnement: Grotte/Souterrain, Marais
 Taille: M
 Alignement: Neutre
 CA: 14 Initiative +4 (14)
@@ -867,6 +904,7 @@ Changement d’aspect. Le doppelganger se transforme en Humanoïde de taille M o
 ### Déva
 Catégorie: Champignons
 Type: Céleste (Ange)
+Environnement: Grotte/Souterrain, Marais
 Taille: M
 Alignement: Loyal Bon
 CA: 17 Initiative +4 (14)
@@ -895,6 +933,7 @@ Soutien divin (2/jour). Le déva lance délivrance des malédictions, restaurati
 ### Thallophyte violette
 Catégorie: Champignons
 Type: Plante
+Environnement: Grotte/Souterrain, Marais
 Taille: M
 Alignement: non alignée
 CA: 5 Initiative –5 (5)
@@ -913,6 +952,7 @@ Contact putréfiant. Corps à corps : +2, allonge 3 m. Touché : 4 (1d8) dégât
 ### Dragon blanc adulte
 Catégorie: Dragons blancs
 Type: Dragon (Chromatique)
+Environnement: Arctique, Montagne
 Taille: TG
 Alignement: Chaotique Mauvais
 CA: 18 Initiative +10 (20)
@@ -942,6 +982,7 @@ Présence terrifiante. Le dragon lance terreur sans composantes matérielles, le
 ### Dragon blanc vénérable
 Catégorie: Dragons blancs
 Type: Dragon (Chromatique)
+Environnement: Arctique, Montagne
 Taille: Gig
 Alignement: Chaotique Mauvais
 CA: 20 Initiative +12 (22)
@@ -971,6 +1012,7 @@ Présence terrifiante. Le dragon lance terreur sans composantes matérielles, le
 ### Dragonnet blanc
 Catégorie: Dragons blancs
 Type: Dragon (Chromatique)
+Environnement: Arctique, Montagne
 Taille: M
 Alignement: Chaotique Mauvais
 CA: 16 Initiative +2 (12)
@@ -994,6 +1036,7 @@ Souffle glacial (recharge 5–6). JS Constitution : DD 12, chaque créature dans
 ### Jeune dragon blanc
 Catégorie: Dragons blancs
 Type: Dragon (Chromatique)
+Environnement: Arctique, Montagne
 Taille: G
 Alignement: Chaotique Mauvais
 CA: 17 Initiative +3 (13)
@@ -1017,6 +1060,7 @@ Souffle glacial (recharge 5–6). JS Constitution : DD 15, chaque créature dans
 ### Dragon bleu adulte
 Catégorie: Dragons bleus
 Type: Dragon (Chromatique)
+Environnement: Désert, Montagne
 Taille: TG
 Alignement: Loyal Mauvais
 CA: 19 Initiative +10 (20)
@@ -1047,6 +1091,7 @@ Fracas tonitruant. Le dragon recourt à Incantation pour lancer fracassement. Le
 ### Dragon bleu vénérable
 Catégorie: Dragons bleus
 Type: Dragon (Chromatique)
+Environnement: Désert, Montagne
 Taille: Gig
 Alignement: Loyal Mauvais
 CA: 22 Initiative +14 (24)
@@ -1077,6 +1122,7 @@ Fracas tonitruant. Le dragon recourt à Incantation pour lancer fracassement (au
 ### Dragonnet bleu
 Catégorie: Dragons bleus
 Type: Dragon (Chromatique)
+Environnement: Désert, Montagne
 Taille: M
 Alignement: Loyal Mauvais
 CA: 17 Initiative +2 (12)
@@ -1097,6 +1143,7 @@ Souffle de foudre (recharge 5–6). JS Dextérité : DD 12, chaque créature dan
 ### Jeune dragon bleu
 Catégorie: Dragons bleus
 Type: Dragon (Chromatique)
+Environnement: Désert, Montagne
 Taille: G
 Alignement: Loyal Mauvais
 CA: 18 Initiative +4 (14)
@@ -1117,6 +1164,7 @@ Souffle de foudre (recharge 5–6). JS Dextérité : DD 16, chaque créature dan
 ### Dragon d’airain adulte
 Catégorie: Dragons d’airain
 Type: Dragon (Métallique)
+Environnement: Désert, Volcanique
 Taille: TG
 Alignement: Chaotique Bon
 CA: 18 Initiative +10 (20)
@@ -1149,6 +1197,7 @@ Sables brûlants. JS Dextérité : DD 16, une créature que le dragon voit dans 
 ### Dragon d’airain vénérable
 Catégorie: Dragons d’airain
 Type: Dragon (Métallique)
+Environnement: Désert, Volcanique
 Taille: Gig
 Alignement: Chaotique Bon
 CA: 20 Initiative +12 (22)
@@ -1181,6 +1230,7 @@ Sables brûlants. JS Dextérité : DD 20, une créature que le dragon voit dans 
 ### Dragonnet d’airain
 Catégorie: Dragons d’airain
 Type: Dragon (Métallique)
+Environnement: Désert, Volcanique
 Taille: M
 Alignement: Chaotique Bon
 CA: 15 Initiative +2 (12)
@@ -1202,6 +1252,7 @@ Inconscient pendant 1 minute. Cet effet prend fin pour la cible si celle-ci subi
 ### Jeune dragon d’airain
 Catégorie: Dragons d’airain
 Type: Dragon (Métallique)
+Environnement: Désert, Volcanique
 Taille: G
 Alignement: Chaotique Bon
 CA: 17 Initiative +3 (13)
@@ -1224,6 +1275,7 @@ Inconscient pendant 1 minute. Cet effet prend fin pour la cible si celle-ci subi
 ### Dragon d’argent adulte
 Catégorie: Dragons d’argent
 Type: Dragon (Métallique)
+Environnement: Montagne, Planaire
 Taille: TG
 Alignement: Loyal Bon
 CA: 19 Initiative +10 (20)
@@ -1255,6 +1307,7 @@ Rafale gelée. JS Dextérité : DD 19, chaque créature dans une Ligne de 18 m d
 ### Dragon d’argent vénérable
 Catégorie: Dragons d’argent
 Type: Dragon (Métallique)
+Environnement: Montagne, Planaire
 Taille: Gig
 Alignement: Loyal Bon
 CA: 22 Initiative +14 (24)
@@ -1286,6 +1339,7 @@ Rafale gelée. JS Dextérité : DD 23, chaque créature dans une Ligne de 18 m d
 ### Dragonnet d’argent
 Catégorie: Dragons d’argent
 Type: Dragon (Métallique)
+Environnement: Montagne, Planaire
 Taille: M
 Alignement: Loyal Bon
 CA: 17 Initiative +2 (12)
@@ -1307,6 +1361,7 @@ Souffle paralysant. JS Constitution : DD 13, chaque créature dans un Cône de 4
 ### Jeune dragon d’argent
 Catégorie: Dragons d’argent
 Type: Dragon (Métallique)
+Environnement: Montagne, Planaire
 Taille: G
 Alignement: Loyal Bon
 CA: 18 Initiative +4 (14)
@@ -1328,6 +1383,7 @@ Souffle paralysant. JS Constitution : DD 17, chaque créature dans un Cône de 9
 ### Dragon d’or adulte
 Catégorie: Dragons d’or
 Type: Dragon (Métallique)
+Environnement: Planaire, Montagne
 Taille: TG
 Alignement: Loyal Bon
 CA: 19 Initiative +14 (24)
@@ -1359,6 +1415,7 @@ Lumière traçante. Le dragon recourt à Incantation pour lancer rayon traçant 
 ### Dragon d’or vénérable
 Catégorie: Dragons d’or
 Type: Dragon (Métallique)
+Environnement: Planaire, Montagne
 Taille: Gig
 Alignement: Loyal Bon
 CA: 22 Initiative +16 (26)
@@ -1390,6 +1447,7 @@ Lumière traçante. Le dragon recourt à Incantation pour lancer rayon traçant 
 ### Dragonnet d’or
 Catégorie: Dragons d’or
 Type: Dragon (Métallique)
+Environnement: Planaire, Montagne
 Taille: M
 Alignement: Loyal Bon
 CA: 17 Initiative +4 (14)
@@ -1414,6 +1472,7 @@ Souffle de feu (recharge 5–6). JS Dextérité : DD 13, chaque créature dans u
 ### Jeune dragon d’or
 Catégorie: Dragons d’or
 Type: Dragon (Métallique)
+Environnement: Planaire, Montagne
 Taille: G
 Alignement: Loyal Bon
 CA: 18 Initiative +6 (16)
@@ -1438,6 +1497,7 @@ Souffle de feu (recharge 5–6). JS Dextérité : DD 17, chaque créature dans u
 ### Dragon de bronze adulte
 Catégorie: Dragons de bronze
 Type: Dragon (Métallique)
+Environnement: Aquatique, Plaines
 Taille: TG
 Alignement: Loyal Bon
 CA: 18 Initiative +10 (20)
@@ -1469,6 +1529,7 @@ Lumière traçante. Le dragon recourt à Incantation pour lancer rayon traçant 
 ### Dragon de bronze vénérable
 Catégorie: Dragons de bronze
 Type: Dragon (Métallique)
+Environnement: Aquatique, Plaines
 Taille: Gig
 Alignement: Loyal Bon
 CA: 22 Initiative +14 (24)
@@ -1500,6 +1561,7 @@ Lumière traçante. Le dragon recourt à Incantation pour lancer rayon traçant 
 ### Dragonnet de bronze
 Catégorie: Dragons de bronze
 Type: Dragon (Métallique)
+Environnement: Aquatique, Plaines
 Taille: M
 Alignement: Loyal Bon
 CA: 15 Initiative +2 (12)
@@ -1524,6 +1586,7 @@ Souffle répulsif. JS Force : DD 12, chaque créature dans un Cône de 9 m. Éch
 ### Jeune dragon de bronze
 Catégorie: Dragons de bronze
 Type: Dragon (Métallique)
+Environnement: Aquatique, Plaines
 Taille: G
 Alignement: Loyal Bon
 CA: 17 Initiative +3 (13)
@@ -1548,6 +1611,7 @@ Souffle répulsif. JS Force : DD 15, chaque créature dans un Cône de 9 m. Éch
 ### Dragon de cuivre adulte
 Catégorie: Dragons de cuivre
 Type: Dragon (Métallique)
+Environnement: Montagne, Désert
 Taille: TG
 Alignement: Chaotique Bon
 CA: 18 Initiative +11 (21)
@@ -1580,6 +1644,7 @@ Gloussement magique. JS Charisme : DD 17, une créature que le dragon voit dans 
 ### Dragon de cuivre vénérable
 Catégorie: Dragons de cuivre
 Type: Dragon (Métallique)
+Environnement: Montagne, Désert
 Taille: Gig
 Alignement: Chaotique Bon
 CA: 21 Initiative +15 (25)
@@ -1612,6 +1677,7 @@ Gloussement magique. JS Charisme : DD 21, une créature que le dragon voit dans 
 ### Dragonnet de cuivre
 Catégorie: Dragons de cuivre
 Type: Dragon (Métallique)
+Environnement: Montagne, Désert
 Taille: M
 Alignement: Chaotique Bon
 CA: 16 Initiative +3 (13)
@@ -1633,6 +1699,7 @@ Bonus à son tour, mais pas les deux. L’effet persiste jusqu’à la fin de so
 ### Jeune dragon de cuivre
 Catégorie: Dragons de cuivre
 Type: Dragon (Métallique)
+Environnement: Montagne, Désert
 Taille: G
 Alignement: Chaotique Bon
 CA: 17 Initiative +4 (14)
@@ -1655,6 +1722,7 @@ Bonus à son tour, mais pas les deux. L’effet persiste jusqu’à la fin de so
 ### Dragon noir adulte
 Catégorie: Dragons noirs
 Type: Dragon (Chromatique)
+Environnement: Marais, Grotte/Souterrain
 Taille: TG
 Alignement: Chaotique Mauvais
 CA: 19 Initiative +12 (22)
@@ -1685,6 +1753,7 @@ Présence terrifiante. Le dragon recourt à Incantation pour lancer terreur. Le 
 ### Dragon noir vénérable
 Catégorie: Dragons noirs
 Type: Dragon (Chromatique)
+Environnement: Marais, Grotte/Souterrain
 Taille: Gig
 Alignement: Chaotique Mauvais
 CA: 22 Initiative +16 (26)
@@ -1715,6 +1784,7 @@ Présence terrifiante. Le dragon recourt à Incantation pour lancer terreur. Le 
 ### Dragonnet noir
 Catégorie: Dragons noirs
 Type: Dragon (Chromatique)
+Environnement: Marais, Grotte/Souterrain
 Taille: M
 Alignement: Chaotique Mauvais
 CA: 17 Initiative +4 (14)
@@ -1738,6 +1808,7 @@ Souffle d’acide (recharge 5–6). JS Dextérité : DD 11, chaque créature dan
 ### Jeune dragon noir
 Catégorie: Dragons noirs
 Type: Dragon (Chromatique)
+Environnement: Marais, Grotte/Souterrain
 Taille: G
 Alignement: Chaotique Mauvais
 CA: 18 Initiative +5 (15)
@@ -1761,6 +1832,7 @@ Souffle d’acide (recharge 5–6). JS Dextérité : DD 14, chaque créature dan
 ### Dragon rouge adulte
 Catégorie: Dragons rouges
 Type: Dragon (Chromatique)
+Environnement: Montagne, Volcanique
 Taille: TG
 Alignement: Chaotique Mauvais
 CA: 19 Initiative +12 (22)
@@ -1791,6 +1863,7 @@ Rayons ignés. Le dragon recourt à Incantation pour lancer rayon ardent. Le dra
 ### Dragon rouge vénérable
 Catégorie: Dragons rouges
 Type: Dragon (Chromatique)
+Environnement: Montagne, Volcanique
 Taille: Gig
 Alignement: Chaotique Mauvais
 CA: 22 Initiative +14 (24)
@@ -1821,6 +1894,7 @@ Rayons ignés. Le dragon recourt à Incantation pour lancer rayon ardent (au 3e 
 ### Dragonnet rouge
 Catégorie: Dragons rouges
 Type: Dragon (Chromatique)
+Environnement: Montagne, Volcanique
 Taille: M
 Alignement: Chaotique Mauvais
 CA: 17 Initiative +2 (12)
@@ -1841,6 +1915,7 @@ Souffle de feu (recharge 5–6). JS Dextérité : DD 13, chaque créature dans u
 ### Jeune dragon rouge
 Catégorie: Dragons rouges
 Type: Dragon (Chromatique)
+Environnement: Montagne, Volcanique
 Taille: G
 Alignement: Chaotique Mauvais
 CA: 18 Initiative +4 (14)
@@ -1861,6 +1936,7 @@ Souffle de feu (recharge 5–6). JS Dextérité : DD 17, chaque créature dans u
 ### Dragon vert adulte
 Catégorie: Dragons verts
 Type: Dragon (Chromatique)
+Environnement: Forêt, Marais
 Taille: TG
 Alignement: Loyal Mauvais
 CA: 19 Initiative +11 (21)
@@ -1891,6 +1967,7 @@ Miasmes nocifs. JS Constitution : DD 17, chaque créature dans une Sphère de 6 
 ### Dragon vert vénérable
 Catégorie: Dragons verts
 Type: Dragon (Chromatique)
+Environnement: Forêt, Marais
 Taille: Gig
 Alignement: Loyal Mauvais
 CA: 21 Initiative +15 (25)
@@ -1921,6 +1998,7 @@ Miasmes nocifs. JS Constitution : DD 21, chaque créature dans une Sphère de 9 
 ### Dragon-tortue
 Catégorie: Dragons verts
 Type: Dragon
+Environnement: Forêt, Marais
 Taille: Gig
 Alignement: Neutre
 CA: 20 Initiative +6 (16)
@@ -1944,6 +2022,7 @@ Souffle de vapeur (recharge 5–6). JS Constitution : DD 19, chaque créature da
 ### Dragonnet vert
 Catégorie: Dragons verts
 Type: Dragon (Chromatique)
+Environnement: Forêt, Marais
 Taille: M
 Alignement: Loyal Mauvais
 CA: 17 Initiative +3 (13)
@@ -1967,6 +2046,7 @@ Souffle empoisonné (recharge 5–6). JS Constitution : DD 11, chaque créature 
 ### Dretch
 Catégorie: Dragons verts
 Type: Fiélon (Démon)
+Environnement: Forêt, Marais
 Taille: P
 Alignement: Chaotique Mauvais
 CA: 11 Initiative +0 (10)
@@ -1986,6 +2066,7 @@ Nuage fétide (1/jour). JS Constitution : DD 11, chaque créature dans une Éman
 ### Drider
 Catégorie: Dragons verts
 Type: Monstruosité
+Environnement: Forêt, Marais
 Taille: G
 Alignement: Chaotique Mauvaise
 CA: 19 Initiative +4 (14)
@@ -2019,6 +2100,7 @@ Incantation. Le druide lance l’un des sorts suivants, la Sagesse étant sa car
 ### Dryade
 Catégorie: Dragons verts
 Type: Fée
+Environnement: Forêt, Marais
 Taille: M
 Alignement: Neutre
 CA: 16 Initiative +1 (11)
@@ -2046,6 +2128,7 @@ Passage par les arbres. Si elle est dans un rayon de 1,50 m d’un arbre de tail
 ### Enlaceur
 Catégorie: Dragons verts
 Type: Aberration
+Environnement: Forêt, Marais
 Taille: G
 Alignement: Neutre Mauvaise
 CA: 20 Initiative +5 (15)
@@ -2069,6 +2152,7 @@ Traction. L’enlaceur tire vers lui chaque créature Agrippée, en ligne droite
 ### Espion
 Catégorie: Dragons verts
 Type: Humanoïde
+Environnement: Forêt, Marais
 Taille: M ou P
 Alignement: Neutre
 CA: 12 Initiative +4 (14)
@@ -2091,6 +2175,7 @@ Ruse. L’espion entreprend l’action Désengagement, Furtivité ou Pointe.
 ### Esprit follet
 Catégorie: Dragons verts
 Type: Fée
+Environnement: Forêt, Marais
 Taille: TP
 Alignement: Neutre Bonne
 CA: 15 Initiative +4 (14)
@@ -2111,6 +2196,7 @@ Perception du for intérieur. JS Charisme : DD 10, une créature que l’esprit 
 ### Ettercap
 Catégorie: Dragons verts
 Type: Monstruosité
+Environnement: Forêt, Marais
 Taille: M
 Alignement: Neutre Mauvaise
 CA: 13 Initiative +2 (12)
@@ -2138,6 +2224,7 @@ Traction. L’ettercap tire vers lui en ligne droite une créature Entravée par
 ### Ettin
 Catégorie: Dragons verts
 Type: Géant
+Environnement: Forêt, Marais
 Taille: G
 Alignement: Chaotique Mauvais
 CA: 12 Initiative −1 (9)
@@ -2159,6 +2246,7 @@ Morgenstern. Corps à corps : +7, allonge 1,50 m. Touché : 14 (2d8 + 5) dégât
 ### Fantôme
 Catégorie: Dragons verts
 Type: Mort-vivant
+Environnement: Forêt, Marais
 Taille: M
 Alignement: Neutre
 CA: 11 Initiative +1 (11)
@@ -2186,6 +2274,7 @@ Visage terrifiant. JS Sagesse : DD 13, chaque créature dans un Cône de 18 m qu
 ### Feu follet
 Catégorie: Dragons verts
 Type: Mort-vivant
+Environnement: Forêt, Marais
 Taille: TP
 Alignement: Chaotique Mauvais
 CA: 19 Initiative +9 (19)
@@ -2214,6 +2303,7 @@ Festin d’essence vitale. JS Constitution : DD 10, une créature vivante à 0 p
 ### Garde animé
 Catégorie: Dragons verts
 Type: Artificiel
+Environnement: Forêt, Marais
 Taille: G
 Alignement: non aligné
 CA: 17 Initiative −1 (9)
@@ -2240,6 +2330,7 @@ Protection. Déclencheur : un jet d’attaque touche le porteur de l’amulette 
 ### Jeune dragon vert
 Catégorie: Dragons verts
 Type: Dragon (Chromatique)
+Environnement: Forêt, Marais
 Taille: G
 Alignement: Loyal Mauvais
 CA: 18 Initiative +4 (14)
@@ -2264,6 +2355,7 @@ DD 14, chaque créature dans un Cône de 9 m. Échec : 42 (12d6) dégâts de poi
 ### Éclaireur
 Catégorie: Dragons verts
 Type: Humanoïde
+Environnement: Forêt, Marais
 Taille: M ou P
 Alignement: Neutre
 CA: 13 Initiative +2 (12)
@@ -2284,6 +2376,7 @@ Arc long. À distance : +4, portée 45/180 m. Touché : 6 (1d8 + 2) dégâts per
 ### Éfrit
 Catégorie: Dragons verts
 Type: Élémentaire (Génie)
+Environnement: Forêt, Marais
 Taille: G
 Alignement: Neutre
 CA: 17 Initiative +1 (11)
@@ -2309,6 +2402,7 @@ Incantation. L’éfrit lance l’un des sorts suivants sans composantes matéri
 ### Élémentaire de la terre
 Catégorie: Dragons verts
 Type: Élémentaire
+Environnement: Forêt, Marais
 Taille: G
 Alignement: Neutre
 CA: 17 Initiative –1 (9)
@@ -2333,6 +2427,7 @@ Projection de rocher. À distance : +8, portée 18 m. Touché : 8 (1d6 + 5) dég
 ### Élémentaire de l’air
 Catégorie: Dragons verts
 Type: Élémentaire
+Environnement: Forêt, Marais
 Taille: G
 Alignement: Neutre
 CA: 15 Initiative +5 (15)
@@ -2356,6 +2451,7 @@ Tourbillon (recharge 4–6). JS Force : DD 13, une créature de taille M ou inf�
 ### Élémentaire de l’eau
 Catégorie: Dragons verts
 Type: Élémentaire
+Environnement: Forêt, Marais
 Taille: G
 Alignement: Neutre
 CA: 14 Initiative +2 (12)
@@ -2382,6 +2478,7 @@ DD 14. Réussite : demi-dégâts uniquement.
 ### Élémentaire du feu
 Catégorie: Dragons verts
 Type: Élémentaire
+Environnement: Forêt, Marais
 Taille: G
 Alignement: Neutre
 CA: 13 Initiative +3 (13)
@@ -2407,6 +2504,7 @@ Brûlure. Corps à corps : +6, allonge 1,50 m. Touché : 10 (2d6 + 3) dégâts d
 ### Érinye
 Catégorie: Dragons verts
 Type: Fiélon (Diable)
+Environnement: Forêt, Marais
 Taille: M
 Alignement: Loyal Mauvais
 CA: 18 Initiative +7 (17)
@@ -2437,6 +2535,7 @@ Parade. Déclencheur : l’érinye est touchée par un jet d’attaque de corps 
 ### Capitaine de la garde
 Catégorie: Gardes
 Type: Humanoïde
+Environnement: Urbain
 Taille: M ou P
 Alignement: Neutre
 CA: 18 Initiative +4 (14)
@@ -2457,6 +2556,7 @@ Javeline. Corps à corps ou à distance : +6, allonge 1,50 m ou portée 9/36 m. 
 ### Garde
 Catégorie: Gardes
 Type: Humanoïde
+Environnement: Urbain
 Taille: M ou P
 Alignement: Neutre
 CA: 16 Initiative +1 (11)
@@ -2475,6 +2575,7 @@ Lance. Corps à corps ou à distance : +3, allonge 1,50 m ou portée 6/18 m. Tou
 ### Gargouille
 Catégorie: Gardes
 Type: Élémentaire
+Environnement: Urbain
 Taille: M
 Alignement: Chaotique Mauvais
 CA: 15 Initiative +2 (12)
@@ -2497,6 +2598,7 @@ Griffe. Corps à corps : +4, allonge 1,50 m. Touché : 7 (2d4 + 2) dégâts tran
 ### Gelée ocre
 Catégorie: Gardes
 Type: Vase
+Environnement: Urbain
 Taille: G
 Alignement: non alignée
 CA: 8 Initiative −2 (8)
@@ -2522,6 +2624,7 @@ Division. Déclencheur : alors que la gelée est de taille G ou M et dispose d�
 ### Glabrezu
 Catégorie: Gardes
 Type: Fiélon (Démon)
+Environnement: Urbain
 Taille: G
 Alignement: Chaotique Mauvais
 CA: 17 Initiative +6 (16)
@@ -2549,6 +2652,7 @@ Agrippée par le glabrezu. Échec : 15 (3d6 + 5) dégâts contondants. Réussite
 ### Gladiateur
 Catégorie: Gardes
 Type: Humanoïde
+Environnement: Urbain
 Taille: M ou P
 Alignement: Neutre
 CA: 16 Initiative +5 (15)
@@ -2572,6 +2676,7 @@ Parade. Déclencheur : le gladiateur est touché par un jet d’attaque de corps
 ### Géant des collines
 Catégorie: Gardes
 Type: Géant
+Environnement: Urbain
 Taille: TG
 Alignement: Chaotique Mauvais
 CA: 13 Initiative +2 (12)
@@ -2591,6 +2696,7 @@ Lancer de détritus. À distance : +8, portée 18/72 m. Touché : 16 (2d10 + 5) 
 ### Géant des nuages
 Catégorie: Gardes
 Type: Géant
+Environnement: Urbain
 Taille: TG
 Alignement: Neutre
 CA: 14 Initiative +4 (14)
@@ -2614,6 +2720,7 @@ Foulée brumeuse. Le géant lance le sort foulée brumeuse avec la même caract�
 ### Géant des pierres
 Catégorie: Gardes
 Type: Géant
+Environnement: Urbain
 Taille: TG
 Alignement: Neutre
 CA: 17 Initiative +5 (15)
@@ -2636,6 +2743,7 @@ Parade de projectile (recharge 5–6). Déclencheur : le géant est touché par 
 ### Géant des tempêtes
 Catégorie: Gardes
 Type: Géant
+Environnement: Urbain
 Taille: TG
 Alignement: Chaotique Bon
 CA: 16 Initiative +7 (17)
@@ -2662,6 +2770,7 @@ Tempête foudroyante (recharge 5–6). JS Dextérité : DD 18, chaque créature 
 ### Géant du feu
 Catégorie: Gardes
 Type: Géant
+Environnement: Urbain
 Taille: TG
 Alignement: Loyal Mauvais
 CA: 18 Initiative +3 (13)
@@ -2682,6 +2791,7 @@ Lancer de marteau. À distance : +11, portée 18/72 m. Touché : 23 (3d10 + 7) d
 ### Géant du givre
 Catégorie: Gardes
 Type: Géant
+Environnement: Urbain
 Taille: TG
 Alignement: Neutre Mauvais
 CA: 15 Initiative +2 (12)
@@ -2705,6 +2815,7 @@ Cri de guerre (recharge 5–6). Le géant ou une créature de son choix parmi ce
 ### Combattant gnoll
 Catégorie: Gnoll
 Type: Fiélon
+Environnement: Plaines, Désert
 Taille: M
 Alignement: Chaotique Mauvais
 CA: 15 Initiative +1 (11)
@@ -2725,6 +2836,7 @@ Déchaînement (1/jour). Aussitôt après avoir infligé des dégâts à une cr�
 ### Chef gobelin
 Catégorie: Gobelins
 Type: Fée (Gobelinoïde)
+Environnement: Grotte/Souterrain, Forêt
 Taille: P
 Alignement: Chaotique Neutre
 CA: 17 Initiative +2 (12)
@@ -2751,6 +2863,7 @@ Attaque redirigée. Déclencheur : une créature que le gobelin voit effectue un
 ### Combattant gobelin
 Catégorie: Gobelins
 Type: Fée (Gobelinoïde)
+Environnement: Grotte/Souterrain, Forêt
 Taille: P
 Alignement: Chaotique Neutre
 CA: 15 Initiative +2 (12)
@@ -2773,6 +2886,7 @@ Fuite agile. Le gobelin entreprend l’action Désengagement ou Furtivité.
 ### Sbire gobelin
 Catégorie: Gobelins
 Type: Fée (Gobelinoïde)
+Environnement: Grotte/Souterrain, Forêt
 Taille: P
 Alignement: Chaotique Neutre
 CA: 12 Initiative +2 (12)
@@ -2794,6 +2908,7 @@ Fuite agile. Le gobelin entreprend l’action Désengagement ou Furtivité.
 ### Chef gros-bras
 Catégorie: Gobelours
 Type: Humanoïde
+Environnement: Grotte/Souterrain, Forêt, Montagne
 Taille: M ou P
 Alignement: Neutre
 CA: 16 Initiative +2 (12)
@@ -2816,6 +2931,7 @@ Arbalète lourde. À distance : +4, portée 30/120 m. Touché : 13 (2d10 + 2) d�
 ### Combattant gobelours
 Catégorie: Gobelours
 Type: Fée (Gobelinoïde)
+Environnement: Grotte/Souterrain, Forêt, Montagne
 Taille: M
 Alignement: Chaotique Mauvaise
 CA: 14 Initiative +2 (12)
@@ -2838,6 +2954,7 @@ Marteau léger. Corps à corps ou à distance : +4 (avec Avantage si la cible es
 ### Golem de chair
 Catégorie: Gobelours
 Type: Artificiel
+Environnement: Grotte/Souterrain, Forêt, Montagne
 Taille: M
 Alignement: Neutre
 CA: 9 Initiative −1 (9)
@@ -2864,6 +2981,7 @@ Coup. Corps à corps : +7, allonge 1,50 m. Touché : 13 (2d8 + 4) dégâts conto
 ### Golem de fer
 Catégorie: Gobelours
 Type: Artificiel
+Environnement: Grotte/Souterrain, Forêt, Montagne
 Taille: G
 Alignement: non aligné
 CA: 20 Initiative +9 (19)
@@ -2889,6 +3007,7 @@ Souffle empoisonné (recharge 6). JS Constitution : DD 18, chaque créature dans
 ### Golem de pierre
 Catégorie: Gobelours
 Type: Artificiel
+Environnement: Grotte/Souterrain, Forêt, Montagne
 Taille: G
 Alignement: non aligné
 CA: 18 Initiative +3 (13)
@@ -2915,6 +3034,7 @@ Lenteur (recharge 5–6). Le golem lance lenteur, sans composantes de sort, la C
 ### Golem d’argile
 Catégorie: Gobelours
 Type: Artificiel
+Environnement: Grotte/Souterrain, Forêt, Montagne
 Taille: G
 Alignement: non aligné
 CA: 14 Initiative +3 (13)
@@ -2943,6 +3063,7 @@ Accélération (recharge 5–6). Le golem entreprend les actions Désengagement 
 ### Gorgone
 Catégorie: Gobelours
 Type: Artificiel
+Environnement: Grotte/Souterrain, Forêt, Montagne
 Taille: G
 Alignement: non aligné
 CA: 19 Initiative +0 (10)
@@ -2965,6 +3086,7 @@ Piétinement. JS Dextérité : DD 16, une créature subissant l’état À terre
 ### Goule
 Catégorie: Gobelours
 Type: Mort-vivant
+Environnement: Grotte/Souterrain, Forêt, Montagne
 Taille: M
 Alignement: Chaotique Mauvais
 CA: 12 Initiative +2 (12)
@@ -2984,6 +3106,7 @@ Morsure. Corps à corps : +4, allonge 1,50 m. Touché : 5 (1d6 + 2) dégâts per
 ### Grick
 Catégorie: Gobelours
 Type: Aberration
+Environnement: Grotte/Souterrain, Forêt, Montagne
 Taille: M
 Alignement: non alignée
 CA: 14 Initiative +2 (12)
@@ -3003,6 +3126,7 @@ Tentacules. Corps à corps : +4, allonge 1,50 m. Touché : 7 (1d10 + 2) dégâts
 ### Griffon
 Catégorie: Gobelours
 Type: Monstruosité
+Environnement: Grotte/Souterrain, Forêt, Montagne
 Taille: G
 Alignement: non alignée
 CA: 12 Initiative +2 (12)
@@ -3021,6 +3145,7 @@ Saignée. Corps à corps : +6, allonge 1,50 m. Touché : 8 (1d8 + 4) dégâts pe
 ### Gros-bras
 Catégorie: Gobelours
 Type: Humanoïde
+Environnement: Grotte/Souterrain, Forêt, Montagne
 Taille: M ou P
 Alignement: Neutre
 CA: 12 Initiative +1 (11)
@@ -3042,6 +3167,7 @@ Arbalète lourde. À distance : +3, portée 30/120 m. Touché : 6 (1d10 + 1) dé
 ### Guenaude marine
 Catégorie: Gobelours
 Type: Fée
+Environnement: Grotte/Souterrain, Forêt, Montagne
 Taille: M
 Alignement: Chaotique Mauvaise
 CA: 14 Initiative +1 (11)
@@ -3065,6 +3191,7 @@ Apparence illusoire. La guenaude lance déguisement, la Constitution étant sa c
 ### Guenaude nocturne
 Catégorie: Gobelours
 Type: Fiélon
+Environnement: Grotte/Souterrain, Forêt, Montagne
 Taille: M
 Alignement: Neutre Mauvais
 CA: 17 Initiative +5 (15)
@@ -3095,6 +3222,7 @@ Changement d’aspect. La guenaude se transforme en Humanoïde de taille P ou M,
 ### Guenaude verte
 Catégorie: Gobelours
 Type: Fée
+Environnement: Grotte/Souterrain, Forêt, Montagne
 Taille: M
 Alignement: Neutre Mauvaise
 CA: 17 Initiative +1 (11)
@@ -3119,6 +3247,7 @@ Incantation. La guenaude lance l’un des sorts suivants sans composantes matér
 ### Harpie
 Catégorie: Gobelours
 Type: Monstruosité
+Environnement: Grotte/Souterrain, Forêt, Montagne
 Taille: M
 Alignement: Chaotique Mauvaise
 CA: 11 Initiative +1 (11)
@@ -3136,6 +3265,7 @@ Chant captivant. La harpie chante une mélodie magique qui persiste jusqu’à c
 ### Hezrou
 Catégorie: Gobelours
 Type: Fiélon (Démon)
+Environnement: Grotte/Souterrain, Forêt, Montagne
 Taille: G
 Alignement: Chaotique Mauvais
 CA: 18 Initiative +6 (16)
@@ -3163,6 +3293,7 @@ Bond. Le hezrou effectue un saut d’un maximum de 9 m en dépensant 3 m de dép
 ### Traqueur gobelours
 Catégorie: Gobelours
 Type: Fée (Gobelinoïde)
+Environnement: Grotte/Souterrain, Forêt, Montagne
 Taille: M
 Alignement: Chaotique Mauvaise
 CA: 15 Initiative +2 (12)
@@ -3189,6 +3320,7 @@ Lutte rapide. JS Dextérité : DD 13, une créature de taille M ou inférieure q
 ### Hibours
 Catégorie: Hibours (ours-hibou)
 Type: Monstruosité
+Environnement: Forêt
 Taille: G
 Alignement: non alignée
 CA: 13 Initiative +1 (11)
@@ -3207,6 +3339,7 @@ Saignée. Corps à corps : +7, allonge 1,50 m. Touché : 14 (2d8 + 5) dégâts t
 ### Hippogriffe
 Catégorie: Hibours (ours-hibou)
 Type: Monstruosité
+Environnement: Forêt
 Taille: G
 Alignement: non alignée
 CA: 11 Initiative +1 (11)
@@ -3228,6 +3361,7 @@ Saignée. Corps à corps : +5, allonge 1,50 m. Touché : 7 (1d8 + 3) dégâts tr
 ### Capitaine hobgobelin
 Catégorie: Hobgobelins
 Type: Fée (Gobelinoïde)
+Environnement: Grotte/Souterrain, Plaines
 Taille: M
 Alignement: Loyale Mauvaise
 CA: 17 Initiative +4 (14)
@@ -3250,6 +3384,7 @@ Arc long. À distance : +4, portée 45/180 m. Touché : 6 (1d8 + 2) dégâts per
 ### Combattant hobgobelin
 Catégorie: Hobgobelins
 Type: Fée (Gobelinoïde)
+Environnement: Grotte/Souterrain, Plaines
 Taille: M
 Alignement: Loyale Mauvaise
 CA: 18 Initiative +3 (13)
@@ -3271,6 +3406,7 @@ Arc long. À distance : +3, portée 45/180 m. Touché : 5 (1d8 + 1) dégâts per
 ### Homoncule
 Catégorie: Hobgobelins
 Type: Artificiel
+Environnement: Grotte/Souterrain, Plaines
 Taille: TP
 Alignement: Neutre
 CA: 13 Initiative +2 (12)
@@ -3292,6 +3428,7 @@ Empoisonné pendant 1 minute. Ainsi Empoisonnée, la cible subit en outre l’é
 ### Horriflamme
 Catégorie: Horriflamme (destrier noir)
 Type: Fiélon
+Environnement: Planaire, Volcanique
 Taille: G
 Alignement: Neutre Mauvais
 CA: 13 Initiative +2 (12)
@@ -3314,6 +3451,7 @@ Chevauchée éthérée. L’horriflamme et un maximum de trois créatures consen
 ### Hydre
 Catégorie: Horriflamme (destrier noir)
 Type: Monstruosité
+Environnement: Planaire, Volcanique
 Taille: TG
 Alignement: non alignée
 CA: 15 Initiative +4 (14)
@@ -3338,6 +3476,7 @@ Morsure. Corps à corps : +8, allonge 3 m. Touché : 10 (1d10 + 5) dégâts perf
 ### Incube
 Catégorie: Horriflamme (destrier noir)
 Type: Fiélon
+Environnement: Planaire, Volcanique
 Taille: M
 Alignement: Neutre Mauvais
 CA: 15 Initiative +3 (13)
@@ -3364,6 +3503,7 @@ Cauchemar (recharge 6). JS Sagesse : DD 15, une créature que l’incube voit da
 ### Combattant kobold
 Catégorie: Kobold
 Type: Dragon
+Environnement: Grotte/Souterrain, Montagne
 Taille: P
 Alignement: Neutre
 CA: 14 Initiative +2 (12)
@@ -3385,6 +3525,7 @@ Dague. Corps à corps ou à distance : +4, allonge 1,50 m ou portée 6/18 m. Tou
 ### Kraken
 Catégorie: Kobold
 Type: Monstruosité (Titan)
+Environnement: Grotte/Souterrain, Montagne
 Taille: Gig
 Alignement: Chaotique Mauvaise
 CA: 18 Initiative +14 (24)
@@ -3416,6 +3557,7 @@ Trait d’orage. Le kraken recourt à Trait de foudre.
 ### Lamie
 Catégorie: Kobold
 Type: Fiélon
+Environnement: Grotte/Souterrain, Montagne
 Taille: G
 Alignement: Chaotique Mauvais
 CA: 13 Initiative +1 (11)
@@ -3439,6 +3581,7 @@ Bond. La lamie effectue un saut d’un maximum de 9 m en dépensant 3 m de dépl
 ### Liche
 Catégorie: Kobold
 Type: Mort-vivant (Magicien)
+Environnement: Grotte/Souterrain, Montagne
 Taille: M
 Alignement: Neutre Mauvais
 CA: 20 Initiative +17 (27)
@@ -3474,6 +3617,7 @@ Trouble vital. JS Constitution : DD 20, chaque créature autre qu’un Mort-viva
 ### Licorne
 Catégorie: Kobold
 Type: Céleste
+Environnement: Grotte/Souterrain, Montagne
 Taille: G
 Alignement: Loyal Bon
 CA: 12 Initiative +8 (18)
@@ -3506,6 +3650,7 @@ Pavois chatoyant. La licorne cible une créature qu’elle voit dans un rayon de
 ### Loup arctique
 Catégorie: Kobold
 Type: Monstruosité
+Environnement: Grotte/Souterrain, Montagne
 Taille: G
 Alignement: Neutre Mauvaise
 CA: 13 Initiative +1 (11)
@@ -3563,6 +3708,7 @@ Magie protectrice (3/jour). L’archimage lance bouclier ou contresort en répon
 ### Lémure
 Catégorie: Kobold
 Type: Fiélon (Diable)
+Environnement: Grotte/Souterrain, Montagne
 Taille: M
 Alignement: Loyal Mauvais
 CA: 9 Initiative –3 (7)
@@ -3584,6 +3730,7 @@ Limon abject. Corps à corps : +2, allonge 1,50 m. Touché : 2 (1d4) dégâts de
 ### Magmatique
 Catégorie: Kobold
 Type: Élémentaire
+Environnement: Grotte/Souterrain, Montagne
 Taille: P
 Alignement: Chaotique Neutre
 CA: 14 Initiative +2 (12)
@@ -3607,6 +3754,7 @@ Illumination embrasée. Le magmatique s’embrase ou éteint ses flammes. Embras
 ### Mante obscure
 Catégorie: Kobold
 Type: Aberration
+Environnement: Grotte/Souterrain, Montagne
 Taille: P
 Alignement: non alignée
 CA: 11 Initiative +3 (13)
@@ -3626,6 +3774,7 @@ Aura de ténèbres (1/jour). Des ténèbres magiques emplissent une Émanation d
 ### Manteleur
 Catégorie: Kobold
 Type: Aberration
+Environnement: Grotte/Souterrain, Montagne
 Taille: G
 Alignement: Chaotique Neutre
 CA: 14 Initiative +5 (15)
@@ -3653,6 +3802,7 @@ Lamentation. JS Sagesse : DD 13, chaque créature dans une Émanation de 18 m ce
 ### Manticore
 Catégorie: Kobold
 Type: Monstruosité
+Environnement: Grotte/Souterrain, Montagne
 Taille: G
 Alignement: Loyale Mauvaise
 CA: 14 Initiative +3 (13)
@@ -3671,6 +3821,7 @@ Piquant caudal. À distance : +5, portée 30/60 m. Touché : 7 (1d8 + 3) dégât
 ### Marilith
 Catégorie: Kobold
 Type: Fiélon (Démon)
+Environnement: Grotte/Souterrain, Montagne
 Taille: G
 Alignement: Chaotique Mauvais
 CA: 16 Initiative +10 (20)
@@ -3703,6 +3854,7 @@ Parade. Déclencheur : la marilith est touchée par jet d’attaque de corps à 
 ### Méduse
 Catégorie: Kobold
 Type: Monstruosité
+Environnement: Grotte/Souterrain, Montagne
 Taille: M
 Alignement: Loyale Mauvaise
 CA: 15 Initiative +6 (16)
@@ -3728,6 +3880,7 @@ JS. Premier échec : la cible subit l’état Entravé et réitère le JS à la 
 ### Merrow
 Catégorie: Méphites
 Type: Monstruosité
+Environnement: Planaire, Volcanique
 Taille: G
 Alignement: Chaotique Mauvaise
 CA: 13 Initiative +2 (12)
@@ -3750,6 +3903,7 @@ Morsure. Corps à corps : +6, allonge 1,50 m. Touché : 6 (1d4 + 4) dégâts per
 ### Mimique
 Catégorie: Méphites
 Type: Monstruosité
+Environnement: Planaire, Volcanique
 Taille: M
 Alignement: Neutre
 CA: 12 Initiative +3 (13)
@@ -3777,6 +3931,7 @@ Changement d’aspect. La mimique se transforme en objet de taille M ou P, tout 
 ### Minotaure de Baphomet
 Catégorie: Méphites
 Type: Monstruosité
+Environnement: Planaire, Volcanique
 Taille: G
 Alignement: Chaotique Mauvaise
 CA: 14 Initiative +0 (10)
@@ -3795,6 +3950,7 @@ Coutille abyssale. Corps à corps : +6, allonge 3 m. Touché : 10 (1d12 + 4) dé
 ### Molosse infernal
 Catégorie: Méphites
 Type: Fiélon
+Environnement: Planaire, Volcanique
 Taille: M
 Alignement: Loyal Mauvais
 CA: 15 Initiative +1 (11)
@@ -3818,6 +3974,7 @@ Souffle de feu (recharge 5–6). JS Dextérité : DD 12, chaque créature dans u
 ### Méphite gelé
 Catégorie: Méphites
 Type: Élémentaire
+Environnement: Planaire, Volcanique
 Taille: P
 Alignement: Neutre Mauvais
 CA: 11 Initiative +1 (11)
@@ -3843,6 +4000,7 @@ Souffle de givre (recharge 6). JS Constitution : DD 10, chaque créature dans un
 ### Méphite magmatique
 Catégorie: Méphites
 Type: Élémentaire
+Environnement: Planaire, Volcanique
 Taille: P
 Alignement: Neutre Mauvais
 CA: 11 Initiative +1 (11)
@@ -3866,6 +4024,7 @@ Souffle de feu (recharge 6). JS Dextérité : DD 11, chaque créature dans un C�
 ### Méphite poussiéreux
 Catégorie: Méphites
 Type: Élémentaire
+Environnement: Planaire, Volcanique
 Taille: P
 Alignement: Neutre Mauvais
 CA: 12 Initiative +2 (12)
@@ -3891,6 +4050,7 @@ Souffle aveuglant (recharge 6). JS Dextérité : DD 10, chaque créature dans un
 ### Méphite vaporeux
 Catégorie: Méphites
 Type: Élémentaire
+Environnement: Planaire, Volcanique
 Taille: P
 Alignement: Neutre Mauvais
 CA: 10 Initiative +0 (10)
@@ -3914,6 +4074,7 @@ Souffle de vapeur (recharge 6). JS Constitution : DD 10, chaque créature dans u
 ### Momie
 Catégorie: Momies
 Type: Mort-vivant
+Environnement: Désert, Donjon/Ruines
 Taille: M ou P
 Alignement: Loyal Mauvais
 CA: 11 Initiative −1 (9)
@@ -3954,6 +4115,7 @@ Regard de biais. La momie recourt à Regard effroyable. La momie ne peut alors p
 ### Naga corrupteur
 Catégorie: Momies
 Type: Fiélon
+Environnement: Désert, Donjon/Ruines
 Taille: G
 Alignement: Chaotique Mauvais
 CA: 17 Initiative +3 (13)
@@ -3977,6 +4139,7 @@ Incantation. Le naga lance l’un des sorts suivants sans composantes matériell
 ### Naga gardien
 Catégorie: Momies
 Type: Céleste
+Environnement: Désert, Donjon/Ruines
 Taille: G
 Alignement: Loyal Bon
 CA: 18 Initiative +4 (14)
@@ -4002,6 +4165,7 @@ Crachat venimeux. JS Constitution : DD 16, une créature que le naga voit dans u
 ### Nalfeshnie
 Catégorie: Momies
 Type: Fiélon (Démon)
+Environnement: Désert, Donjon/Ruines
 Taille: G
 Alignement: Chaotique Mauvais
 CA: 18 Initiative +5 (15)
@@ -4032,6 +4196,7 @@ Poursuite. Déclencheur : une autre créature que le nalfeshnie voit termine son
 ### Noble
 Catégorie: Momies
 Type: Humanoïde
+Environnement: Désert, Donjon/Ruines
 Taille: M ou P
 Alignement: Neutre
 CA: 15 Initiative +1 (11)
@@ -4053,6 +4218,7 @@ Parade. Déclencheur : le noble est touché par un jet d’attaque de corps à c
 ### Nécronte
 Catégorie: Momies
 Type: Mort-vivant
+Environnement: Désert, Donjon/Ruines
 Taille: M
 Alignement: Neutre Mauvais
 CA: 14 Initiative +4 (14)
@@ -4080,6 +4246,7 @@ Absorption de vie. JS Constitution : DD 13, une créature dans un rayon de 1,50 
 ### Armure animée
 Catégorie: Objets animés
 Type: Artificiel
+Environnement: Urbain, Donjon/Ruines
 Taille: M
 Alignement: non aligné
 CA: 18 Initiative +2 (12)
@@ -4098,6 +4265,7 @@ Coup. Corps à corps : +4, allonge 1,50 m. Touché : 5 (1d6 + 2) dégâts conton
 ### Ogre
 Catégorie: Objets animés
 Type: Géant
+Environnement: Urbain, Donjon/Ruines
 Taille: G
 Alignement: Chaotique Mauvais
 CA: 11 Initiative −1 (9)
@@ -4116,6 +4284,7 @@ Javeline. Corps à corps ou à distance : +6, allonge 1,50 m ou portée 9/36 m. 
 ### Ombre
 Catégorie: Objets animés
 Type: Mort-vivant
+Environnement: Urbain, Donjon/Ruines
 Taille: M
 Alignement: Chaotique Mauvais
 CA: 12 Initiative +2 (12)
@@ -4143,6 +4312,7 @@ Discrétion dans les ombres. Tant qu’elle reste dans les Ténèbres ou sous un
 ### Oni
 Catégorie: Objets animés
 Type: Fiélon
+Environnement: Urbain, Donjon/Ruines
 Taille: G
 Alignement: Loyal Mauvais
 CA: 17 Initiative +0 (10)
@@ -4172,6 +4342,7 @@ Invisibilité. L’oni lance invisibilité sur lui-même, sans composantes de so
 ### Otyugh
 Catégorie: Objets animés
 Type: Aberration
+Environnement: Urbain, Donjon/Ruines
 Taille: G
 Alignement: Neutre
 CA: 14 Initiative +0 (10)
@@ -4198,6 +4369,7 @@ Changement d’aspect. L’ours-garou se transforme en hybride ours-humanoïde d
 ### Oxydeur
 Catégorie: Objets animés
 Type: Monstruosité
+Environnement: Urbain, Donjon/Ruines
 Taille: M
 Alignement: non alignée
 CA: 14 Initiative +1 (11)
@@ -4223,6 +4395,7 @@ Antennes réactives. Déclencheur : un jet d’attaque touche l’oxydeur. Cons�
 ### Pégase
 Catégorie: Objets animés
 Type: Céleste
+Environnement: Urbain, Donjon/Ruines
 Taille: G
 Alignement: Chaotique Bon
 CA: 12 Initiative +2 (12)
@@ -4240,6 +4413,7 @@ Sabots. Corps à corps : +6, allonge 1,50 m. Touché : 7 (1d6 + 4) dégâts cont
 ### Tapis étrangleur
 Catégorie: Objets animés
 Type: Artificiel
+Environnement: Urbain, Donjon/Ruines
 Taille: G
 Alignement: non aligné
 CA: 12 Initiative +4 (14)
@@ -4257,6 +4431,7 @@ FP: 2 (450 PX ; BM +2)
 ### Épée volante
 Catégorie: Objets animés
 Type: Artificiel
+Environnement: Urbain, Donjon/Ruines
 Taille: P
 Alignement: non aligné
 CA: 17 Initiative +4 (14)
@@ -4274,6 +4449,7 @@ Taillade. Corps à corps : +4, allonge 1,50 m. Touché : 6 (1d8 + 2) dégâts tr
 ### Capitaine pirate
 Catégorie: Pirates
 Type: Humanoïde
+Environnement: Aquatique, Urbain
 Taille: M ou P
 Alignement: Neutre
 CA: 17 Initiative +7 (17)
@@ -4300,6 +4476,7 @@ Parade-riposte. Déclencheur : le pirate est touché par un jet d’attaque de c
 ### Pirate
 Catégorie: Pirates
 Type: Humanoïde
+Environnement: Aquatique, Urbain
 Taille: M ou P
 Alignement: Neutre
 CA: 14 Initiative +5 (15)
@@ -4320,6 +4497,7 @@ Panache envoûtant. JS Sagesse : DD 12, une créature que le pirate voit dans un
 ### Planétar
 Catégorie: Pirates
 Type: Céleste (Ange)
+Environnement: Aquatique, Urbain
 Taille: G
 Alignement: Loyal Bon
 CA: 19 Initiative +10 (20)
@@ -4350,6 +4528,7 @@ Soutien divin (2/jour). Le planétar lance délivrance des malédictions, invisi
 ### Arbre éveillé
 Catégorie: Plantes éveillées
 Type: Plante
+Environnement: Forêt, Marais
 Taille: TG
 Alignement: Neutre
 CA: 13 Initiative –2 (8)
@@ -4368,6 +4547,7 @@ Coup. Corps à corps : +6, allonge 3 m. Touché : 14 (3d6 + 4) dégâts contonda
 ### Arbuste éveillé
 Catégorie: Plantes éveillées
 Type: Plante
+Environnement: Forêt, Marais
 Taille: P
 Alignement: Neutre
 CA: 9 Initiative −1 (9)
@@ -4386,6 +4566,7 @@ Ratissage. Corps à corps : +1, allonge 1,50 m. Touché : 1 dégât tranchant.
 ### Pouding noir
 Catégorie: Plantes éveillées
 Type: Vase
+Environnement: Forêt, Marais
 Taille: G
 Alignement: non alignée
 CA: 7 Initiative −3 (7)
@@ -4428,6 +4609,7 @@ Soutien divin (3/jour). Le prêtre lance bénédiction, dissipation de la magie,
 ### Pseudodragon
 Catégorie: Plantes éveillées
 Type: Dragon
+Environnement: Forêt, Marais
 Taille: TP
 Alignement: Neutre Bon
 CA: 14 Initiative +2 (12)
@@ -4451,6 +4633,7 @@ Empoisonné pendant 1 heure. Échec de 5 ou plus : Tant qu’elle est Empoisonn�
 ### Quasit
 Catégorie: Plantes éveillées
 Type: Fiélon (Démon)
+Environnement: Forêt, Marais
 Taille: TP
 Alignement: Chaotique Mauvais
 CA: 13 Initiative +3 (13)
@@ -4476,6 +4659,7 @@ Invisibilité. Le quasit lance invisibilité sur lui-même, sans composante mat�
 ### Rakshasa
 Catégorie: Plantes éveillées
 Type: Fiélon
+Environnement: Forêt, Marais
 Taille: M
 Alignement: Loyal Mauvais
 CA: 17 Initiative +8 (18)
@@ -4510,6 +4694,7 @@ Changement d’aspect. Le rat-garou se transforme en hybride rat-humanoïde de t
 ### Remorhaz
 Catégorie: Plantes éveillées
 Type: Monstruosité
+Environnement: Forêt, Marais
 Taille: TG
 Alignement: non alignée
 CA: 17 Initiative +5 (15)
@@ -4533,6 +4718,7 @@ Engloutissement. JS Force : DD 19, une créature de taille G ou inférieure Agri
 ### Roturier
 Catégorie: Plantes éveillées
 Type: Humanoïde
+Environnement: Forêt, Marais
 Taille: M ou P
 Alignement: Neutre
 CA: 10 Initiative +0 (10)
@@ -4553,6 +4739,7 @@ Gourdin. Corps à corps : +2, allonge 1,50 m. Touché : 2 (1d4) dégâts contond
 ### Rukh
 Catégorie: Plantes éveillées
 Type: Monstruosité
+Environnement: Forêt, Marais
 Taille: Gig
 Alignement: non alignée
 CA: 15 Initiative +8 (18)
@@ -4576,6 +4763,7 @@ Piqué (recharge 5–6). Si le rukh tient une créature Agrippée, il vole à co
 ### Combattant sahuagin
 Catégorie: Sahuagin
 Type: Fiélon
+Environnement: Aquatique
 Taille: M
 Alignement: Loyal Mauvais
 CA: 12 Initiative +0 (10)
@@ -4603,6 +4791,7 @@ Charge aquatique. Le sahuagin nage en ligne droite dans les limites de sa Vitess
 ### Salamandre
 Catégorie: Sahuagin
 Type: Élémentaire
+Environnement: Aquatique
 Taille: G
 Alignement: Neutre Mauvais
 CA: 15 Initiative +2 (12)
@@ -4632,6 +4821,7 @@ Changement d’aspect. Le sanglier-garou se transforme en hybride sanglier-human
 ### Satyre
 Catégorie: Sahuagin
 Type: Fée
+Environnement: Aquatique
 Taille: M
 Alignement: Chaotique Neutre
 CA: 13 Initiative +3 (13)
@@ -4653,6 +4843,7 @@ Moquerie. JS Sagesse : DD 12, une créature que le satyre voit dans un rayon de 
 ### Fanatique de secte
 Catégorie: Sectateurs
 Type: Humanoïde
+Environnement: Urbain, Donjon/Ruines
 Taille: M ou P
 Alignement: Neutre
 CA: 13 Initiative +2 (12)
@@ -4681,6 +4872,7 @@ Nuée de sénestres. Corps à corps : +4, allonge 1,50 m. Touché : 20 (4d8 + 2)
 ### Sectateur
 Catégorie: Sectateurs
 Type: Humanoïde
+Environnement: Urbain, Donjon/Ruines
 Taille: M ou P
 Alignement: Neutre
 CA: 12 Initiative +1 (11)
@@ -4699,6 +4891,7 @@ Serpe rituelle. Corps à corps : +3, allonge 1,50 m. Touché : 3 (1d4 +1) dégâ
 ### Solar
 Catégorie: Sectateurs
 Type: Céleste (Ange)
+Environnement: Urbain, Donjon/Ruines
 Taille: G
 Alignement: Loyal Bon
 CA: 21 Initiative +20 (30)
@@ -4734,6 +4927,7 @@ Téléportation radiante. Le solar se téléporte d’un maximum de 18 m vers un
 ### Fantassin
 Catégorie: Soldats
 Type: Humanoïde
+Environnement: Urbain, Plaines
 Taille: M ou P
 Alignement: Neutre
 CA: 13 Initiative +0 (10)
@@ -4754,6 +4948,7 @@ Lance. Corps à corps ou à distance : +3, allonge 1,50 m ou portée 6/18 m. Tou
 ### Spectre
 Catégorie: Soldats
 Type: Mort-vivant
+Environnement: Urbain, Plaines
 Taille: M
 Alignement: Chaotique Mauvais
 CA: 12 Initiative +2 (12)
@@ -4777,6 +4972,7 @@ Absorption de vie. Corps à corps : +4, allonge 1,50 m. Touché : 7 (2d6) dégâ
 ### Vétéran
 Catégorie: Soldats
 Type: Humanoïde
+Environnement: Urbain, Plaines
 Taille: M ou P
 Alignement: Neutre
 CA: 17 Initiative +3 (13)
@@ -4800,6 +4996,7 @@ Parade. Déclencheur : le soldat est touché par un jet d’attaque de corps à 
 ### Sphinx merveilleux
 Catégorie: Sphinx
 Type: Céleste
+Environnement: Désert, Planaire
 Taille: TP
 Alignement: Loyal Bon
 CA: 13 Initiative +3 (13)
@@ -4824,6 +5021,7 @@ Accès d’ingéniosité (2/jour). Déclencheur : le sphinx ou une autre créatu
 ### Sphinx valeureux
 Catégorie: Sphinx
 Type: Céleste
+Environnement: Désert, Planaire
 Taille: G
 Alignement: Loyal Neutre
 CA: 17 Initiative +12 (22)
@@ -4857,6 +5055,7 @@ Traque arcanique. Le sphinx se téléporte en un espace inoccupé qu’il voit d
 ### Sphinx érudit
 Catégorie: Sphinx
 Type: Céleste
+Environnement: Désert, Planaire
 Taille: G
 Alignement: Loyal Neutre
 CA: 17 Initiative +10 (20)
@@ -4887,6 +5086,7 @@ Traque arcanique. Le sphinx se téléporte en un espace inoccupé qu’il voit d
 ### Destrier squelette
 Catégorie: Squelettes
 Type: Mort-vivant
+Environnement: Donjon/Ruines
 Taille: G
 Alignement: Loyal Mauvais
 CA: 13 Initiative +1 (11)
@@ -4905,6 +5105,7 @@ Sabots. Corps à corps : +6, allonge 1,50 m. Touché : 7 (1d6 + 4) dégâts cont
 ### Minotaure squelette
 Catégorie: Squelettes
 Type: Mort-vivant
+Environnement: Donjon/Ruines
 Taille: G
 Alignement: Loyal Mauvais
 CA: 12 Initiative +0 (10)
@@ -4924,6 +5125,7 @@ Coup de corne. Corps à corps : +6, allonge 1,50 m. Touché : 11 (2d6 + 4) dég�
 ### Squelette
 Catégorie: Squelettes
 Type: Mort-vivant
+Environnement: Donjon/Ruines
 Taille: M
 Alignement: Loyal Mauvais
 CA: 14 Initiative +3 (13)
@@ -4944,6 +5146,7 @@ Arc court. À distance : +5, portée 24/96 m. Touché : 6 (1d6 + 3) dégâts per
 ### Strige
 Catégorie: Squelettes
 Type: Monstruosité
+Environnement: Donjon/Ruines
 Taille: TP
 Alignement: non alignée
 CA: 13 Initiative +3 (13)
@@ -4960,6 +5163,7 @@ Trompe. Corps à corps : +5, allonge 1,50 m. Touché : 6 (1d6 + 3) dégâts perf
 ### Succube
 Catégorie: Squelettes
 Type: Fiélon
+Environnement: Donjon/Ruines
 Taille: M
 Alignement: Neutre Mauvais
 CA: 15 Initiative +3 (13)
@@ -4987,6 +5191,7 @@ Changement d’aspect. Le succube se transforme en Humanoïde de taille M ou P, 
 ### Sylvanien
 Catégorie: Squelettes
 Type: Plante
+Environnement: Donjon/Ruines
 Taille: TG
 Alignement: Chaotique Bonne
 CA: 16 Initiative +3 (13)
@@ -5011,6 +5216,7 @@ Animation des arbres (1/jour). Le sylvanien anime magiquement un ou deux arbres 
 ### Tarasque
 Catégorie: Squelettes
 Type: Monstruosité (Titan)
+Environnement: Donjon/Ruines
 Taille: Gig
 Alignement: non alignée
 CA: 25 Initiative +18 (28)
@@ -5049,6 +5255,7 @@ Offensive. La tarasque se déplace à concurrence de la moitié de sa Vitesse et
 ### Tertre errant
 Catégorie: Squelettes
 Type: Plante
+Environnement: Donjon/Ruines
 Taille: G
 Alignement: non alignée
 CA: 15 Initiative −1 (9)
@@ -5073,6 +5280,7 @@ Enveloppement. JS Force : DD 15, une créature de taille M ou inférieure dans u
 ### Abattis de troll
 Catégorie: Thalasséen (homme-poisson)
 Type: Géant
+Environnement: Aquatique
 Taille: P
 Alignement: Chaotique Mauvais
 CA: 13 Initiative +1 (11)
@@ -5093,6 +5301,7 @@ Saignée. Corps à corps : +6, allonge 1,50 m. Touché : 9 (2d4 + 4) dégâts tr
 ### Tirailleur thalasséen
 Catégorie: Thalasséen (homme-poisson)
 Type: Élémentaire
+Environnement: Aquatique
 Taille: M
 Alignement: Neutre
 CA: 11 Initiative +1 (11)
@@ -5120,6 +5329,7 @@ Changement d’aspect. Le tigre-garou se transforme en hybride tigre-humanoïde 
 ### Torve
 Catégorie: Thalasséen (homme-poisson)
 Type: Aberration
+Environnement: Aquatique
 Taille: M
 Alignement: Neutre Mauvaise
 CA: 11 Initiative +1 (11)
@@ -5137,6 +5347,7 @@ Gourdin en os. Corps à corps : +5, allonge 1,50 m. Touché : 6 (1d6 + 3) dégâ
 ### Traqueur invisible
 Catégorie: Thalasséen (homme-poisson)
 Type: Élémentaire
+Environnement: Aquatique
 Taille: G
 Alignement: Neutre
 CA: 14 Initiative +7 (22)
@@ -5162,6 +5373,7 @@ Vortex. JS Constitution : DD 14, une créature de taille G ou inférieure dans l
 ### Troll
 Catégorie: Thalasséen (homme-poisson)
 Type: Géant
+Environnement: Aquatique
 Taille: G
 Alignement: Chaotique Mauvais
 CA: 15 Initiative +1 (11)
@@ -5187,6 +5399,7 @@ Charge. Le troll se déplace à concurrence de la moitié de sa Vitesse en ligne
 ### Familier de vampire
 Catégorie: Vampires
 Type: Humanoïde
+Environnement: Urbain, Donjon/Ruines
 Taille: M ou P
 Alignement: Neutre Mauvais
 CA: 15 Initiative +5 (15)
@@ -5214,6 +5427,7 @@ Agilité immortelle. Le familier effectue l’action Désengagement ou Pointe.
 ### Vampire
 Catégorie: Vampires
 Type: Mort-vivant
+Environnement: Urbain, Donjon/Ruines
 Taille: M ou P
 Alignement: Loyal Mauvais
 CA: 16 Initiative +14 (24)
@@ -5252,6 +5466,7 @@ Subjugation. Le vampire lance injonction sans composantes de sort, le Charisme �
 ### Vampirien
 Catégorie: Vampires
 Type: Mort-vivant
+Environnement: Urbain, Donjon/Ruines
 Taille: M ou P
 Alignement: Neutre Mauvais
 CA: 16 Initiative +3 (13)
@@ -5284,6 +5499,7 @@ Agilité immortelle. Le vampire effectue l’action Désengagement ou Pointe.
 ### Vase grise
 Catégorie: Vampires
 Type: Vase
+Environnement: Urbain, Donjon/Ruines
 Taille: M
 Alignement: non alignée
 CA: 9 Initiative −2 (13)
@@ -5308,6 +5524,7 @@ Pseudopode. Corps à corps : +3, allonge 1,50 m. Touché : 10 (2d8 + 1) dégâts
 ### Ver pourpre
 Catégorie: Vampires
 Type: Monstruosité
+Environnement: Urbain, Donjon/Ruines
 Taille: Gig
 Alignement: non alignée
 CA: 18 Initiative +3 (13)
@@ -5333,6 +5550,7 @@ Agrippé prend fin. Une créature engloutie subit les états Aveuglé et Entrav�
 ### Vouivre
 Catégorie: Vampires
 Type: Dragon
+Environnement: Urbain, Donjon/Ruines
 Taille: G
 Alignement: non aligné
 CA: 14 Initiative +0 (10)
@@ -5352,6 +5570,7 @@ Morsure. Corps à corps : +7, allonge 1,50 m. Touché : 13 (2d8 + 4) dégâts pe
 ### Vrock
 Catégorie: Vampires
 Type: Fiélon (Démon)
+Environnement: Urbain, Donjon/Ruines
 Taille: G
 Alignement: Chaotique Mauvais
 CA: 15 Initiative +2 (12)
@@ -5377,6 +5596,7 @@ Spores (recharge 6). JS Constitution : DD 15, chaque créature dans une Émanati
 ### Worg
 Catégorie: Vampires
 Type: Fée
+Environnement: Urbain, Donjon/Ruines
 Taille: G
 Alignement: Neutre Mauvaise
 CA: 13 Initiative +1 (11)
@@ -5394,6 +5614,7 @@ Morsure. Corps à corps : +5, allonge 1,50 m. Touché : 7 (1d8 + 3) dégâts per
 ### Xorn
 Catégorie: Vampires
 Type: Élémentaire
+Environnement: Urbain, Donjon/Ruines
 Taille: M
 Alignement: Neutre
 CA: 19 Initiative +0 (10)
@@ -5421,6 +5642,7 @@ Charge. Le xorn se déplace en ligne droite dans les limites de sa Vitesse ou de
 ### Ogre zombi
 Catégorie: Zombis
 Type: Mort-vivant
+Environnement: Donjon/Ruines, Marais
 Taille: G
 Alignement: Neutre Mauvais
 CA: 8 Initiative −2 (8)
@@ -5441,6 +5663,7 @@ Coup. Corps à corps : +6, allonge 1,50 m. Touché : 13 (2d8 + 4) dégâts conto
 ### Zombi
 Catégorie: Zombis
 Type: Mort-vivant
+Environnement: Donjon/Ruines, Marais
 Taille: M
 Alignement: Neutre Mauvais
 CA: 8 Initiative −2 (8)
@@ -5460,7 +5683,9 @@ Coup. Corps à corps : +3, allonge 1,50 m. Touché : 5 (1d8 + 1) dégâts conton
 
 ### Aigle
 Catégorie: Animaux
+Image: eagle.jpg
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: P
 Alignement: non alignée
 CA: 12 Initiative +2 (12)
@@ -5478,6 +5703,7 @@ Serres. Corps à corps : +4, allonge 1,50 m. Touché : 4 (1d4 + 2) dégâts tran
 ### Aigle géant
 Catégorie: Animaux
 Type: Céleste
+Environnement: Forêt, Plaines
 Taille: G
 Alignement: Neutre Bon
 CA: 13 Initiative +3 (13)
@@ -5497,6 +5723,7 @@ Saignée. Corps à corps : +5, allonge 1,50 m. Touché : 5 (1d4 + 3) dégâts tr
 ### Allosaure
 Catégorie: Animaux
 Type: Bête (Dinosaure)
+Environnement: Forêt, Plaines
 Taille: G
 Alignement: non alignée
 CA: 13 Initiative +1 (11)
@@ -5515,6 +5742,7 @@ Morsure. Corps à corps : +6, allonge 1,50 m. Touché : 15 (2d10 + 4) dégâts p
 ### Ankylosaure
 Catégorie: Animaux
 Type: Bête (Dinosaure)
+Environnement: Forêt, Plaines
 Taille: TG
 Alignement: non alignée
 CA: 15 Initiative +0 (10)
@@ -5531,7 +5759,9 @@ Queue. Corps à corps : +6, allonge 3 m. Touché : 9 (1d10 + 4) dégâts contond
 
 ### Araignée
 Catégorie: Animaux
+Image: spider.jpg
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: TP
 Alignement: non alignée
 CA: 12 Initiative +2 (12)
@@ -5553,6 +5783,7 @@ Morsure. Corps à corps : +4, allonge 1,50 m. Touché : 1 dégât perforant plus
 ### Araignée géante
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: G
 Alignement: non alignée
 CA: 14 Initiative +3 (13)
@@ -5575,6 +5806,7 @@ Toile d’araignée (recharge 5–6). JS Dextérité : DD 13, une créature que 
 ### Araignée-loup géante
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: M
 Alignement: non alignée
 CA: 13 Initiative +3 (13)
@@ -5595,6 +5827,7 @@ Morsure. Corps à corps : +5, allonge 1,50 m. Touché : 5 (1d4 + 3) dégâts per
 ### Archélon
 Catégorie: Animaux
 Type: Bête (Dinosaure)
+Environnement: Forêt, Plaines
 Taille: TG
 Alignement: non alignée
 CA: 17 Initiative +3 (13)
@@ -5616,6 +5849,7 @@ Morsure. Corps à corps : +6, allonge 1,50 m. Touché : 14 (3d6 + 4) dégâts pe
 ### Babouin
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: P
 Alignement: non alignée
 CA: 12 Initiative +2 (12)
@@ -5635,6 +5869,7 @@ Morsure. Corps à corps : +1, allonge 1,50 m. Touché : 1 (1d4 − 1) dégâts p
 ### Belette
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: TP
 Alignement: non alignée
 CA: 13 Initiative +3 (13)
@@ -5652,6 +5887,7 @@ Morsure. Corps à corps : +5, allonge 1,50 m. Touché : 1 dégât perforant.
 ### Belette géante
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: M
 Alignement: non alignée
 CA: 13 Initiative +3 (13)
@@ -5669,6 +5905,7 @@ Morsure. Corps à corps : +5, allonge 1,50 m. Touché : 5 (1d4 + 3) dégâts per
 ### Blaireau
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: TP
 Alignement: non alignée
 CA: 11 Initiative +0 (10)
@@ -5687,6 +5924,7 @@ Morsure. Corps à corps : +2, allonge 1,50 m. Touché : 1 dégât perforant.
 ### Blaireau géant
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: M
 Alignement: non alignée
 CA: 13 Initiative +0 (10)
@@ -5705,6 +5943,7 @@ Morsure. Corps à corps : +3, allonge 1,50 m. Touché : 6 (2d4 + 1) dégâts per
 ### Cervidé géant
 Catégorie: Animaux
 Type: Céleste
+Environnement: Forêt, Plaines
 Taille: TG
 Alignement: Neutre Bon
 CA: 14 Initiative +6 (16)
@@ -5723,6 +5962,7 @@ Ramure. Corps à corps : +6, allonge 3 m. Touché : 11 (2d6 + 4) dégâts conton
 ### Chacal
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: P
 Alignement: non alignée
 CA: 12 Initiative +2 (12)
@@ -5740,6 +5980,7 @@ Morsure. Corps à corps : +1, allonge 1,50 m. Touché : 1 (1d4 – 1) dégâts p
 ### Chameau
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: G
 Alignement: non alignée
 CA: 10 Initiative −1 (9)
@@ -5756,6 +5997,7 @@ Morsure. Corps à corps : +4, allonge 1,50 m. Touché : 4 (1d4 + 2) dégâts con
 ### Chat
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: TP
 Alignement: non alignée
 CA: 12 Initiative +2 (12)
@@ -5776,6 +6018,7 @@ Sauteur. La distance de saut du chat se base sur la Dextérité au lieu de la Fo
 ### Chauve-souris
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: TP
 Alignement: non alignée
 CA: 12 Initiative +2 (12)
@@ -5792,6 +6035,7 @@ Morsure. Corps à corps : +4, allonge 1,50 m. Touché : 1 dégât perforant.
 ### Chauve-souris géante
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: G
 Alignement: non alignée
 CA: 13 Initiative +3 (13)
@@ -5808,6 +6052,7 @@ Morsure. Corps à corps : +5, allonge 1,50 m. Touché : 6 (1d6 + 3) dégâts per
 ### Cheval de selle
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: G
 Alignement: non alignée
 CA: 11 Initiative +1 (11)
@@ -5824,6 +6069,7 @@ Sabots. Corps à corps : +5, allonge 1,50 m. Touché : 7 (1d8 + 3) dégâts cont
 ### Cheval de trait
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: G
 Alignement: non alignée
 CA: 10 Initiative +0 (10)
@@ -5840,6 +6086,7 @@ Sabots. Corps à corps : +6, allonge 1,50 m. Touché : 6 (1d4 + 4) dégâts cont
 ### Chouette
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: TP
 Alignement: non alignée
 CA: 11 Initiative +1 (11)
@@ -5860,6 +6107,7 @@ Serres. Corps à corps : +3, allonge 1,50 m. Touché : 1 dégât tranchant.
 ### Chouette géante
 Catégorie: Animaux
 Type: Céleste
+Environnement: Forêt, Plaines
 Taille: G
 Alignement: Neutre
 CA: 12 Initiative +2 (12)
@@ -5882,6 +6130,7 @@ Incantation. La chouette lance l’un des sorts suivants sans composantes, la Sa
 ### Chèvre
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: M
 Alignement: non alignée
 CA: 10 Initiative +0 (10)
@@ -5899,6 +6148,7 @@ Coup de bélier. Corps à corps : +2, allonge 1,50 m. Touché : 1 dégât conton
 ### Chèvre géante
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: G
 Alignement: non alignée
 CA: 11 Initiative +1 (11)
@@ -5916,6 +6166,7 @@ Coup de bélier. Corps à corps : +5, allonge 1,50 m. Touché : 6 (1d6 + 3) dég
 ### Corbeau
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: TP
 Alignement: non alignée
 CA: 12 Initiative +2 (12)
@@ -5936,6 +6187,7 @@ Bec. Corps à corps : +4, allonge 1,50 m. Touché : 1 dégât perforant.
 ### Crabe
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: TP
 Alignement: non alignée
 CA: 11 Initiative +0 (10)
@@ -5956,6 +6208,7 @@ Griffe. Corps à corps : +2, allonge 1,50 m. Touché : 1 dégât contondant.
 ### Crabe géant
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: M
 Alignement: non alignée
 CA: 15 Initiative +1 (11)
@@ -5976,6 +6229,7 @@ Griffe. Corps à corps : +3, allonge 1,50 m. Touché : 4 (1d6 + 1) dégâts cont
 ### Crapaud géant
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: G
 Alignement: non alignée
 CA: 11 Initiative +1 (11)
@@ -5997,6 +6251,7 @@ Engloutissement. Le crapaud engloutit une cible de taille M ou inférieure qu’
 ### Crocodile
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: G
 Alignement: non alignée
 CA: 12 Initiative +0 (10)
@@ -6018,6 +6273,7 @@ Agrippé (évasion DD 12). Ainsi Agrippée, la cible subit aussi l’état Entra
 ### Crocodile géant
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: TG
 Alignement: non alignée
 CA: 14 Initiative −1 (9)
@@ -6041,6 +6297,7 @@ Queue. Corps à corps : +8, allonge 3 m. Touché : 18 (3d8 + 5) dégâts contond
 ### Destrier
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: G
 Alignement: non alignée
 CA: 11 Initiative +1 (11)
@@ -6057,6 +6314,7 @@ Sabots. Corps à corps : +6, allonge 1,50 m. Touché : 9 (2d4 + 4) dégâts cont
 ### Faucon
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: TP
 Alignement: non alignée
 CA: 13 Initiative +3 (13)
@@ -6074,6 +6332,7 @@ Serres. Corps à corps : +5, allonge 1,50 m. Touché : 1 dégât tranchant.
 ### Faucon de sang
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: P
 Alignement: non alignée
 CA: 12 Initiative +2 (12)
@@ -6094,6 +6353,7 @@ Bec. Corps à corps : +4, allonge 1,50 m. Touché : 4 (1d4 + 2) dégâts perfora
 ### Grand cervidé
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: G
 Alignement: non alignée
 CA: 10 Initiative +0 (10)
@@ -6111,6 +6371,7 @@ Ramure. Corps à corps : +5, allonge 1,50 m. Touché : 6 (1d6 + 3) dégâts cont
 ### Grand singe
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: M
 Alignement: non alignée
 CA: 12 Initiative +2 (12)
@@ -6130,6 +6391,7 @@ Rocher (recharge 6). À distance : +5, portée 7,50/15 m. Touché : 10 (2d6 + 3)
 ### Grenouille
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: TP
 Alignement: non alignée
 CA: 11 Initiative +1 (11)
@@ -6151,6 +6413,7 @@ Morsure. Corps à corps : +3, allonge 1,50 m. Touché : 1 dégât perforant.
 ### Grenouille géante
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: M
 Alignement: non alignée
 CA: 11 Initiative +1 (11)
@@ -6173,6 +6436,7 @@ Engloutissement. La grenouille engloutit une cible de taille P ou inférieure qu
 ### Guêpe géante
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: M
 Alignement: non alignée
 CA: 13 Initiative +2 (12)
@@ -6192,6 +6456,7 @@ Dard. Corps à corps : +4, allonge 1,50 m. Touché : 5 (1d6 + 2) dégâts perfor
 ### Hippocampe
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: TP
 Alignement: non alignée
 CA: 12 Initiative +1 (11)
@@ -6212,6 +6477,7 @@ Accélération bulleuse. Alors qu’il est sous l’eau, l’hippocampe se dépl
 ### Hippocampe géant
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: G
 Alignement: non alignée
 CA: 14 Initiative +1 (11)
@@ -6234,6 +6500,7 @@ Accélération bulleuse. Alors qu’il est sous l’eau, l’hippocampe se dépl
 ### Hippopotame
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: G
 Alignement: non alignée
 CA: 14 Initiative −2 (8)
@@ -6255,6 +6522,7 @@ Morsure. Corps à corps : +7, allonge 1,50 m. Touché : 16 (2d10 + 5) dégâts p
 ### Hyène
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: M
 Alignement: non alignée
 CA: 11 Initiative +1 (11)
@@ -6275,6 +6543,7 @@ Morsure. Corps à corps : +2, allonge 1,50 m. Touché : 3 (1d6) dégâts perfora
 ### Hyène géante
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: G
 Alignement: non alignée
 CA: 12 Initiative +2 (12)
@@ -6295,6 +6564,7 @@ Déchaînement (1/jour). Aussitôt après avoir infligé des dégâts à une cr�
 ### Lion
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: G
 Alignement: non alignée
 CA: 12 Initiative +2 (12)
@@ -6319,6 +6589,7 @@ Rugissement. JS Sagesse : DD 11, une créature dans un rayon de 4,50 m. Échec :
 ### Loup
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: M
 Alignement: non alignée
 CA: 12 Initiative +2 (12)
@@ -6339,6 +6610,7 @@ Morsure. Corps à corps : +4, allonge 1,50 m. Touché : 5 (1d6 + 2) dégâts per
 ### Loup sanguinaire
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: G
 Alignement: non alignée
 CA: 14 Initiative +2 (12)
@@ -6359,6 +6631,7 @@ Morsure. Corps à corps : +5, allonge 1,50 m. Touché : 8 (1d10 + 3) dégâts pe
 ### Lézard
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: TP
 Alignement: non alignée
 CA: 10 Initiative +0 (10)
@@ -6378,6 +6651,7 @@ Morsure. Corps à corps : +2, allonge 1,50 m. Touché : 1 dégât perforant.
 ### Lézard géant
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: G
 Alignement: non alignée
 CA: 12 Initiative +1 (11)
@@ -6397,6 +6671,7 @@ Morsure. Corps à corps : +4, allonge 1,50 m. Touché : 6 (1d8 + 2) dégâts per
 ### Mammouth
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: TG
 Alignement: non alignée
 CA: 13 Initiative +2 (12)
@@ -6417,6 +6692,7 @@ Piétinement. JS Dextérité : DD 18, une créature À terre dans un rayon de 1,
 ### Mille-pattes géant
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: P
 Alignement: non alignée
 CA: 14 Initiative +2 (12)
@@ -6433,6 +6709,7 @@ Morsure. Corps à corps : +4, allonge 1,50 m. Touché : 4 (1d4 + 2) dégâts per
 ### Molosse
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: M
 Alignement: non alignée
 CA: 12 Initiative +2 (12)
@@ -6450,6 +6727,7 @@ Morsure. Corps à corps : +3, allonge 1,50 m. Touché : 4 (1d6 + 1) dégâts per
 ### Mule
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: M
 Alignement: non alignée
 CA: 10 Initiative +0 (10)
@@ -6469,6 +6747,7 @@ Sabots. Corps à corps : +4, allonge 1,50 m. Touché : 4 (1d4 + 2) dégâts cont
 ### Nuée de chauves-souris
 Catégorie: Animaux
 Type: Nuée de taille G de Bêtes
+Environnement: Forêt, Plaines
 Taille: TP
 Alignement: non alignée
 CA: 12 Initiative +2 (12)
@@ -6490,6 +6769,7 @@ Morsures. Corps à corps : +4, allonge 1,50 m. Touché : 5 (2d4) dégâts perfor
 ### Nuée de corbeaux
 Catégorie: Animaux
 Type: Nuée de taille M de Bêtes
+Environnement: Forêt, Plaines
 Taille: TP
 Alignement: non alignée
 CA: 12 Initiative +2 (12)
@@ -6514,6 +6794,7 @@ Cacophonie (recharge 6). JS Sagesse : DD 10, une créature dans l’espace de la
 ### Nuée de piranhas
 Catégorie: Animaux
 Type: Nuée de taille M de Bêtes
+Environnement: Forêt, Plaines
 Taille: TP
 Alignement: non alignée
 CA: 13 Initiative +3 (13)
@@ -6536,6 +6817,7 @@ Morsures. Corps à corps : +5 (avec Avantage si la cible n’a pas tous ses pv),
 ### Nuée de rats
 Catégorie: Animaux
 Type: Nuée de taille M de Bêtes
+Environnement: Forêt, Plaines
 Taille: TP
 Alignement: non alignée
 CA: 10 Initiative +0 (10)
@@ -6557,6 +6839,7 @@ Morsures. Corps à corps : +2, allonge 1,50 m. Touché : 5 (2d4) dégâts perfor
 ### Nuée de serpents venimeux
 Catégorie: Animaux
 Type: Nuée de taille M de Bêtes
+Environnement: Forêt, Plaines
 Taille: TP
 Alignement: non alignée
 CA: 14 Initiative +4 (14)
@@ -6578,6 +6861,7 @@ Morsures. Corps à corps : +6, allonge 1,50 m. Touché : 8 (1d8 + 4) dégâts pe
 ### Nuée d’insectes
 Catégorie: Animaux
 Type: Nuée de taille M de Bêtes
+Environnement: Forêt, Plaines
 Taille: TP
 Alignement: non alignée
 CA: 11 Initiative +1 (11)
@@ -6600,6 +6884,7 @@ Morsures. Corps à corps : +3, allonge 1,50 m. Touché : 6 (2d4 + 1) dégâts de
 ### Ours brun
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: G
 Alignement: non alignée
 CA: 11 Initiative +1 (11)
@@ -6619,6 +6904,7 @@ Morsure. Corps à corps : +5, allonge 1,50 m. Touché : 7 (1d8 + 3) dégâts per
 ### Ours noir
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: M
 Alignement: non alignée
 CA: 11 Initiative +1 (11)
@@ -6637,6 +6923,7 @@ Saignée. Corps à corps : +4, allonge 1,50 m. Touché : 5 (1d6 + 2) dégâts tr
 ### Ours polaire
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: G
 Alignement: non alignée
 CA: 12 Initiative +2 (12)
@@ -6656,6 +6943,7 @@ Saignée. Corps à corps : +7, allonge 1,50 m. Touché : 9 (1d8 + 5) dégâts tr
 ### Panthère
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: M
 Alignement: non alignée
 CA: 13 Initiative +3 (13)
@@ -6676,6 +6964,7 @@ Fuite agile. La panthère entreprend l’action Désengagement ou Furtivité.
 ### Petit cervidé
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: M
 Alignement: non alignée
 CA: 13 Initiative +3 (13)
@@ -6696,6 +6985,7 @@ Coup de bélier. Corps à corps : +2, allonge 1,50 m. Touché : 2 (1d4) dégâts
 ### Pieuvre
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: P
 Alignement: non alignée
 CA: 12 Initiative +2 (12)
@@ -6720,6 +7010,7 @@ Nuage d’encre (1/jour). Déclencheur : une créature termine son tour dans un 
 ### Pieuvre géante
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: G
 Alignement: non alignée
 CA: 11 Initiative +1 (11)
@@ -6744,6 +7035,7 @@ Vitesse de nage. Le Cube constitue une zone à Visibilité nulle pendant 1 minut
 ### Piranha
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: TP
 Alignement: non alignée
 CA: 13 Initiative +3 (13)
@@ -6763,6 +7055,7 @@ Morsure. Corps à corps : +5 (avec Avantage si la cible n’a pas tous ses pv), 
 ### Plésiosaure
 Catégorie: Animaux
 Type: Bête (Dinosaure)
+Environnement: Forêt, Plaines
 Taille: G
 Alignement: non alignée
 CA: 13 Initiative +2 (12)
@@ -6783,6 +7076,7 @@ Morsure. Corps à corps : +6, allonge 3 m. Touché : 11 (2d6 + 4) dégâts perfo
 ### Poney
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: M
 Alignement: non alignée
 CA: 10 Initiative +0 (10)
@@ -6799,6 +7093,7 @@ Sabots. Corps à corps : +4, allonge 1,50 m. Touché : 4 (1d4 + 2) dégâts cont
 ### Ptéranodon
 Catégorie: Animaux
 Type: Bête (Dinosaure)
+Environnement: Forêt, Plaines
 Taille: M
 Alignement: non alignée
 CA: 13 Initiative +2 (12)
@@ -6819,6 +7114,7 @@ Morsure. Corps à corps : +4, allonge 1,50 m. Touché : 6 (1d8 + 2) dégâts per
 ### Rat
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: TP
 Alignement: non alignée
 CA: 10 Initiative +0 (10)
@@ -6839,6 +7135,7 @@ Morsure. Corps à corps : +2, allonge 1,50 m. Touché : 1 dégât perforant.
 ### Rat géant
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: P
 Alignement: non alignée
 CA: 13 Initiative +3 (13)
@@ -6859,6 +7156,7 @@ Morsure. Corps à corps : +5, allonge 1,50 m. Touché : 5 (1d4 + 3) dégâts per
 ### Requin de récif
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: M
 Alignement: non alignée
 CA: 12 Initiative +2 (12)
@@ -6880,6 +7178,7 @@ Morsure. Corps à corps : +4, allonge 1,50 m. Touché : 7 (2d4 + 2) dégâts per
 ### Requin géant
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: TG
 Alignement: non alignée
 CA: 13 Initiative +3 (13)
@@ -6901,6 +7200,7 @@ Morsure. Corps à corps : +9 (avec Avantage si la cible n’a pas tous ses pv), 
 ### Requin-chasseur
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: G
 Alignement: non alignée
 CA: 12 Initiative +2 (12)
@@ -6921,6 +7221,7 @@ Morsure. Corps à corps : +6 (avec Avantage si la cible n’a pas tous ses pv), 
 ### Rhinocéros
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: G
 Alignement: non alignée
 CA: 13 Initiative −1 (9)
@@ -6937,6 +7238,7 @@ Coup de corne. Corps à corps : +7, allonge 1,50 m. Touché : 14 (2d8 + 5) dég�
 ### Sanglier
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: M
 Alignement: non alignée
 CA: 11 Initiative +0 (10)
@@ -6956,6 +7258,7 @@ Coup de défense. Corps à corps : +3, allonge 1,50 m. Touché : 4 (1d6 + 1) dé
 ### Sanglier géant
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: G
 Alignement: non alignée
 CA: 13 Initiative +0 (10)
@@ -6975,6 +7278,7 @@ Coup de défense. Corps à corps : +5, allonge 1,50 m. Touché : 10 (2d6 + 3) d�
 ### Scarabée de feu géant
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: P
 Alignement: non alignée
 CA: 13 Initiative +0 (10)
@@ -6995,6 +7299,7 @@ Morsure. Corps à corps : +1, allonge 1,50 m. Touché : 1 dégât de feu.
 ### Scorpion
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: TP
 Alignement: non alignée
 CA: 11 Initiative +0 (10)
@@ -7011,6 +7316,7 @@ Dard. Corps à corps : +2, allonge 1,50 m. Touché : 1 dégât perforant plus 3 
 ### Scorpion géant
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: G
 Alignement: non alignée
 CA: 15 Initiative +1 (11)
@@ -7029,6 +7335,7 @@ Griffe. Corps à corps : +5, allonge 1,50 m. Touché : 6 (1d6 + 3) dégâts cont
 ### Serpent constricteur
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: G
 Alignement: non alignée
 CA: 13 Initiative +2 (12)
@@ -7047,6 +7354,7 @@ Constriction. JS Force : DD 12, une créature de taille M ou inférieure que le 
 ### Serpent constricteur géant
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: TG
 Alignement: non alignée
 CA: 12 Initiative +2 (12)
@@ -7066,6 +7374,7 @@ Constriction. JS Force : DD 14, une créature de taille G ou inférieure que le 
 ### Serpent venimeux
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: TP
 Alignement: non alignée
 CA: 12 Initiative +2 (12)
@@ -7082,6 +7391,7 @@ Morsure. Corps à corps : +4, allonge 1,50 m. Touché : 4 (1d4 + 2) dégâts per
 ### Serpent venimeux géant
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: M
 Alignement: non alignée
 CA: 14 Initiative +4 (14)
@@ -7099,6 +7409,7 @@ Morsure. Corps à corps : +6, allonge 3 m. Touché : 6 (1d4 + 4) dégâts perfor
 ### Serpent volant
 Catégorie: Animaux
 Type: Monstruosité
+Environnement: Forêt, Plaines
 Taille: TP
 Alignement: non alignée
 CA: 14 Initiative +2 (12)
@@ -7118,6 +7429,7 @@ Morsure. Corps à corps : +4, allonge 1,50 m. Touché : 1 dégât perforant plus
 ### Singe géant
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: TG
 Alignement: non alignée
 CA: 12 Initiative +5 (15)
@@ -7140,6 +7452,7 @@ Bond. Le singe effectue un saut d’un maximum de 9 m en dépensant 3 m de dépl
 ### Tigre
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: G
 Alignement: non alignée
 CA: 13 Initiative +3 (13)
@@ -7160,6 +7473,7 @@ Fuite agile. Le tigre entreprend l’action Désengagement ou Furtivité.
 ### Tigre à dents de sabre
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: G
 Alignement: non alignée
 CA: 13 Initiative +3 (13)
@@ -7184,6 +7498,7 @@ Fuite agile. Le tigre entreprend l’action Désengagement ou Furtivité.
 ### Tricératops
 Catégorie: Animaux
 Type: Bête (Dinosaure)
+Environnement: Forêt, Plaines
 Taille: TG
 Alignement: non alignée
 CA: 14 Initiative −1 (9)
@@ -7201,6 +7516,7 @@ Coup de corne. Corps à corps : +9, allonge 1,50 m. Touché : 19 (2d12 + 6) dég
 ### Tyrannosaure
 Catégorie: Animaux
 Type: Bête (Dinosaure)
+Environnement: Forêt, Plaines
 Taille: TG
 Alignement: non alignée
 CA: 13 Initiative +3 (13)
@@ -7221,6 +7537,7 @@ Queue. Corps à corps : +10, allonge 4,50 m. Touché : 25 (4d8 + 7) dégâts con
 ### Vautour
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: M
 Alignement: non alignée
 CA: 10 Initiative +0 (10)
@@ -7241,6 +7558,7 @@ Bec. Corps à corps : +2, allonge 1,50 m. Touché : 2 (1d4) dégâts perforants.
 ### Vautour géant
 Catégorie: Animaux
 Type: Monstruosité
+Environnement: Forêt, Plaines
 Taille: G
 Alignement: Neutre Mauvaise
 CA: 10 Initiative +0 (10)
@@ -7262,6 +7580,7 @@ Incision. Corps à corps : +4, allonge 1,50 m. Touché : 9 (2d6 + 2) dégâts pe
 ### Éléphant
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: TG
 Alignement: non alignée
 CA: 12 Initiative −1 (9)
@@ -7282,6 +7601,7 @@ Piétinement. JS Dextérité : DD 16, une créature subissant l’état À terre
 ### Épaulard
 Catégorie: Animaux
 Type: Bête
+Environnement: Forêt, Plaines
 Taille: TG
 Alignement: non alignée
 CA: 12 Initiative +2 (12)

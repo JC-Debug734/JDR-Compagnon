@@ -37,7 +37,7 @@ class EffectuerVisiteBoutiqueUseCase(
         val nouveauxServices = if (boutique.type == TypeBoutique.MARCHAND) {
             boutique.services
         } else {
-            genererServices(boutique.type, boutique.standing, random)
+            boutique.services.filter { it.personnalise } + genererServices(boutique.type, boutique.standing, random)
         }
 
         return boutique.copy(

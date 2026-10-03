@@ -1,5 +1,7 @@
 package com.jc2.jdrcompagnon.feature_boutique.domain.model
 
+import kotlinx.serialization.Serializable
+
 /**
  * Référence légère vers un objet de la bibliothèque SRD existante (equipement_srd521.md).
  *
@@ -8,12 +10,14 @@ package com.jc2.jdrcompagnon.feature_boutique.domain.model
  * Étape d'intégration : remplacer ce type par la vraie classe Equipement du projet,
  * ou mapper Equipement -> EquipementReference dans data/mapper/EquipementMapper.kt.
  */
+@Serializable
 data class EquipementReference(
     val nom: String,
     val coutBaseEnPo: Int,
     val type: String // Arme, Armure, Outil, etc. (cf. champ **Type** du SRD)
 )
 
+@Serializable
 data class ArticleEnVente(
     val equipement: EquipementReference,
     val prixApplique: Int,   // prix de base ajusté par le standing de la boutique

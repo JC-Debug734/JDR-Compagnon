@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -80,9 +79,11 @@ fun SrdLibraryPickerDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
                 Column(
+                    // Hauteur fixe (pas heightIn/max) : sinon le conteneur rétrécit avec
+                    // le nombre de résultats et la liste "saute" à chaque frappe.
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 360.dp)
+                        .height(360.dp)
                 ) {
                     when {
                         isLoading -> Box(

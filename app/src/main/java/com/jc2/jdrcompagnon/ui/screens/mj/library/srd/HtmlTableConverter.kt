@@ -138,5 +138,23 @@ data class EquipmentItem(
     val ac: String = "",
     val strength: String = "",
     val stealth: String = "",
-    val rawMarkdown: String = ""
+    val rawMarkdown: String = "",
+    // Objets à charges (baguettes, bâtons...) — champs **Charges**, **Recharge**, **Pouvoir** et
+    // **Destruction** d'un livre (voir EquipmentParser) ; suivis par personnage dans
+    // Character.itemCharges et utilisés depuis l'onglet Combat de la fiche (voir ObjetsACharges).
+    // Nombre maximum de charges, null pour un objet sans charges.
+    val charges: Int? = null,
+    // Charges récupérées à chaque repos long, formule de dés ("1d6 + 4") ou nombre fixe.
+    val recharge: String = "",
+    // Pouvoir accordé au porteur tant que l'objet est équipé ("Chant d'oiseau : ...").
+    val pouvoir: String = "",
+    // Dépenser la dernière charge fait lancer un d20 : l'objet est détruit sur ce résultat ou moins.
+    val destruction: Int? = null,
+    // **Consommable** Oui : l'objet disparaît quand on l'utilise (potion, poussière...).
+    val consommable: Boolean = false,
+    // **Harmonisation** Oui / Oui (magicien) : les propriétés magiques de l'objet ne fonctionnent
+    // que pour un porteur harmonisé (voir Harmonisation, Character.attunedItems).
+    val harmonisation: Boolean = false,
+    // Condition imposée à qui s'harmonise ("magicien", "lanceur de sorts"...), vide si aucune.
+    val harmonisationPrerequis: String = "",
 )

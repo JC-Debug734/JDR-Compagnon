@@ -8,6 +8,7 @@ import com.jc2.jdrcompagnon.feature_boutique.domain.model.Boutique
 import com.jc2.jdrcompagnon.feature_boutique.domain.model.Employe
 import com.jc2.jdrcompagnon.feature_boutique.domain.model.EquipementReference
 import com.jc2.jdrcompagnon.feature_boutique.domain.model.RoleEmploye
+import com.jc2.jdrcompagnon.feature_boutique.domain.model.Service
 import com.jc2.jdrcompagnon.feature_boutique.domain.usecase.ApprovisionnerBoutiqueUseCase
 import com.jc2.jdrcompagnon.feature_boutique.domain.usecase.CalculerPrixArticleUseCase
 import com.jc2.jdrcompagnon.feature_boutique.domain.usecase.DeterminerBudgetAchatUseCase
@@ -81,6 +82,35 @@ class BoutiqueDetailViewModel(
     fun onAjouterEmploye(boutique: Boutique, nom: String, role: RoleEmploye, trait: String) {
         viewModelScope.launch {
             repository.sauvegarderBoutique(boutique.copy(employes = boutique.employes + Employe(nom, role, trait)))
+        }
+    }
+
+    /** [index] : position dans la liste affichée (Employe n'a pas d'identifiant propre). */
+    fun onModifierEmploye(boutique: Boutique, index: Int, nom: String, role: RoleEmploye, trait: String) {
+        viewModelScope.launch {
+            val employesMaj = boutique.employes.mapIndexed { i, e -> if (i == index) Employe(nom, role, trait) else e }
+            repository.sauvegarderBoutique(boutique.copy(employes = employesMaj))
+        }
+    }
+
+    /** Service ajouté par le MJ : marqué personnalisé pour survivre aux nouvelles visites. */
+    fun onAjouterService(boutique: Boutique, service: Service) {
+        viewModelScope.launch {
+            repository.sauvegarderBoutique(boutique.copy(services = boutique.services + service.copy(personnalise = true)))
+        }
+    }
+
+    /** Un service paramétré par le MJ devient personnalisé (il n'est plus régénéré). */
+    fun onModifierService(boutique: Boutique, index: Int, service: Service) {
+        viewModelScope.launch {
+            val servicesMaj = boutique.services.mapIndexed { i, s -> if (i == index) service.copy(personnalise = true) else s }
+            repository.sauvegarderBoutique(boutique.copy(services = servicesMaj))
+        }
+    }
+
+    fun onSupprimerService(boutique: Boutique, index: Int) {
+        viewModelScope.launch {
+            repository.sauvegarderBoutique(boutique.copy(services = boutique.services.filterIndexed { i, _ -> i != index }))
         }
     }
 

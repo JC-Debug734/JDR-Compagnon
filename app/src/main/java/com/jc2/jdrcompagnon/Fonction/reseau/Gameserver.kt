@@ -222,9 +222,8 @@ class GameServer(
     fun sendToAll(message: String) {
         scope.launch {
             _connectedClients.value.forEach { client ->
-                runCatching {
-                    PrintWriter(client.socket.getOutputStream(), true).println(message)
-                }.onFailure { Log.d(TAG, "Échec envoi à ${client.id}: ${it.message}") }
+                runCatching { writeLine(client, message) }
+                    .onFailure { Log.d(TAG, "Échec envoi à ${client.id}: ${it.message}") }
             }
         }
     }
@@ -233,10 +232,21 @@ class GameServer(
     fun sendToClient(clientId: String, message: String) {
         scope.launch {
             _connectedClients.value.find { it.id == clientId }?.let { client ->
-                runCatching {
-                    PrintWriter(client.socket.getOutputStream(), true).println(message)
-                }.onFailure { Log.d(TAG, "Échec envoi à $clientId: ${it.message}") }
+                runCatching { writeLine(client, message) }
+                    .onFailure { Log.d(TAG, "Échec envoi à $clientId: ${it.message}") }
             }
+        }
+    }
+
+    /**
+     * Écrit une ligne JSON sur la socket du client, sous verrou : chaque envoi part dans sa propre
+     * coroutine, et une fiche de personnage dépasse le tampon de PrintWriter (8 Ko) — sans verrou,
+     * deux envois simultanés (ex. réponse de réservation + push de fiche) s'entremêlaient et la
+     * ligne reçue devenait illisible, silencieusement ignorée.
+     */
+    private fun writeLine(client: ConnectedClient, message: String) {
+        synchronized(client.socket) {
+            PrintWriter(client.socket.getOutputStream(), true).println(message)
         }
     }
 }

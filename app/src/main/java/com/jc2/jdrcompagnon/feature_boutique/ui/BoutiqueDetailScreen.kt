@@ -1,6 +1,10 @@
 package com.jc2.jdrcompagnon.feature_boutique.ui
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.text.font.FontWeight
+import com.jc2.jdrcompagnon.ui.components.CollapsibleSectionCard
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -49,6 +53,9 @@ import com.jc2.jdrcompagnon.feature_boutique.domain.model.TypeBoutique
 import com.jc2.jdrcompagnon.feature_boutique.presentation.BoutiqueDetailUiState
 import com.jc2.jdrcompagnon.feature_boutique.presentation.BoutiqueDetailViewModel
 
+/** Texte secondaire (descriptions, prix, listes vides) : blanc légèrement atténué. */
+private val TexteSecondaire = Color.White.copy(alpha = 0.8f)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BoutiqueDetailScreen(
@@ -58,6 +65,9 @@ fun BoutiqueDetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var afficherAjoutEmploye by remember { mutableStateOf(false) }
+    var employeEnEdition by remember { mutableStateOf<Int?>(null) }
+    // -1 : nouveau service ; sinon index du service paramétré ; null : fermé.
+    var serviceEnEdition by remember { mutableStateOf<Int?>(null) }
     var afficherAjoutArticle by remember { mutableStateOf(false) }
     var afficherApprovisionnement by remember { mutableStateOf(false) }
     var afficherConfirmationVisite by remember { mutableStateOf(false) }
@@ -76,7 +86,7 @@ fun BoutiqueDetailScreen(
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(titre) },
+                title = { Text(titre, color = Color.White) },
                 navigationIcon = {
                     IconButton(onClick = onOpenMenu) {
                         Icon(Icons.Default.Menu, contentDescription = "Menu")
@@ -92,47 +102,44 @@ fun BoutiqueDetailScreen(
                 CircularProgressIndicator(Modifier.align(Alignment.Center))
             }
             is BoutiqueDetailUiState.Introuvable -> Box(Modifier.fillMaxSize().padding(padding)) {
-                Text("Boutique introuvable", modifier = Modifier.align(Alignment.Center))
+                Text("Boutique introuvable", color = Color.White, modifier = Modifier.align(Alignment.Center))
             }
             is BoutiqueDetailUiState.Error -> Box(Modifier.fillMaxSize().padding(padding)) {
-                Text("Erreur : ${state.message}", modifier = Modifier.align(Alignment.Center))
+                Text("Erreur : ${state.message}", color = Color.White, modifier = Modifier.align(Alignment.Center))
             }
             is BoutiqueDetailUiState.Success -> {
                 val boutique = state.boutique
 
+                val ownerKey = "boutique:${boutique.id}"
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(padding)
                         .verticalScroll(rememberScrollState())
-                        .padding(16.dp)
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Text(boutique.marchand.nom, style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        "${boutique.type.label} · ${boutique.standing.label}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    if (boutique.marchand.trait.isNotBlank()) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                boutique.marchand.trait,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.weight(1f)
-                            )
-                            IconButton(onClick = { viewModel.onRegenererTraitMarchand(boutique) }) {
-                                Icon(Icons.Default.Casino, contentDescription = "Régénérer le caractère du marchand")
+                    CollapsibleSectionCard(ownerKey, "Marchand") {
+                        Text(boutique.marchand.nom, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                        Text(
+                            "${boutique.type.label} · ${boutique.standing.label}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TexteSecondaire
+                        )
+                        if (boutique.marchand.trait.isNotBlank()) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    boutique.marchand.trait,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TexteSecondaire,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                IconButton(onClick = { viewModel.onRegenererTraitMarchand(boutique) }) {
+                                    Icon(Icons.Default.Casino, contentDescription = "Régénérer le caractère du marchand")
+                                }
                             }
                         }
-                    }
-
-                    Spacer(Modifier.height(16.dp))
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth().padding(12.dp)
-                        ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Default.Paid, contentDescription = null)
                             Text(
                                 "Argent disponible : ${boutique.argentDisponibleEnPo} po",
@@ -145,47 +152,53 @@ fun BoutiqueDetailScreen(
                         }
                     }
 
-                    Spacer(Modifier.height(24.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                        Text("Employés", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                        IconButton(onClick = { afficherAjoutEmploye = true }) {
-                            Icon(Icons.Default.Add, contentDescription = "Ajouter un employé")
+                    CollapsibleSectionCard(
+                        ownerKey,
+                        "Employés",
+                        headerActions = {
+                            IconButton(onClick = { afficherAjoutEmploye = true }) {
+                                Icon(Icons.Default.Add, contentDescription = "Ajouter un employé")
+                            }
                         }
-                    }
+                    ) {
                     if (boutique.employes.isEmpty()) {
-                        Text("Aucun employé", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Aucun employé", color = TexteSecondaire)
                     }
                     boutique.employes.forEachIndexed { index, employe ->
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                            Column(modifier = Modifier.weight(1f)) {
+                            // Appui sur l'employé : le paramétrer (nom, rôle, caractère).
+                            Column(modifier = Modifier.weight(1f).clickable { employeEnEdition = index }) {
                                 Text("${employe.nom} — ${employe.role.label}")
                                 if (employe.trait.isNotBlank()) {
                                     Text(
                                         employe.trait,
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = TexteSecondaire
                                     )
                                 }
                             }
                             IconButton(onClick = { viewModel.onSupprimerEmploye(boutique, index) }) {
-                                Icon(Icons.Default.Delete, contentDescription = "Retirer ${employe.nom}")
+                                Icon(Icons.Default.Delete, contentDescription = "Retirer ${employe.nom}", tint = MaterialTheme.colorScheme.error)
                             }
                         }
                     }
+                    }
 
                     if (boutique.type == TypeBoutique.MARCHAND) {
-                        Spacer(Modifier.height(24.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                            Text("Inventaire", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                            IconButton(onClick = { afficherApprovisionnement = true }) {
-                                Icon(Icons.Default.Sync, contentDescription = "Réapprovisionner")
+                        CollapsibleSectionCard(
+                            ownerKey,
+                            "Inventaire",
+                            headerActions = {
+                                IconButton(onClick = { afficherApprovisionnement = true }) {
+                                    Icon(Icons.Default.Sync, contentDescription = "Réapprovisionner")
+                                }
+                                IconButton(onClick = { afficherAjoutArticle = true }) {
+                                    Icon(Icons.Default.Add, contentDescription = "Ajouter un article précis")
+                                }
                             }
-                            IconButton(onClick = { afficherAjoutArticle = true }) {
-                                Icon(Icons.Default.Add, contentDescription = "Ajouter un article précis")
-                            }
-                        }
+                        ) {
                         if (boutique.inventaire.isEmpty()) {
-                            Text("Aucun article", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Aucun article", color = TexteSecondaire)
                         }
                         boutique.inventaire.forEachIndexed { index, article ->
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -194,7 +207,7 @@ fun BoutiqueDetailScreen(
                                     Text(
                                         "${article.prixApplique} po · x${article.quantiteStock}",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = TexteSecondaire
                                     )
                                 }
                                 IconButton(onClick = { viewModel.onToggleArticlePermanent(boutique, index) }) {
@@ -207,15 +220,26 @@ fun BoutiqueDetailScreen(
                                     )
                                 }
                                 IconButton(onClick = { viewModel.onSupprimerArticle(boutique, index) }) {
-                                    Icon(Icons.Default.Delete, contentDescription = "Retirer ${article.equipement.nom}")
+                                    Icon(Icons.Default.Delete, contentDescription = "Retirer ${article.equipement.nom}", tint = MaterialTheme.colorScheme.error)
                                 }
                             }
                         }
-                    } else {
-                        Spacer(Modifier.height(24.dp))
-                        Text("Services", style = MaterialTheme.typography.titleMedium)
+                        }
+                    }
+
+                    // Services : toute boutique peut en proposer (un marchand peut réparer,
+                    // livrer, graver...), ajoutés et paramétrés par le MJ.
+                    CollapsibleSectionCard(
+                        ownerKey,
+                        "Services",
+                        headerActions = {
+                            IconButton(onClick = { serviceEnEdition = -1 }) {
+                                Icon(Icons.Default.Add, contentDescription = "Ajouter un service")
+                            }
+                        }
+                    ) {
                         if (boutique.services.isEmpty()) {
-                            Text("Aucun service", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Aucun service", color = TexteSecondaire)
                         }
                         boutique.services.forEachIndexed { index, service ->
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -223,9 +247,9 @@ fun BoutiqueDetailScreen(
                                     checked = service.actif,
                                     onCheckedChange = { viewModel.onToggleServiceActif(boutique, index) }
                                 )
-                                Column(modifier = Modifier.weight(1f).padding(vertical = 4.dp)) {
-                                    val couleur = if (service.actif) MaterialTheme.colorScheme.onSurfaceVariant
-                                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                                // Appui sur le service : le paramétrer (tarif, places, description).
+                                Column(modifier = Modifier.weight(1f).clickable { serviceEnEdition = index }.padding(vertical = 4.dp)) {
+                                    val couleur = if (service.actif) TexteSecondaire else Color.White.copy(alpha = 0.4f)
                                     Text(
                                         if (service.actif) service.nom else "${service.nom} (désactivé)",
                                         color = if (service.actif) Color.Unspecified else couleur
@@ -240,9 +264,39 @@ fun BoutiqueDetailScreen(
                                         color = couleur
                                     )
                                 }
+                                IconButton(onClick = { viewModel.onSupprimerService(boutique, index) }) {
+                                    Icon(Icons.Default.Delete, contentDescription = "Retirer ${service.nom}", tint = MaterialTheme.colorScheme.error)
+                                }
                             }
                         }
                     }
+                }
+
+                employeEnEdition?.let { index ->
+                    boutique.employes.getOrNull(index)?.let { employe ->
+                        AjouterEmployeDialog(
+                            initial = employe,
+                            onGenererNom = viewModel::genererNomEmployeAleatoire,
+                            onGenererTrait = viewModel::genererTraitAleatoire,
+                            onDismiss = { employeEnEdition = null },
+                            onConfirmer = { nom, role, trait ->
+                                viewModel.onModifierEmploye(boutique, index, nom, role, trait)
+                                employeEnEdition = null
+                            }
+                        )
+                    }
+                }
+
+                serviceEnEdition?.let { index ->
+                    ServiceFormDialog(
+                        initial = boutique.services.getOrNull(index),
+                        onDismiss = { serviceEnEdition = null },
+                        onConfirmer = { service ->
+                            if (index < 0) viewModel.onAjouterService(boutique, service)
+                            else viewModel.onModifierService(boutique, index, service)
+                            serviceEnEdition = null
+                        }
+                    )
                 }
 
                 if (afficherAjoutEmploye) {
@@ -290,7 +344,7 @@ fun BoutiqueDetailScreen(
                                 if (boutique.type == TypeBoutique.MARCHAND)
                                     "Le stock va être renouvelé (les articles marqués « toujours disponibles » sont conservés) et l'argent disponible va être réinitialisé. Continuer ?"
                                 else
-                                    "Les services proposés vont être renouvelés et l'argent disponible va être réinitialisé. Continuer ?"
+                                    "Les services générés vont être renouvelés (ceux que vous avez ajoutés ou paramétrés sont conservés) et l'argent disponible va être réinitialisé. Continuer ?"
                             )
                         },
                         confirmButton = {

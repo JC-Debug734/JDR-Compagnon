@@ -1,52 +1,66 @@
 package com.jc2.jdrcompagnon.feature_carte.ui
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Casino
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
 import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.jc2.jdrcompagnon.di.EvenementDependencies
 import com.jc2.jdrcompagnon.di.EvenementsViewModelFactory
-import com.jc2.jdrcompagnon.feature_carte.domain.model.EffetEvenement
-import com.jc2.jdrcompagnon.feature_carte.domain.model.EvenementAleatoire
 import com.jc2.jdrcompagnon.feature_carte.presentation.EvenementsViewModel
-import com.jc2.jdrcompagnon.ui.GameState
+import com.jc2.jdrcompagnon.feature_evenement.domain.model.Evenement
+import com.jc2.jdrcompagnon.feature_evenement.domain.model.TypeEvenement
+import com.jc2.jdrcompagnon.feature_evenement.ui.EvenementCard
+import com.jc2.jdrcompagnon.feature_evenement.ui.EvenementEditorDialog
+import com.jc2.jdrcompagnon.feature_evenement.ui.EventResultDialog
+import com.jc2.jdrcompagnon.feature_evenement.ui.couleur
+import com.jc2.jdrcompagnon.feature_evenement.ui.icone
+import com.jc2.jdrcompagnon.ui.theme.ForcedDarkPalette
 
+/**
+ * Événements de campagne : ceux de la bibliothèque propres à cette campagne (créables ici), puis
+ * les événements communs du monde. Le tirage (bouton en bas) pioche dans les deux, filtré par le
+ * type sélectionné. Tap sur une carte = modifier (dans la bibliothèque, donc partout).
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EvenementsAleatoiresScreen(
@@ -57,190 +71,135 @@ fun EvenementsAleatoiresScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val dernierTirage by viewModel.dernierTirage.collectAsStateWithLifecycle()
-    var afficherAjout by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    LaunchedEffect(viewModel.worldId) { EvenementDependencies.seedExamplesIfNeeded(context, viewModel.worldId) }
+
+    var filtreType by rememberSaveable { mutableStateOf<TypeEvenement?>(null) }
+    var creation by remember { mutableStateOf(false) }
+    var enEdition by remember { mutableStateOf<Evenement?>(null) }
+    var aSupprimer by remember { mutableStateOf<Evenement?>(null) }
+
+    val propres = uiState.propres.filter { filtreType == null || it.type == filtreType }
+    val communs = uiState.communs.filter { filtreType == null || it.type == filtreType }
 
     Scaffold(
         topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text("ÉVÉNEMENTS ALÉATOIRES") },
-                navigationIcon = {
-                    IconButton(onClick = onOpenMenu) { Icon(Icons.Default.Menu, contentDescription = "Menu") }
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent),
-            )
+            Column {
+                CenterAlignedTopAppBar(
+                    title = { Text("ÉVÉNEMENTS DE CAMPAGNE") },
+                    navigationIcon = {
+                        IconButton(onClick = onOpenMenu) { Icon(Icons.Default.Menu, contentDescription = "Menu") }
+                    },
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
+                )
+                Row(modifier = Modifier.padding(horizontal = 8.dp)) {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
+                    }
+                }
+            }
         },
-        containerColor = Color.Transparent,
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                onClick = { viewModel.onTirerEvenement() },
+                onClick = { viewModel.onTirerEvenement(filtreType) },
                 icon = { Icon(Icons.Default.Casino, contentDescription = null) },
-                text = { Text("Tirer un événement") }
+                text = { Text(filtreType?.let { "Tirer : ${it.label}" } ?: "Tirer un événement") },
+                containerColor = ForcedDarkPalette.AccentGold,
+                contentColor = ForcedDarkPalette.Background
             )
-        }
+        },
+        containerColor = Color.Transparent
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 88.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             item {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    Text("Personnalisés", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                    IconButton(onClick = { afficherAjout = true }) { Icon(Icons.Default.Add, contentDescription = "Ajouter un événement") }
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    FilterChip(selected = filtreType == null, onClick = { filtreType = null }, label = { Text("Tous") })
+                    TypeEvenement.entries.forEach { type ->
+                        FilterChip(
+                            selected = filtreType == type,
+                            onClick = { filtreType = if (filtreType == type) null else type },
+                            label = { Text(type.label) },
+                            leadingIcon = { Icon(type.icone, contentDescription = null, tint = type.couleur, modifier = Modifier.size(18.dp)) },
+                            colors = FilterChipDefaults.filterChipColors(selectedContainerColor = type.couleur.copy(alpha = 0.3f))
+                        )
+                    }
                 }
             }
-            if (uiState.personnalises.isEmpty()) {
-                item { Text("Aucun événement personnalisé", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        "Propres à la campagne (${propres.size})",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = { creation = true }) { Icon(Icons.Default.Add, contentDescription = "Nouvel événement de campagne") }
+                }
             }
-            items(uiState.personnalises, key = { it.id }) { evenement ->
-                EvenementCard(evenement, onSupprimer = { viewModel.onSupprimerEvenement(evenement.id) })
+            if (propres.isEmpty()) {
+                item { Text("Aucun événement propre à cette campagne.", color = Color.White.copy(alpha = 0.7f)) }
             }
-
-            item { Spacer(Modifier.height(16.dp)) }
-            item { Text("Génériques", style = MaterialTheme.typography.titleMedium) }
-            items(uiState.generiques, key = { it.id }) { evenement ->
-                EvenementCard(evenement, onSupprimer = null)
+            items(propres, key = { it.id }) { evenement ->
+                EvenementCard(
+                    evenement = evenement,
+                    campagneNom = null,
+                    onClick = { enEdition = evenement },
+                    onDelete = { aSupprimer = evenement }
+                )
+            }
+            item {
+                Text(
+                    "Communs au monde (${communs.size})",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White,
+                    modifier = Modifier.padding(top = 12.dp)
+                )
+            }
+            items(communs, key = { it.id }) { evenement ->
+                // Suppression réservée à la bibliothèque : un événement commun sert ailleurs.
+                EvenementCard(evenement = evenement, campagneNom = null, onClick = { enEdition = evenement }, onDelete = null)
             }
         }
     }
 
-    if (afficherAjout) {
-        AjouterEvenementDialog(
-            onDismiss = { afficherAjout = false },
-            onConfirmer = { titre, description, effets ->
-                viewModel.onAjouterEvenement(titre, description, effets)
-                afficherAjout = false
+    if (creation || enEdition != null) {
+        EvenementEditorDialog(
+            initial = enEdition,
+            worldId = viewModel.worldId,
+            typeParDefaut = filtreType ?: TypeEvenement.RENCONTRE,
+            campagneParDefaut = campagneId,
+            onDismiss = { creation = false; enEdition = null },
+            onSave = { evenement ->
+                viewModel.onSauvegarder(evenement)
+                creation = false
+                enEdition = null
             }
+        )
+    }
+
+    aSupprimer?.let { evenement ->
+        AlertDialog(
+            onDismissRequest = { aSupprimer = null },
+            title = { Text("Confirmer la suppression") },
+            text = { Text("Supprimer l'événement « ${evenement.titre} » de la bibliothèque ?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.onSupprimer(evenement.id)
+                    aSupprimer = null
+                }) { Text("Supprimer", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { aSupprimer = null }) { Text("Annuler") } }
         )
     }
 
     dernierTirage?.let { evenement ->
-        ResultatTirageDialog(
-            evenement = evenement,
-            groupes = uiState.groupes,
-            onAppliquerReputation = { groupeId, factionNom, delta -> viewModel.onAppliquerReputation(groupeId, factionNom, delta) },
-            onDismiss = { viewModel.clearDernierTirage() }
-        )
+        EventResultDialog(evenement = evenement, worldId = viewModel.worldId, onDismiss = { viewModel.clearDernierTirage() })
     }
-}
-
-@Composable
-internal fun EvenementCard(evenement: EvenementAleatoire, onSupprimer: (() -> Unit)?) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(12.dp)) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(evenement.titre, style = MaterialTheme.typography.titleSmall)
-                Text(evenement.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                evenement.effets.forEach { effet ->
-                    Text(
-                        text = when (effet) {
-                            is EffetEvenement.GainReputation -> "Réputation : ${effet.factionNom} ${if (effet.delta >= 0) "+" else ""}${effet.delta}"
-                            is EffetEvenement.Information -> "Info : ${effet.texte}"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-            if (onSupprimer != null) {
-                IconButton(onClick = onSupprimer) { Icon(Icons.Default.Delete, contentDescription = "Supprimer") }
-            }
-        }
-    }
-}
-
-@Composable
-internal fun AjouterEvenementDialog(
-    onDismiss: () -> Unit,
-    onConfirmer: (titre: String, description: String, effets: List<EffetEvenement>) -> Unit
-) {
-    var titre by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var factionNom by remember { mutableStateOf("") }
-    var deltaTexte by remember { mutableStateOf("") }
-    var infoTexte by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Nouvel événement") },
-        text = {
-            Column {
-                OutlinedTextField(value = titre, onValueChange = { titre = it }, label = { Text("Titre") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("Description") }, modifier = Modifier.fillMaxWidth())
-                Spacer(Modifier.height(8.dp))
-                Text("Effet réputation (optionnel)", style = MaterialTheme.typography.labelMedium)
-                OutlinedTextField(value = factionNom, onValueChange = { factionNom = it }, label = { Text("Faction") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(
-                    value = deltaTexte,
-                    onValueChange = { deltaTexte = it.filter { c -> c.isDigit() || c == '-' } },
-                    label = { Text("Variation (ex: 5 ou -5)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                Text("Effet info (optionnel)", style = MaterialTheme.typography.labelMedium)
-                OutlinedTextField(value = infoTexte, onValueChange = { infoTexte = it }, label = { Text("Texte") }, modifier = Modifier.fillMaxWidth())
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    val effets = buildList {
-                        val delta = deltaTexte.toIntOrNull()
-                        if (factionNom.isNotBlank() && delta != null) add(EffetEvenement.GainReputation(factionNom, delta))
-                        if (infoTexte.isNotBlank()) add(EffetEvenement.Information(infoTexte))
-                    }
-                    onConfirmer(titre, description, effets)
-                },
-                enabled = titre.isNotBlank()
-            ) { Text("Ajouter") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } }
-    )
-}
-
-@Composable
-internal fun ResultatTirageDialog(
-    evenement: EvenementAleatoire,
-    groupes: List<GameState.MjGroup>,
-    onAppliquerReputation: (groupeId: String, factionNom: String, delta: Int) -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(evenement.titre) },
-        text = {
-            Column {
-                Text(evenement.description)
-                evenement.effets.forEach { effet ->
-                    Spacer(Modifier.height(8.dp))
-                    when (effet) {
-                        is EffetEvenement.Information -> Text("Info : ${effet.texte}")
-                        is EffetEvenement.GainReputation -> {
-                            Text("Réputation : ${effet.factionNom} ${if (effet.delta >= 0) "+" else ""}${effet.delta}")
-                            if (groupes.isEmpty()) {
-                                Text("Aucun groupe créé pour appliquer cet effet.", style = MaterialTheme.typography.bodySmall)
-                            } else {
-                                var menuOuvert by remember { mutableStateOf(false) }
-                                androidx.compose.foundation.layout.Box {
-                                    TextButton(onClick = { menuOuvert = true }) { Text("Appliquer à un groupe") }
-                                    DropdownMenu(expanded = menuOuvert, onDismissRequest = { menuOuvert = false }) {
-                                        groupes.forEach { groupe ->
-                                            DropdownMenuItem(
-                                                text = { Text(groupe.name) },
-                                                onClick = {
-                                                    menuOuvert = false
-                                                    onAppliquerReputation(groupe.id, effet.factionNom, effet.delta)
-                                                }
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Fermer") } }
-    )
 }

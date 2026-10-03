@@ -2,403 +2,353 @@ package com.jc2.jdrcompagnon.feature_group.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jc2.jdrcompagnon.feature_group.domain.EncounterDifficulty
-import com.jc2.jdrcompagnon.feature_group.domain.model.Mount
-import com.jc2.jdrcompagnon.feature_group.domain.model.Reputation
 import com.jc2.jdrcompagnon.feature_group.domain.model.ReputationScale
-import com.jc2.jdrcompagnon.feature_group.domain.model.Transport
 import com.jc2.jdrcompagnon.feature_group.domain.usecase.SuggestBalancedEncounterUseCase
 import com.jc2.jdrcompagnon.ui.Character
 import com.jc2.jdrcompagnon.ui.GameState
-import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdRepository
 
 /**
- * Carte "groupe d'aventuriers" — regroupe en un seul endroit : membres, montures, moyens de
- * transport, réputation par faction, et calculateur de rencontre équilibrée.
+ * Contenu détaillé d'un groupe d'aventuriers — tout ce qui le concerne, localisé : lieu du groupe
+ * et trésor commun, répartition par lieu, membres (PJ, PNJ, créatures), PNJ de la campagne,
+ * montures et animaux, véhicules, réputation par faction, inventaire commun, biens, et
+ * calculateur de rencontre équilibrée. Affiché sur son propre écran (GroupDetailScreen).
  *
- * Montures et moyens de transport se choisissent dans la bibliothèque SRD (bestiaire pour les
- * montures, équipement pour les véhicules) plutôt qu'en texte libre : la recherche reste
- * tolérante (aucun résultat trouvé n'empêche pas de valider un nom personnalisé), pour ne pas
- * bloquer un MJ qui invente sa propre monture/véhicule hors bestiaire.
+ * Les quêtes validées alimentent automatiquement trésor, réputation, montures, véhicules,
+ * inventaire, biens et PNJ (voir ValiderQueteUseCase) ; tout reste modifiable à la main ici.
+ * L'attitude des PNJ envers le groupe est réglée sur leur fiche (onglet PNJ) et récapitulée ici.
  *
- * Vue "idiote" (Règle A) : toute mutation du groupe repasse par [onGroupChanged] /
- * [onMemberToggle], appelés depuis GroupsScreen qui les relaie à GameState.updateMjGroup.
+ * La mutation des membres repasse par [onMemberToggle] (GroupDetailScreen) ; le reste passe
+ * directement par GameState (updateMjGroup, assignMountRider, harnessMount...).
  */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun GroupCard(
+fun GroupDetailContent(
     group: GameState.MjGroup,
     availableCharacters: List<Character>,
-    worldId: String?,
-    expanded: Boolean,
-    onToggleExpand: () -> Unit,
     onMemberToggle: (String) -> Unit,
-    onGroupChanged: (GameState.MjGroup) -> Unit,
     onOpenBestiaryDetail: (String) -> Unit,
     onOpenEquipmentDetail: (String) -> Unit,
-    onLongClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onOpenCharacter: (Character) -> Unit = {},
+    onTablePlayersChange: (List<GameState.TablePlayer>) -> Unit = {},
 ) {
     val members = availableCharacters.filter { it.id in group.memberIds }
-    val memberLevels = members.map { it.level }
+    // Le calculateur de rencontre ne compte que les combattants "du côté" du groupe (PJ et
+    // PNJ compagnons, joueurs sans fiche), pas les créatures qui l'accompagnent.
+    val memberLevels = members.filter { it.type == "PJ" || it.type == "PNJ" }.map { it.level } +
+        group.tablePlayers.map { it.level }
 
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        tonalElevation = 2.dp,
-        color = MaterialTheme.colorScheme.surface
-    ) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .combinedClickable(onClick = onToggleExpand, onLongClick = onLongClick),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(group.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text(
-                        "${members.size} membre(s)" +
-                                if (group.mounts.isNotEmpty() || group.transports.isNotEmpty())
-                                    " · ${group.mounts.size} monture(s) · ${group.transports.size} transport(s)"
-                                else "",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Icon(
-                    imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                    contentDescription = if (expanded) "Réduire" else "Développer"
-                )
-            }
-
-            if (expanded) {
-                HorizontalDivider()
-                MembersSubsection(group, availableCharacters, onMemberToggle)
-                HorizontalDivider()
-                MountsSubsection(group, worldId, onGroupChanged, onOpenBestiaryDetail)
-                HorizontalDivider()
-                TransportsSubsection(group, worldId, onGroupChanged, onOpenEquipmentDetail)
-                HorizontalDivider()
-                ReputationSubsection(group, onGroupChanged)
-                HorizontalDivider()
-                EncounterCalculatorSubsection(memberLevels)
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        SubsectionCard { GroupLocationSubsection(group) }
+        SubsectionCard { WhereIsWhatSubsection(group, members) }
+        SubsectionCard { TablePlayersSubsection(group.tablePlayers, onTablePlayersChange) }
+        MemberCategory.entries.forEach { category ->
+            SubsectionCard {
+                MembersSubsection(group, category, availableCharacters, onMemberToggle, onOpenCharacter)
             }
         }
+        SubsectionCard { CampaignPnjsSubsection(group, onOpenCharacter) }
+        SubsectionCard { PnjAttitudesSubsection(group, availableCharacters) }
+        SubsectionCard { MountsSubsection(group, members, onOpenBestiaryDetail) }
+        SubsectionCard { TransportsSubsection(group, onOpenEquipmentDetail) }
+        SubsectionCard { ReputationSubsection(group) }
+        SubsectionCard { InventorySubsection(group, members, onOpenEquipmentDetail) }
+        SubsectionCard { AssetsSubsection(group) }
+        SubsectionCard { EncounterCalculatorSubsection(memberLevels) }
     }
 }
 
 @Composable
-private fun SubsectionTitle(text: String) {
-    Text(text, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Black)
+internal fun SubsectionCard(content: @Composable () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) { content() }
+    }
 }
 
-// --- Membres (PJ/PNJ) ---
+@Composable
+internal fun SubsectionTitle(text: String) {
+    Text(text, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Black, color = Color.White)
+}
+
+// --- Membres : aventuriers (PJ), PNJ et créatures du groupe ---
+
+private enum class MemberCategory(val title: String, val emptyLabel: String, val types: Set<String>) {
+    AVENTURIERS("Aventuriers (PJ)", "Aucun PJ dans ce groupe.", setOf("PJ")),
+    PNJ("PNJ du groupe", "Aucun PNJ dans ce groupe.", setOf("PNJ")),
+    CREATURES("Créatures du groupe", "Aucune créature dans ce groupe.", setOf("Monstre", "Boss", "Créature", "Familier")),
+}
 
 @Composable
 private fun MembersSubsection(
     group: GameState.MjGroup,
+    category: MemberCategory,
     availableCharacters: List<Character>,
-    onMemberToggle: (String) -> Unit
+    onMemberToggle: (String) -> Unit,
+    onOpenCharacter: (Character) -> Unit,
 ) {
+    val ofCategory = availableCharacters.filter { it.type in category.types }
+    val members = ofCategory.filter { it.id in group.memberIds }
+    val candidates = ofCategory.filter { it.id !in group.memberIds }
+    var showAddMenu by remember { mutableStateOf(false) }
+    var locating by remember { mutableStateOf<Character?>(null) }
+
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        SubsectionTitle("Membres (PJ / PNJ)")
-        if (availableCharacters.isEmpty()) {
-            Text(
-                "Aucun PJ ou PNJ créé pour ce monde.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        availableCharacters.forEach { character ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Checkbox(
-                    checked = character.id in group.memberIds,
-                    onCheckedChange = { onMemberToggle(character.id) }
-                )
-                Text(
-                    "${character.name} — ${character.characterClass} niv.${character.level} (${character.type})",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-        }
-    }
-}
-
-/**
- * Champ "nom personnalisé" + recherche dans la bibliothèque, avec résultats affichés juste en
- * dessous. Composant partagé par montures (bestiaire) et transport (équipement) : seule la
- * fonction de recherche [search] change entre les deux usages.
- */
-@Composable
-private fun LibrarySearchField(
-    query: String,
-    onQueryChange: (String) -> Unit,
-    label: String,
-    results: List<String>,
-    onResultPicked: (String) -> Unit
-) {
-    Column {
-        OutlinedTextField(
-            value = query,
-            onValueChange = onQueryChange,
-            label = { Text(label) },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
-        )
-        results.forEach { result ->
-            Text(
-                text = result,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onResultPicked(result) }
-                    .padding(vertical = 4.dp)
-            )
-        }
-    }
-}
-
-// --- Montures (recherche dans le bestiaire SRD) ---
-
-@Composable
-private fun MountsSubsection(
-    group: GameState.MjGroup,
-    worldId: String?,
-    onGroupChanged: (GameState.MjGroup) -> Unit,
-    onOpenBestiaryDetail: (String) -> Unit
-) {
-    val context = LocalContext.current
-    var name by remember(group.id) { mutableStateOf("") }
-    var speciesQuery by remember(group.id) { mutableStateOf("") }
-    var speciesResults by remember(group.id) { mutableStateOf<List<String>>(emptyList()) }
-
-    LaunchedEffect(speciesQuery, worldId) {
-        speciesResults = if (speciesQuery.length < 2) {
-            emptyList()
-        } else {
-            SrdRepository.searchMonsters(context, speciesQuery, worldId).map { it.name }.take(6)
-        }
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SubsectionTitle("Montures")
-        group.mounts.forEach { mount ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable(enabled = mount.species.isNotBlank()) { onOpenBestiaryDetail(mount.species) }
-                ) {
-                    Text(mount.name)
-                    if (mount.species.isNotBlank()) {
-                        Text(
-                            mount.species,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f)) { SubsectionTitle("${category.title} — ${members.size}") }
+            Box {
+                TextButton(onClick = { showAddMenu = true }, enabled = candidates.isNotEmpty()) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Text("Ajouter")
+                }
+                DropdownMenu(expanded = showAddMenu, onDismissRequest = { showAddMenu = false }) {
+                    candidates.forEach { character ->
+                        DropdownMenuItem(
+                            text = { Text("${character.name} (${character.type})") },
+                            onClick = {
+                                onMemberToggle(character.id)
+                                showAddMenu = false
+                            }
                         )
                     }
                 }
-                IconButton(onClick = { onGroupChanged(group.copy(mounts = group.mounts - mount)) }) {
-                    Icon(Icons.Default.Delete, contentDescription = "Retirer")
+            }
+        }
+        if (members.isEmpty()) {
+            Text(
+                if (ofCategory.isEmpty()) "Aucune fiche de ce type dans ce monde." else category.emptyLabel,
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White
+            )
+        }
+        members.forEach { character ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onOpenCharacter(character) },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(character.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(
+                        listOf(character.characterClass, character.race, "niv.${character.level}", "PV ${character.currentHitPoints}/${character.maxHitPoints}", "VIT ${character.speed} m")
+                            .filter { it.isNotBlank() }
+                            .joinToString(" • "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.8f)
+                    )
+                    val monture = group.mounts.firstOrNull { it.riderCharacterId == character.id && it.kind == com.jc2.jdrcompagnon.feature_group.domain.model.MountKind.MONTURE }
+                    Text(
+                        listOfNotNull(
+                            "📍 ${lieuDe(character.location, group)}",
+                            monture?.let { "🐎 ${it.name}" },
+                        ).joinToString("  "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.8f)
+                    )
+                }
+                IconButton(onClick = { locating = character }) {
+                    Icon(Icons.Default.Place, contentDescription = "Changer le lieu", tint = Color.White)
+                }
+                IconButton(onClick = { onMemberToggle(character.id) }) {
+                    Icon(Icons.Default.Close, contentDescription = "Retirer du groupe", tint = MaterialTheme.colorScheme.error)
                 }
             }
         }
-        OutlinedTextField(
-            value = name, onValueChange = { name = it },
-            label = { Text("Nom donné à la monture (ex: Bucéphale)") },
-            modifier = Modifier.fillMaxWidth(), singleLine = true
+    }
+
+    locating?.let { character ->
+        LocationDialog(
+            title = "Où se trouve ${character.name} ?",
+            initial = character.location,
+            hint = "Vide = avec le groupe",
+            onDismiss = { locating = null },
+            onConfirm = { GameState.setCharacterLocation(character.id, it); locating = null },
         )
-        LibrarySearchField(
-            query = speciesQuery,
-            onQueryChange = { speciesQuery = it },
-            label = "Rechercher une espèce dans le bestiaire (ex: cheval)",
-            results = speciesResults,
-            onResultPicked = { picked -> speciesQuery = picked; speciesResults = emptyList() }
-        )
-        Button(
-            enabled = name.isNotBlank(),
-            onClick = {
-                onGroupChanged(group.copy(mounts = group.mounts + Mount(name = name, species = speciesQuery)))
-                name = ""; speciesQuery = ""; speciesResults = emptyList()
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) { Text("Ajouter") }
     }
 }
 
-// --- Moyens de transport (recherche dans l'équipement SRD) ---
+// --- Joueurs sans fiche (personnes jouant sans l'application) ---
 
 @Composable
-private fun TransportsSubsection(
-    group: GameState.MjGroup,
-    worldId: String?,
-    onGroupChanged: (GameState.MjGroup) -> Unit,
-    onOpenEquipmentDetail: (String) -> Unit
+private fun TablePlayersSubsection(
+    players: List<GameState.TablePlayer>,
+    onPlayersChange: (List<GameState.TablePlayer>) -> Unit,
 ) {
-    val context = LocalContext.current
-    var name by remember(group.id) { mutableStateOf("") }
-    var typeQuery by remember(group.id) { mutableStateOf("") }
-    var typeResults by remember(group.id) { mutableStateOf<List<String>>(emptyList()) }
-    var capacity by remember(group.id) { mutableStateOf("") }
+    var editing by remember { mutableStateOf<GameState.TablePlayer?>(null) }
 
-    LaunchedEffect(typeQuery, worldId) {
-        typeResults = if (typeQuery.length < 2) {
-            emptyList()
-        } else {
-            SrdRepository.loadEquipmentList(context, worldId)
-                .filter { it.name.contains(typeQuery, ignoreCase = true) }
-                .map { it.name }
-                .take(6)
-        }
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SubsectionTitle("Moyens de transport")
-        group.transports.forEach { transport ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable(enabled = transport.type.isNotBlank()) { onOpenEquipmentDetail(transport.type) }
-                ) {
-                    Text(transport.name)
-                    Text(
-                        "${transport.type} (capacité ${transport.capacity})",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-                IconButton(onClick = { onGroupChanged(group.copy(transports = group.transports - transport)) }) {
-                    Icon(Icons.Default.Delete, contentDescription = "Retirer")
-                }
-            }
-        }
-        OutlinedTextField(
-            value = name, onValueChange = { name = it },
-            label = { Text("Nom donné au véhicule (ex: La Mouette)") },
-            modifier = Modifier.fillMaxWidth(), singleLine = true
-        )
-        LibrarySearchField(
-            query = typeQuery,
-            onQueryChange = { typeQuery = it },
-            label = "Rechercher un véhicule dans l'équipement (ex: chariot)",
-            results = typeResults,
-            onResultPicked = { picked -> typeQuery = picked; typeResults = emptyList() }
-        )
-        OutlinedTextField(
-            value = capacity, onValueChange = { capacity = it.filter(Char::isDigit) },
-            label = { Text("Capacité") }, modifier = Modifier.fillMaxWidth(), singleLine = true
-        )
-        Button(
-            enabled = name.isNotBlank(),
-            onClick = {
-                onGroupChanged(
-                    group.copy(
-                        transports = group.transports + Transport(
-                            name = name, type = typeQuery, capacity = capacity.toIntOrNull() ?: 0
-                        )
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f)) { SubsectionTitle("Joueurs sans fiche — ${players.size}") }
+            TextButton(onClick = {
+                val level = players.lastOrNull()?.level ?: 1
+                onPlayersChange(
+                    players + GameState.TablePlayer(
+                        name = "Joueur ${players.size + 1}",
+                        level = level,
+                        maxHitPoints = GameState.TablePlayer.estimatedHitPoints(level),
                     )
                 )
-                name = ""; typeQuery = ""; typeResults = emptyList(); capacity = ""
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) { Text("Ajouter") }
-    }
-}
-
-// --- Réputation ---
-
-@Composable
-private fun ReputationSubsection(group: GameState.MjGroup, onGroupChanged: (GameState.MjGroup) -> Unit) {
-    var newFactionName by remember(group.id) { mutableStateOf("") }
-
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SubsectionTitle("Réputation")
-        group.reputations.forEach { reputation ->
+            }) {
+                Icon(Icons.Default.Add, contentDescription = null)
+                Text("Ajouter")
+            }
+        }
+        if (players.isEmpty()) {
+            Text(
+                "Pour jouer avec des personnes sans l'application : ajoutez-les ici avec leur niveau.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White
+            )
+        }
+        players.forEach { player ->
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { editing = player },
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("${reputation.factionName} — ${ReputationScale.labelFor(reputation.score)} (${reputation.score})")
-                Row {
-                    IconButton(onClick = { onGroupChanged(adjustReputation(group, reputation, -5)) }) { Text("−5") }
-                    IconButton(onClick = { onGroupChanged(adjustReputation(group, reputation, +5)) }) { Text("+5") }
+                Column(Modifier.weight(1f)) {
+                    Text(player.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(
+                        "niv.${player.level} • CA ${player.armorClass} • PV ${player.maxHitPoints}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.8f)
+                    )
+                }
+                IconButton(onClick = { onPlayersChange(players.filterNot { it.id == player.id }) }) {
+                    Icon(Icons.Default.Close, contentDescription = "Retirer du groupe", tint = MaterialTheme.colorScheme.error)
                 }
             }
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value = newFactionName, onValueChange = { newFactionName = it },
-                label = { Text("Nouvelle faction") }, modifier = Modifier.weight(1f), singleLine = true
-            )
-            Spacer(Modifier.width(8.dp))
-            Button(
-                enabled = newFactionName.isNotBlank(),
-                onClick = {
-                    onGroupChanged(group.copy(reputations = group.reputations + Reputation(factionName = newFactionName)))
-                    newFactionName = ""
+    }
+
+    editing?.let { player ->
+        var name by remember(player.id) { mutableStateOf(player.name) }
+        var level by remember(player.id) { mutableStateOf(player.level) }
+        var armorClass by remember(player.id) { mutableStateOf(player.armorClass) }
+        var hitPoints by remember(player.id) { mutableStateOf(player.maxHitPoints) }
+        AlertDialog(
+            onDismissRequest = { editing = null },
+            title = { Text("Joueur sans fiche") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("Nom") },
+                        singleLine = true,
+                    )
+                    NumberStepper("Niveau", level, 1..20) { newLevel ->
+                        // PV encore à l'estimation par défaut : on les suit le niveau.
+                        if (hitPoints == GameState.TablePlayer.estimatedHitPoints(level)) {
+                            hitPoints = GameState.TablePlayer.estimatedHitPoints(newLevel)
+                        }
+                        level = newLevel
+                    }
+                    NumberStepper("CA", armorClass, 1..30) { armorClass = it }
+                    NumberStepper("PV max", hitPoints, 1..400) { hitPoints = it }
                 }
-            ) { Text("Ajouter") }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = name.isNotBlank(),
+                    onClick = {
+                        val updated = player.copy(name = name.trim(), level = level, armorClass = armorClass, maxHitPoints = hitPoints)
+                        onPlayersChange(players.map { if (it.id == player.id) updated else it })
+                        editing = null
+                    }
+                ) { Text("Enregistrer") }
+            },
+            dismissButton = { TextButton(onClick = { editing = null }) { Text("Annuler") } }
+        )
+    }
+}
+
+/** Sélecteur numérique compact (− valeur +), utilisé pour le nombre et le niveau des joueurs. */
+@Composable
+internal fun NumberStepper(
+    label: String,
+    value: Int,
+    range: IntRange,
+    onValueChange: (Int) -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        IconButton(onClick = { onValueChange((value - 1).coerceIn(range)) }, enabled = value > range.first) {
+            Icon(Icons.Default.Remove, contentDescription = "Diminuer")
+        }
+        Text("$value", fontWeight = FontWeight.Bold, modifier = Modifier.widthIn(min = 28.dp), textAlign = TextAlign.Center)
+        IconButton(onClick = { onValueChange((value + 1).coerceIn(range)) }, enabled = value < range.last) {
+            Icon(Icons.Default.Add, contentDescription = "Augmenter")
         }
     }
 }
 
-private fun adjustReputation(group: GameState.MjGroup, reputation: Reputation, delta: Int): GameState.MjGroup {
-    val updated = reputation.copy(score = (reputation.score + delta).coerceIn(-100, 100))
-    return group.copy(reputations = group.reputations.map { if (it.factionId == reputation.factionId) updated else it })
+// --- Attitude des PNJ envers le groupe (réglée dans l'onglet PNJ de leur fiche) ---
+
+@Composable
+private fun PnjAttitudesSubsection(group: GameState.MjGroup, availableCharacters: List<Character>) {
+    val attitudes = availableCharacters
+        .filter { it.type == "PNJ" && group.id in it.groupReputations }
+        .sortedByDescending { it.groupReputations[group.id] }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        SubsectionTitle("Attitude des PNJ envers le groupe")
+        if (attitudes.isEmpty()) {
+            Text(
+                "Aucun PNJ n'a d'avis sur ce groupe (à régler dans l'onglet PNJ de leur fiche).",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White
+            )
+        }
+        attitudes.forEach { pnj ->
+            val score = pnj.groupReputations[group.id] ?: 0
+            Text("${pnj.name} — ${ReputationScale.labelFor(score)} ($score)", color = Color.White)
+        }
+    }
 }
 
 // --- Calculateur de rencontre ---
@@ -412,9 +362,9 @@ private fun EncounterCalculatorSubsection(memberLevels: List<Int>) {
         SubsectionTitle("Rencontre équilibrée")
         if (memberLevels.isEmpty()) {
             Text(
-                "Cochez des PJ/PNJ ci-dessus pour calculer une rencontre.",
+                "Ajoutez des PJ/PNJ ou des joueurs sans fiche ci-dessus pour calculer une rencontre.",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = Color.White
             )
             return
         }
@@ -424,7 +374,12 @@ private fun EncounterCalculatorSubsection(memberLevels: List<Int>) {
                 SegmentedButton(
                     selected = selectedDifficulty == difficulty,
                     onClick = { selectedDifficulty = difficulty },
-                    shape = SegmentedButtonDefaults.itemShape(index, EncounterDifficulty.entries.size)
+                    shape = SegmentedButtonDefaults.itemShape(index, EncounterDifficulty.entries.size),
+                    colors = SegmentedButtonDefaults.colors(
+                        activeContainerColor = MaterialTheme.colorScheme.primary,
+                        activeContentColor = MaterialTheme.colorScheme.onPrimary,
+                        activeBorderColor = MaterialTheme.colorScheme.primary
+                    )
                 ) { Text(difficulty.label) }
             }
         }
@@ -433,13 +388,14 @@ private fun EncounterCalculatorSubsection(memberLevels: List<Int>) {
         Text(
             "Budget d'XP recommandé : ${suggestion.totalXpBudget}",
             style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            color = Color.White
         )
         Text(
             "Nombre de monstres conseillé : ${suggestion.recommendedMonsterCount.first} " +
                     "à ${suggestion.recommendedMonsterCount.last}",
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = Color.White
         )
     }
 }

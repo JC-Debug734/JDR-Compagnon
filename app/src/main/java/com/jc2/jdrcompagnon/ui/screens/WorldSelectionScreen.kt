@@ -1,35 +1,28 @@
 package com.jc2.jdrcompagnon.ui.screens
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.slideInVertically
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
+import android.net.Uri
+import android.provider.OpenableColumns
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Landscape
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -38,63 +31,75 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jc2.jdrcompagnon.R
+import com.jc2.jdrcompagnon.ui.GameState
+import com.jc2.jdrcompagnon.ui.WorldState
+import com.jc2.jdrcompagnon.ui.worlds.CustomWorldsRepository
+import com.jc2.jdrcompagnon.ui.worlds.toWorldColorOrNull
 
+/**
+ * Choix de l'univers, présenté comme le choix du rôle (RoleSelectionScreen) : de grandes cases
+ * empilées portant seulement le nom de l'univers, sans texte de présentation. L'univers actif
+ * est coché ; un univers importé peut être retiré (icône corbeille) ; la dernière case importe
+ * un nouvel univers depuis une archive .zip.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WorldSelectionScreen(
     onWorldSelected: (String, String, String, ImageVector, Color, Color) -> Unit,
+    // Distinct de [onWorldSelected] : un univers importé porte des métadonnées (icône,
+    // couleurs, fond d'écran, catégories) qui ne peuvent pas transiter par les types UI-only
+    // (ImageVector/Color) du premier callback — l'appelant reçoit directement le WorldState
+    // déjà résolu par [CustomWorldsRepository], prêt pour [GameState.selectWorld].
+    onCustomWorldSelected: (WorldState) -> Unit = {},
     onBack: (() -> Unit)? = null,
     onOpenMenu: () -> Unit = {},
 ) {
-    var visible by remember { mutableStateOf(false) }
-    var selectedWorldId by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+    val currentWorld by GameState.currentWorld.collectAsState()
+    var customWorlds by remember { mutableStateOf(CustomWorldsRepository.listCustomWorlds(context)) }
+    var importError by remember { mutableStateOf<String?>(null) }
+    var worldToDelete by remember { mutableStateOf<WorldState?>(null) }
 
-    LaunchedEffect(Unit) { visible = true }
-    val configuration = LocalConfiguration.current
-    val screenWidthDp = configuration.screenWidthDp
+    val zipPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri: Uri? ->
+        if (uri != null) {
+            val fallbackName = queryDisplayName(context, uri)?.substringBeforeLast('.') ?: "Univers importé"
+            CustomWorldsRepository.importWorldFromZip(context, uri, fallbackName)
+                .onSuccess { customWorlds = CustomWorldsRepository.listCustomWorlds(context) }
+                .onFailure { importError = it.message ?: "Import impossible" }
+        }
+    }
 
-    val isCompact = screenWidthDp < 600
-    val gridColumns = if (isCompact) 1 else 2
+    val dndLabel = stringResource(R.string.world_dnd_label)
+    val dndDescription = stringResource(R.string.world_dnd_description)
+    val naheulLabel = stringResource(R.string.world_naheul_label)
+    val naheulDescription = stringResource(R.string.world_naheul_description)
 
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = {
-                    Text(
-                        text = selectedWorldId?.let {
-                            when {
-                                it == "donjon_et_dragon" -> stringResource(R.string.world_dnd_label)
-                                it == "naheulbeuk" -> stringResource(R.string.world_naheul_label)
-                                else -> "CHOISIR UN MONDE"
-                            }
-                        } ?: "CHOISIR UN MONDE",
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, letterSpacing = 2.sp),
-                    )
-                },
+                title = {},
                 navigationIcon = {
                     IconButton(onClick = onOpenMenu) {
-                        Icon(Icons.Default.Menu, contentDescription = "Menu")
+                        Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White)
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent),
@@ -102,294 +107,143 @@ fun WorldSelectionScreen(
         },
         containerColor = Color.Transparent,
     ) { innerPadding ->
+        // Cases en bas de l'écran, comme le choix du rôle ; défilement si beaucoup d'univers.
         Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-            Spacer(modifier = Modifier.height(16.dp))
-
-            if (selectedWorldId == null) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Text(
-                        text = "CHOISIR UN MONDE",
-                        style = MaterialTheme.typography.headlineLarge,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        textAlign = TextAlign.Center,
-                        letterSpacing = 0.5.sp,
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Sélectionnez un monde pour commencer à jouer",
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.weight(1f))
+        Column(
+            modifier = Modifier
+                .weight(1f, fill = false)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            WorldButton(
+                label = dndLabel,
+                selected = currentWorld?.id == "donjon_et_dragon",
+                onClick = {
+                    onWorldSelected("donjon_et_dragon", dndLabel, dndDescription, Icons.Filled.Shield, Color(0xFFC62828), Color(0xFFFFD54F))
+                },
+            )
+            WorldButton(
+                label = naheulLabel,
+                selected = currentWorld?.id == "naheulbeuk",
+                onClick = {
+                    onWorldSelected("naheulbeuk", naheulLabel, naheulDescription, Icons.Filled.Landscape, Color(0xFF2E7D32), Color(0xFFFFB300))
+                },
+            )
+            customWorlds.forEach { world ->
+                WorldButton(
+                    label = world.name,
+                    selected = currentWorld?.id == world.id,
+                    color = world.primaryColorHex.toWorldColorOrNull() ?: RoleSelectionColor,
+                    onClick = { onCustomWorldSelected(world) },
+                    onDelete = { worldToDelete = world },
+                )
             }
-
-            if (isCompact) {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 24.dp),
-                    contentPadding = PaddingValues(bottom = 100.dp),
-                ) {
-                    itemsIndexed(items = listOf("dnd", "naheul"), key = { _, id -> id }) { index, worldKey ->
-                        val worldId = if (worldKey == "dnd") "donjon_et_dragon" else "naheulbeuk"
-                        val isSelected = selectedWorldId == worldId
-                        val label = stringResource(
-                            when (worldKey) {
-                                "dnd" -> R.string.world_dnd_label
-                                "naheul" -> R.string.world_naheul_label
-                                else -> R.string.world_dnd_label
-                            }
-                        )
-                        val description = stringResource(
-                            when (worldKey) {
-                                "dnd" -> R.string.world_dnd_description
-                                "naheul" -> R.string.world_naheul_description
-                                else -> R.string.world_dnd_description
-                            }
-                        )
-                        val metadata = stringResource(
-                            when (worldKey) {
-                                "dnd" -> R.string.world_dnd_metadata
-                                "naheul" -> R.string.world_naheul_metadata
-                                else -> R.string.world_dnd_metadata
-                            }
-                        )
-                        val icon = when (worldKey) {
-                            "dnd" -> Icons.Filled.Shield
-                            "naheul" -> Icons.Filled.Landscape
-                            else -> Icons.Filled.Public
-                        }
-                        val primaryColor = if (worldKey == "dnd") Color(0xFFC62828) else Color(0xFF2E7D32)
-                        val secondaryColor = if (worldKey == "dnd") Color(0xFFFFD54F) else Color(0xFFFFB300)
-                        val cardData = WorldCardData(
-                            id = worldId, label = label,
-                            description = description,
-                            metadata = metadata,
-                            icon = icon,
-                            primaryColor = primaryColor,
-                            secondaryColor = secondaryColor
-                        )
-
-                        WorldSelectionCard(
-                            data = cardData,
-                            isSelected = isSelected,
-                            onClick = {
-                                selectedWorldId = worldId
-                                onWorldSelected(worldId, label, description, icon, primaryColor, secondaryColor)
-                            },
-                            animationIndex = index, animationVisible = visible,
-                        )
-                    }
-                }
-            } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(gridColumns),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 24.dp),
-                    contentPadding = PaddingValues(bottom = 100.dp)
-                ) {
-                    itemsIndexed(items = listOf("dnd", "naheul"), key = { _, id -> id }) { index, worldKey ->
-                        val worldId = if (worldKey == "dnd") "donjon_et_dragon" else "naheulbeuk"
-                        val isSelected = selectedWorldId == worldId
-                        val label = stringResource(
-                            when (worldKey) {
-                                "dnd" -> R.string.world_dnd_label
-                                "naheul" -> R.string.world_naheul_label
-                                else -> R.string.world_dnd_label
-                            }
-                        )
-                        val description = stringResource(
-                            when (worldKey) {
-                                "dnd" -> R.string.world_dnd_description
-                                "naheul" -> R.string.world_naheul_description
-                                else -> R.string.world_dnd_description
-                            }
-                        )
-                        val metadata = stringResource(
-                            when (worldKey) {
-                                "dnd" -> R.string.world_dnd_metadata
-                                "naheul" -> R.string.world_naheul_metadata
-                                else -> R.string.world_dnd_metadata
-                            }
-                        )
-                        val icon = when (worldKey) {
-                            "dnd" -> Icons.Filled.Shield
-                            "naheul" -> Icons.Filled.Landscape
-                            else -> Icons.Filled.Public
-                        }
-                        val primaryColor = if (worldKey == "dnd") Color(0xFFC62828) else Color(0xFF2E7D32)
-                        val secondaryColor = if (worldKey == "dnd") Color(0xFFFFD54F) else Color(0xFFFFB300)
-                        val cardData = WorldCardData(
-                            id = worldId, label = label,
-                            description = description,
-                            metadata = metadata,
-                            icon = icon,
-                            primaryColor = primaryColor,
-                            secondaryColor = secondaryColor
-                        )
-
-                        WorldSelectionCard(
-                            data = cardData,
-                            isSelected = isSelected,
-                            onClick = {
-                                selectedWorldId = worldId
-                                onWorldSelected(worldId, label, description, icon, primaryColor, secondaryColor)
-                            },
-                            animationIndex = index, animationVisible = visible,
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
+            WorldButton(
+                label = "Importer un univers",
+                selected = false,
+                onClick = { zipPickerLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "*/*")) },
+            )
+        }
         }
     }
-}
 
-data class WorldCardData(
-    val id: String,
-    val label: String,
-    val description: String,
-    val metadata: String,
-    val icon: ImageVector,
-    val primaryColor: Color,
-    val secondaryColor: Color,
-)
+    val error = importError
+    if (error != null) {
+        AlertDialog(
+            onDismissRequest = { importError = null },
+            title = { Text("Import impossible") },
+            text = { Text(error) },
+            confirmButton = {
+                TextButton(onClick = { importError = null }) { Text("OK") }
+            },
+        )
+    }
+
+    // Confirmation avant de retirer un univers importé : action irréversible (dossier et
+    // tout son contenu supprimés), d'où la confirmation contrairement au retrait d'un simple
+    // livre personnalisé dans la bibliothèque.
+    val toDelete = worldToDelete
+    if (toDelete != null) {
+        AlertDialog(
+            onDismissRequest = { worldToDelete = null },
+            title = { Text("Retirer cet univers ?") },
+            text = {
+                Text(
+                    "« ${toDelete.name} » et tout son contenu importé seront définitivement " +
+                        "supprimés de l'appareil.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    CustomWorldsRepository.deleteCustomWorld(context, toDelete.id)
+                    customWorlds = CustomWorldsRepository.listCustomWorlds(context)
+                    // Univers actif supprimé : AppEntryPoint repasse automatiquement sur D&D.
+                    if (GameState.currentWorld.value?.id == toDelete.id) GameState.clearWorld()
+                    worldToDelete = null
+                }) {
+                    Text("Supprimer", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { worldToDelete = null }) { Text("Annuler") }
+            },
+        )
+    }
+}
 
 /**
- * World selection card with hero styling, metadata, and selection state
+ * Case d'univers au style des cases du choix du rôle (bordure dorée, fond translucide, nom en
+ * blanc centré). L'univers actif a une bordure plus épaisse et une coche ; [onDelete] ajoute une
+ * corbeille (univers importés uniquement).
  */
 @Composable
-fun WorldSelectionCard(
-    data: WorldCardData,
-    isSelected: Boolean,
+private fun WorldButton(
+    label: String,
+    selected: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    animationIndex: Int = 0,
-    animationVisible: Boolean = true,
+    color: Color = RoleSelectionColor,
+    onDelete: (() -> Unit)? = null,
 ) {
-    val density = LocalDensity.current
-
-    val borderStroke = if (isSelected) {
-        BorderStroke(2.dp, data.primaryColor)
-    } else {
-        BorderStroke(1.dp, data.primaryColor.copy(alpha = 0.2f))
-    }
-
-    val content = @Composable {
-        Surface(
-            onClick = onClick,
-            modifier = modifier.fillMaxWidth().clip(MaterialTheme.shapes.large),
-            color = if (isSelected) data.primaryColor.copy(alpha = 0.06f) else MaterialTheme.colorScheme.surface,
-            tonalElevation = if (isSelected) 6.dp else 2.dp,
-            border = borderStroke,
-            shape = RoundedCornerShape(16.dp),
-        ) {
-            Box(modifier = Modifier.fillMaxWidth()) {
-                // Decorative gradient accent
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .size(120.dp)
-                        .offset(x = 40.dp, y = (-40).dp)
-                        .background(
-                            Brush.radialGradient(
-                                listOf(
-                                    data.primaryColor.copy(alpha = if (isSelected) 0.22f else 0.12f),
-                                    Color.Transparent
-                                )
-                            ),
-                        ),
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(100.dp)
+            .border(if (selected) 4.dp else 2.dp, color, MaterialTheme.shapes.medium)
+            .clickable(onClick = onClick),
+        shape = MaterialTheme.shapes.medium,
+        color = color.copy(alpha = if (selected) 0.25f else 0.1f),
+    ) {
+        Box(modifier = Modifier.fillMaxSize().padding(12.dp)) {
+            if (selected) {
+                Icon(
+                    Icons.Default.CheckCircle,
+                    contentDescription = "Univers actif",
+                    tint = color,
+                    modifier = Modifier.align(Alignment.CenterStart),
                 )
-
-                Row(
-                    modifier = Modifier.padding(24.dp).fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    // Icon container
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = data.primaryColor.copy(alpha = 0.12f),
-                        modifier = Modifier.size(56.dp),
-                        border = BorderStroke(1.dp, data.primaryColor.copy(alpha = 0.2f)),
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = data.icon,
-                                contentDescription = "Icone ${data.label}",
-                                tint = data.primaryColor,
-                                modifier = Modifier.size(32.dp),
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.width(20.dp))
-
-                    // Text content
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = data.label.uppercase(),
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = data.description,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = data.metadata,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                        )
-                    }
-
-                    // Selection badge
-                    if (isSelected) {
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = data.secondaryColor.copy(alpha = 0.12f),
-                            border = BorderStroke(1.dp, data.secondaryColor.copy(alpha = 0.2f)),
-                        ) {
-                            Text(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                text = stringResource(R.string.world_badge_selected),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = data.secondaryColor,
-                            )
-                        }
-                    }
+            }
+            Text(
+                text = label,
+                style = MaterialTheme.typography.headlineSmall,
+                color = Color.White,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                modifier = Modifier.align(Alignment.Center).padding(horizontal = 40.dp),
+            )
+            if (onDelete != null) {
+                IconButton(onClick = onDelete, modifier = Modifier.align(Alignment.CenterEnd)) {
+                    Icon(Icons.Default.Delete, contentDescription = "Retirer cet univers", tint = Color.White)
                 }
             }
         }
     }
-
-    if (animationVisible) {
-        AnimatedVisibility(
-            visible = true,
-            enter = fadeIn(animationSpec = tween(durationMillis = 600, delayMillis = animationIndex * 100)) +
-                    slideInVertically(
-                        animationSpec = tween(durationMillis = 600, delayMillis = animationIndex * 100),
-                        initialOffsetY = { with(density) { 40.dp.roundToPx() } },
-                    ),
-            exit = androidx.compose.animation.fadeOut(animationSpec = tween(durationMillis = 200)) +
-                    androidx.compose.animation.slideOutVertically(
-                        animationSpec = tween(durationMillis = 200),
-                        targetOffsetY = { with(density) { -40.dp.roundToPx() } },
-                    ),
-        ) {
-            content()
-        }
-    } else {
-        content()
-    }
 }
+
+/** Nom d'affichage d'un fichier choisi via le sélecteur système (colonne DISPLAY_NAME). */
+private fun queryDisplayName(context: android.content.Context, uri: Uri): String? =
+    context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+        val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+        if (nameIndex >= 0 && cursor.moveToFirst()) cursor.getString(nameIndex) else null
+    }

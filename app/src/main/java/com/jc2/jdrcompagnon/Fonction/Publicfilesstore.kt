@@ -88,6 +88,11 @@ object PublicFilesStore {
 
     /** Écrit (ou réécrit intégralement) un fichier texte dans le dossier public. */
     fun writeText(context: Context, displayName: String, content: String, subfolder: String? = null, mimeType: String = "text/markdown") {
+        writeBytes(context, displayName, content.toByteArray(Charsets.UTF_8), subfolder, mimeType)
+    }
+
+    /** Écrit (ou réécrit intégralement) un fichier binaire dans le dossier public (ex: image de fond de carte). */
+    fun writeBytes(context: Context, displayName: String, content: ByteArray, subfolder: String? = null, mimeType: String = "application/octet-stream") {
         try {
             val resolver = context.contentResolver
             val existingUri = findUri(context, displayName, subfolder)
@@ -100,7 +105,7 @@ object PublicFilesStore {
                 resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
             }
             if (uri != null) {
-                resolver.openOutputStream(uri, "wt")?.use { out -> out.write(content.toByteArray(Charsets.UTF_8)) }
+                resolver.openOutputStream(uri, "wt")?.use { out -> out.write(content) }
             } else {
                 android.util.Log.e("PublicFilesStore", "Impossible de créer $displayName")
             }

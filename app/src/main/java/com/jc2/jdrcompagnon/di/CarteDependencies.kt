@@ -4,14 +4,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.jc2.jdrcompagnon.feature_carte.data.CarteRepository
 import com.jc2.jdrcompagnon.feature_carte.data.CarteRepositoryImpl
+import com.jc2.jdrcompagnon.feature_carte.data.ConversionEvenementsCarte
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import com.jc2.jdrcompagnon.feature_carte.domain.usecase.CalculerTempsTrajetUseCase
 import com.jc2.jdrcompagnon.feature_carte.domain.usecase.CreerPointInteretUseCase
 import com.jc2.jdrcompagnon.feature_carte.domain.usecase.DelierBoutiqueUseCase
 import com.jc2.jdrcompagnon.feature_carte.domain.usecase.DeplacerPointInteretUseCase
-import com.jc2.jdrcompagnon.feature_carte.domain.usecase.GenererEvenementsGeneriquesUseCase
 import com.jc2.jdrcompagnon.feature_carte.domain.usecase.LierBoutiqueAVilleUseCase
 import com.jc2.jdrcompagnon.feature_carte.domain.usecase.SupprimerPointInteretUseCase
-import com.jc2.jdrcompagnon.feature_carte.domain.usecase.TirerEvenementAleatoireUseCase
 import com.jc2.jdrcompagnon.feature_carte.presentation.CarteCampagneViewModel
 import com.jc2.jdrcompagnon.feature_carte.presentation.EvenementsViewModel
 import com.jc2.jdrcompagnon.feature_carte.presentation.VilleDetailViewModel
@@ -35,11 +37,10 @@ object CarteDependencies {
     private val lierBoutiqueAVille by lazy { LierBoutiqueAVilleUseCase(BoutiqueDependencies.repository, repository) }
     private val delierBoutique by lazy { DelierBoutiqueUseCase(BoutiqueDependencies.repository, repository) }
     private val calculerTempsTrajet = CalculerTempsTrajetUseCase()
-    private val genererEvenementsGeneriques = GenererEvenementsGeneriquesUseCase()
-    private val tirerEvenementAleatoire by lazy { TirerEvenementAleatoireUseCase(genererEvenementsGeneriques) }
 
-    fun newCarteViewModel(campagneId: String): CarteCampagneViewModel = CarteCampagneViewModel(
+    fun newCarteViewModel(campagneId: String, carteId: String? = null): CarteCampagneViewModel = CarteCampagneViewModel(
         campagneId = campagneId,
+        carteId = carteId,
         repository = repository,
         boutiqueRepository = BoutiqueDependencies.repository,
         creerPointInteret = creerPointInteret,
@@ -52,10 +53,24 @@ object CarteDependencies {
 
     fun newEvenementsViewModel(campagneId: String): EvenementsViewModel = EvenementsViewModel(
         campagneId = campagneId,
-        repository = repository,
-        genererEvenementsGeneriques = genererEvenementsGeneriques,
-        tirerEvenementAleatoire = tirerEvenementAleatoire
+        worldId = EvenementDependencies.mondeDeCampagne(campagneId),
+        repository = EvenementDependencies.repository,
     )
+
+    /**
+     * Convertit en tâche de fond les anciens événements de campagne/ville vers la bibliothèque
+     * (voir ConversionEvenementsCarte). Appelé par GameState.init, une fois les campagnes chargées
+     * (leur monde est nécessaire) et la base ouverte ; sans effet quand il n'y a plus rien à convertir.
+     */
+    fun convertirAnciensEvenements() {
+        CoroutineScope(Dispatchers.IO).launch {
+            runCatching {
+                ConversionEvenementsCarte(BoutiqueDependencies.requireDatabase().carteDao(), EvenementDependencies.repository)(
+                    EvenementDependencies::mondeDeCampagne
+                )
+            }.onFailure { android.util.Log.e("CarteDependencies", "Conversion des anciens événements impossible", it) }
+        }
+    }
 
     fun newVillesListViewModel(campagneId: String): VillesListViewModel = VillesListViewModel(
         campagneId = campagneId,
@@ -70,15 +85,14 @@ object CarteDependencies {
         boutiqueRepository = BoutiqueDependencies.repository,
         lierBoutiqueAVille = lierBoutiqueAVille,
         delierBoutique = delierBoutique,
-        tirerEvenementAleatoire = tirerEvenementAleatoire,
         mondeActif = { GameState.currentWorld.value?.id ?: "donjon_et_dragon" }
     )
 }
 
-class CarteCampagneViewModelFactory(private val campagneId: String) : ViewModelProvider.Factory {
+class CarteCampagneViewModelFactory(private val campagneId: String, private val carteId: String? = null) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         @Suppress("UNCHECKED_CAST")
-        return CarteDependencies.newCarteViewModel(campagneId) as T
+        return CarteDependencies.newCarteViewModel(campagneId, carteId) as T
     }
 }
 

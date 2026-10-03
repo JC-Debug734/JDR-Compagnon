@@ -22,13 +22,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.Public
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -47,7 +42,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -63,13 +57,17 @@ import com.jc2.jdrcompagnon.ui.theme.Breakpoints
 // RoleCard — clickable M3 Card, no CTA button, arrow in bottom-right
 // ========================================================================
 
+// Couleur unique pour toutes les cases (rôles + univers + réglages), pour que le bloc
+// de boutons empilés forme un ensemble visuellement homogène plutôt que des cases de
+// couleurs différentes par entrée.
+internal val RoleSelectionColor = Color(0xFFE0B84C)
+
 @Composable
 fun RoleSelectionButton(
     label: String,
-    icon: ImageVector,
-    color: Color,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    color: Color = RoleSelectionColor,
 ) {
     Surface(
         modifier = modifier
@@ -86,17 +84,10 @@ fun RoleSelectionButton(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = label,
-                tint = color,
-                modifier = Modifier.size(32.dp),
-            )
-            Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelLarge,
-                color = color,
+                style = MaterialTheme.typography.headlineSmall,
+                color = Color.White,
                 textAlign = TextAlign.Center,
                 maxLines = 2,
             )
@@ -248,11 +239,14 @@ fun RoleSelectionScreen(
                 }
 
                 // ── Hero section (delay 100ms, 200ms) ──
-                val worldCoverRes = when (currentWorld?.id) {
+                // Any? car le modèle Coil accepte aussi bien un id de drawable (mondes
+                // intégrés) qu'un File (fond d'écran d'un univers importé, voir
+                // WorldState.backgroundImagePath / CustomWorldsRepository).
+                val worldCoverRes: Any? = when (currentWorld?.id) {
                     // TODO: image temporairement retirée (fichier PNG invalide, à corriger puis remettre)
                     // "donjon_et_dragon" -> R.drawable.dnd_cover_image
                     "naheulbeuk" -> R.drawable.naheulbeuk
-                    else -> null
+                    else -> currentWorld?.backgroundImagePath?.let { java.io.File(it) }
                 }
 
                 AnimatedVisibility(
@@ -319,25 +313,24 @@ fun RoleSelectionScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                // Role selection stacked rectangles
+                // Role selection stacked rectangles (même couleur pour toutes les cases)
                 RoleSelectionButton(
                     label = "Maître du Jeu",
-                    icon = Icons.Default.Shield,
-                    color = MaterialTheme.colorScheme.primary,
                     onClick = onSelectMj,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 RoleSelectionButton(
                     label = "Joueur",
-                    icon = Icons.Default.Public,
-                    color = MaterialTheme.colorScheme.secondary,
                     onClick = onSelectJoueur,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 RoleSelectionButton(
+                    label = "Univers",
+                    onClick = onSelectContext,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                RoleSelectionButton(
                     label = "Réglages",
-                    icon = Icons.Default.Settings,
-                    color = MaterialTheme.colorScheme.tertiary,
                     onClick = onSelectSettings,
                     modifier = Modifier.fillMaxWidth(),
                 )

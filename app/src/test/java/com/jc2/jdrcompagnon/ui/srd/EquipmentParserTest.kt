@@ -5,55 +5,148 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+/**
+ * Couvre les deux formats réellement chargés par SrdRepository.loadEquipmentList :
+ * les blocs "**Champ** valeur" de equipement_srd521.md (D&D) et les listes
+ * "- Nom : description" de naheulbeuk/equipment.md. L'ancien format à base de
+ * tableaux Markdown ("| Colonne | ... |") n'est plus utilisé par aucun fichier
+ * du projet et a été retiré d'EquipmentParser avec ses tests.
+ */
 class EquipmentParserTest {
 
     @Test
-    fun `each weapon in SRD table becomes a distinct entry`() {
+    fun `chaque bloc en gras devient une entree distincte avec sa categorie`() {
         val snippet = """
-            ## Armes
+            # Équipement — SRD 5.2.1
 
-            Nom                 Coût   Dégâts       Poids    Propriétés
+            ### Dague
 
-            *Armes courantes de mêlée*
+            **Type** Arme
+            **Catégorie** Courante
+            **Portée** Corps à corps
+            **Dégâts** 1d4 perforants
+            **Propriétés** Finesse, Lancer (6/18), Légère
+            **Botte** Coup double
+            **Poids** 0,5 kg
+            **Coût** 2 po
+            **Consommable** Non
+            **Description** Arme courante de corps à corps.
+            **Contenu** -
 
-            gourdin             1 sp   1d4          2 lb.    Lumière
-                                       contondant
+            ---
 
-            Dague               2 gp   1d4          1 lb.    Finesse, lumière, lancé
-                                       perforant             (portée 20/60)
+            ### Armure de cuir
 
-            Massue              2 sp   1d8          10 lb.   À deux mains
-                                       contondant
+            **Type** Armure
+            **Catégorie** Légère
+            **CA** 11 + mod. Dex
+            **Force requise** -
+            **Discrétion** -
+            **Poids** 5 kg
+            **Coût** 10 po
+            **Description** Armure légère en cuir souple.
+            **Contenu** -
 
-            *Armes courantes de portée simple*
-
-            Arc court           25 gp  1d6          2 lb.    Munitions (portée
-                                       perforant             80/320), à deux mains.
+            ---
         """.trimIndent()
 
         val entries = EquipmentParser.parse(snippet)
-            .filter { it.category == "Armes" }
-            .map { it.name }
 
-        assertEquals(
-            "Les armes du tableau doivent être des entrées distinctes",
-            listOf("Gourdin", "Dague", "Massue", "Arc court"),
-            entries
+        assertEquals(2, entries.size)
+        val dague = entries.single { it.name == "Dague" }
+        assertEquals("Armes Courante", dague.category)
+        assertEquals("1d4 perforants", dague.damage)
+        assertEquals("Finesse, Lancer (6/18), Légère", dague.properties)
+
+        val armure = entries.single { it.name == "Armure de cuir" }
+        assertEquals("Armures Légère", armure.category)
+        assertEquals("11 + mod. Dex", armure.ac)
+    }
+
+    @Test
+    fun `un champ multi-lignes en liste a puces est rattache au bon champ`() {
+        val snippet = """
+            ### Paquetage d'explorateur
+
+            **Type** Paquetage
+            **Coût** 10 po
+            **Poids** 12 kg
+            **Description** Kit de base pour l'exploration.
+            **Contenu**
+            - Sac à dos
+            - Corde (15 m)
+            - 10 Torche
+
+            ---
+        """.trimIndent()
+
+        val paquetage = EquipmentParser.parse(snippet).single()
+
+        assertEquals("Paquetages", paquetage.category)
+        assertTrue(
+            "Le contenu du paquetage doit lister ses objets",
+            paquetage.rawMarkdown.contains("Contenu : Sac à dos, Corde (15 m), 10 Torche")
         )
     }
 
     @Test
-    fun `weapons include multi line properties`() {
+    fun `le format Naheulbeuk sert de repli quand il n y a pas de champ en gras`() {
         val snippet = """
-            ## Armes
+            # Équipement Naheulbeuk
 
-            Dague               2 gp   1d4          1 lb.    Finesse, lumière, lancé
-                                       perforant             (portée 20/60)
+            ## Armes courantes
+            - Dague : légère, mêlée ou distance courte.
+            - Épée courte : arme de mêlée standard.
+
+            ## Armures
+            - Armures légères : matelassée, cuir, cuir clouté.
         """.trimIndent()
 
-        val dagger = EquipmentParser.parse(snippet).single { it.name == "Dague" }
+        val entries = EquipmentParser.parse(snippet)
 
-        assertTrue("Le contenu de la Dague doit inclure la ligne de propriétés", dagger.rawMarkdown.contains("perforant"))
-        assertTrue("Le contenu de la Dague doit inclure la portée", dagger.rawMarkdown.contains("portée 20/60"))
+        assertEquals(
+            listOf("Dague", "Épée courte", "Armures légères"),
+            entries.map { it.name }
+        )
+        assertEquals("Armes courantes", entries[0].category)
+        assertEquals("Armures", entries[2].category)
+        assertTrue(entries[0].rawMarkdown.contains("légère, mêlée ou distance courte"))
+    }
+
+    @Test
+    fun `le champ Harmonisation est lu avec son prerequis`() {
+        val snippet = """
+            ### Chapeau de magicien
+            **Type** Objets merveilleux
+            **Harmonisation** Oui (magicien)
+            **Description** Objet magique, courant.
+            ---
+
+            ### Luth à illusions
+            **Type** Objets merveilleux
+            **Harmonisation** Oui
+            **Description** Objet magique, courant.
+            ---
+
+            ### Arme ardente
+            **Type** Arme
+            **Description** Objet magique, rare (harmonisation requise avec un paladin).
+            ---
+
+            ### Heaume effrayant
+            **Type** Objets merveilleux
+            **Description** Objet magique, courant.
+            ---
+        """.trimIndent()
+
+        val entries = EquipmentParser.parse(snippet)
+
+        assertTrue(entries[0].harmonisation)
+        assertEquals("magicien", entries[0].harmonisationPrerequis)
+        assertTrue(entries[1].harmonisation)
+        assertEquals("", entries[1].harmonisationPrerequis)
+        assertTrue(entries[2].harmonisation)
+        assertEquals("paladin", entries[2].harmonisationPrerequis)
+        assertEquals(false, entries[3].harmonisation)
     }
 }

@@ -1,19 +1,24 @@
 package com.jc2.jdrcompagnon.ui.screens.mj
 
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DriveFolderUpload
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -25,14 +30,27 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.jc2.jdrcompagnon.feature_import.ImportNavigation
 import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.WorldState
+import com.jc2.jdrcompagnon.ui.components.SelectableListCard
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import com.jc2.jdrcompagnon.ui.screens.mj.scenario.ScenarioImport
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+/**
+ * Liste des scénarios du monde courant (SelectableListCard, comme Groupes et Campagnes) : rond à
+ * gauche pour sélectionner le scénario, clic sur la carte pour le modifier, "Lire" puis
+ * corbeille à droite. Jamais d'image en fond de carte ni d'appui long, qui posaient un bug
+ * d'affichage (voile/fond d'image corrompu par endroits).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScenariosScreen(
     currentWorld: WorldState?,
@@ -46,14 +64,19 @@ fun ScenariosScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val mjScenarios by GameState.mjScenarios.collectAsState()
     val worldId = currentWorld?.id
-    val scenarios = remember(worldId, mjScenarios) { GameState.scenariosForWorld(worldId) }
+    val campagnes by GameState.mjCampaigns.collectAsState()
+    val campagneCourante by GameState.currentCampaignId.collectAsState()
+    // Les scénarios d'une campagne non sélectionnée sont masqués (voir PorteeCampagne).
+    val scenarios = remember(worldId, mjScenarios, campagnes, campagneCourante) {
+        GameState.scenariosForWorld(worldId).filter { com.jc2.jdrcompagnon.ui.PorteeCampagne.scenarioVisible(it) }
+    }
+    val lastScenarioId by GameState.lastScenarioId.collectAsState()
 
     LaunchedEffect(Unit) {
         GameState.syncScenariosFromDisk(context)
     }
 
     var searchQuery by remember { mutableStateOf("") }
-    var scenarioMenuForId by remember { mutableStateOf<String?>(null) }
     var scenarioToDelete by remember { mutableStateOf<GameState.MjScenario?>(null) }
 
     val filtered = remember(searchQuery, scenarios) {
@@ -85,13 +108,25 @@ fun ScenariosScreen(
                         Icon(Icons.Default.Menu, contentDescription = "Menu")
                     }
                 },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
+                actions = {
+                    // Scénario .md ou dossier de scénarios : via l'outil IMPORT.
+                    IconButton(onClick = { ImportNavigation.ouvrir() }) {
+                        Icon(Icons.Default.UploadFile, contentDescription = "Importer", tint = Color.White)
+                    }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        containerColor = androidx.compose.ui.graphics.Color.Transparent,
+        // Fond transparent : le fond d'écran global de l'app doit rester visible ; seules les
+        // cartes de scénario (couleur unie) doivent être lisibles, même principe que GroupsScreen.
+        containerColor = Color.Transparent,
         floatingActionButton = {
-            FloatingActionButton(onClick = { onOpenScenarioEditor(null) }) {
+            FloatingActionButton(
+                onClick = { onOpenScenarioEditor(null) },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            ) {
                 Icon(Icons.Default.Add, contentDescription = "Nouveau scénario")
             }
         }
@@ -136,66 +171,18 @@ fun ScenariosScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(filtered, key = { it.id }) { scenario ->
-                        Box(modifier = Modifier.fillMaxWidth()) {
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .combinedClickable(
-                                        onClick = {
-                                            GameState.setLastScenarioId(scenario.id)
-                                            onBack()
-                                        },
-                                        onLongClick = { scenarioMenuForId = scenario.id }
-                                    ),
-                                shape = RoundedCornerShape(16.dp),
-                                color = MaterialTheme.colorScheme.surface,
-                                tonalElevation = 1.dp
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(
-                                        text = scenario.title,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                }
-                            }
-                            DropdownMenu(
-                                expanded = scenarioMenuForId == scenario.id,
-                                onDismissRequest = { scenarioMenuForId = null }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("Lire") },
-                                    onClick = {
-                                        scenarioMenuForId = null
-                                        GameState.setLastScenarioId(scenario.id)
-                                        onOpenScenarioReader(scenario.id)
-                                    },
-                                    leadingIcon = { Icon(Icons.Default.PlayArrow, contentDescription = null) }
+                        SelectableListCard(
+                            title = scenario.title,
+                            subtitle = if (scenario.scenes.size > 1) "${scenario.scenes.size} scènes" else null,
+                            selected = scenario.id == lastScenarioId,
+                            onToggleSelect = {
+                                GameState.setLastScenarioId(
+                                    if (lastScenarioId == scenario.id) null else scenario.id
                                 )
-                                DropdownMenuItem(
-                                    text = { Text("Modifier") },
-                                    onClick = {
-                                        scenarioMenuForId = null
-                                        onOpenScenarioEditor(scenario.id)
-                                    },
-                                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Supprimer") },
-                                    onClick = {
-                                        scenarioMenuForId = null
-                                        scenarioToDelete = scenario
-                                    },
-                                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) }
-                                )
-                            }
-                        }
+                            },
+                            onEdit = { onOpenScenarioEditor(scenario.id) },
+                            onDelete = { scenarioToDelete = scenario }
+                        )
                     }
                 }
             }
@@ -210,7 +197,7 @@ fun ScenariosScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        GameState.removeMjScenario(scenario.id)
+                        GameState.removeMjScenario(scenario.id, context)
                         scenarioToDelete = null
                         coroutineScope.launch { snackbarHostState.showSnackbar("Scénario supprimé") }
                     }
@@ -226,3 +213,4 @@ fun ScenariosScreen(
         )
     }
 }
+

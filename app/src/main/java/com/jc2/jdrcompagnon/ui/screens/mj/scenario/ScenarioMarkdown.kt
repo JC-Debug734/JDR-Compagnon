@@ -33,7 +33,7 @@ import com.mikepenz.markdown.m3.Markdown
  *
  * Prend en charge :
  * - la syntaxe custom `{color:nom}...{/color}` et `<color=#RRGGBB>...<color>`
- * - les liens internes `#type:nom` (monster, pnj, equipment, spell, rule) cliquables inline
+ * - les liens internes `#type:nom` (monster, pnj, equipment, spell, rule, event) cliquables inline
  *
  * @param content Le contenu markdown brut
  * @param onLinkClick Callback appelé avec le type et le nom du lien interne
@@ -120,7 +120,7 @@ private fun stripColorTags(text: String): String {
 }
 
 private fun stripInternalLinkTags(text: String): String {
-    return text.replace(Regex("""#(monster|pnj|npc|equipment|spell|rule):(?:\[([^\]\n]+)\]|([^\s\n\]]+))""")) { match ->
+    return text.replace(Regex(INTERNAL_LINK_PATTERN.removePrefix("(?<!\\\\)"))) { match ->
         match.groupValues[2].ifEmpty { match.groupValues[3] }
     }
 }
@@ -131,11 +131,50 @@ private fun stripInternalLinkTags(text: String): String {
 private fun unescapeHashes(text: String): String = text.replace("\\\\#", "#")
 
 /**
- * Regex des liens internes : #type:nom. Ignore les `\\#` (échappé).
+ * Types de liens d'un scénario (#type:nom ou #type:[nom en plusieurs mots]) :
+ * - liens cliquables vers une fiche ou une action : monster, pnj/npc, equipment, spell, rule,
+ *   event (discussion), evenement (bibliothèque d'événements), epreuve, combat ;
+ * - simples mentions ([TYPES_MENTION]), non cliquables, qui ne servent qu'à mettre un nom en
+ *   avant avec la couleur de son type : lieu (ville, région, bâtiment), perso (personnage cité
+ *   sans fiche), faction.
  */
-private val internalLinkRegex = Regex("""(?<!\\)#(monster|pnj|npc|equipment|spell|rule):(?:\[([^\]\n]+)\]|([^\s\n\]]+))""")
+const val TYPES_LIEN = "monster|pnj|npc|equipment|spell|rule|event|evenement|epreuve|combat|lieu|perso|faction"
+val TYPES_MENTION = setOf("lieu", "perso", "faction")
+
+/** Motif des liens internes ; ignore les `\\#` (échappé). */
+const val INTERNAL_LINK_PATTERN = """(?<!\\)#($TYPES_LIEN):(?:\[([^\]\n]+)\]|([^\s\n\]]+))"""
+
+private val internalLinkRegex = Regex(INTERNAL_LINK_PATTERN)
+
+/**
+ * Couleur d'un nom selon son type, pendant la lecture : personnages en or, créatures en rouge,
+ * lieux en vert, objets en violet, sorts en bleu, factions et épreuves en orange.
+ */
+fun couleurLien(type: String): Color = when (type) {
+    "pnj", "npc", "event", "perso" -> Color(0xFFFFC857)
+    "monster", "combat" -> Color(0xFFFF8A7A)
+    "lieu" -> Color(0xFF7CD992)
+    "equipment" -> Color(0xFFC9A7FF)
+    "spell" -> Color(0xFF7FD6FF)
+    "faction", "epreuve" -> Color(0xFFFFAA5C)
+    "evenement" -> Color(0xFF4DD0E1)
+    else -> Color(0xFFCFD8DC)
+}
 
 private fun MatchResult.internalLinkName(): String = groupValues[2].ifEmpty { groupValues[3] }
+
+/**
+ * Texte affiché pour un lien interne pendant la lecture. Un lien #combat:[Gobelin x3, Loup x2]
+ * est préfixé pour être reconnu comme un combat, et pas comme une simple liste de monstres.
+ */
+fun internalLinkLabel(type: String, name: String): String = when (type) {
+    "combat" -> "⚔ Combat : $name"
+    // Événement de scène = briefing d'un PNJ : distingué d'un simple lien vers sa fiche.
+    "event" -> "💬 Discussion avec : $name"
+    // Événement de la bibliothèque (feature_evenement), lancé depuis la lecture.
+    "evenement" -> "🎲 $name"
+    else -> name
+}
 
 /**
  * Construit un texte enrichi avec les liens internes cliquables.
@@ -176,7 +215,7 @@ private fun ClickableScenarioMarkdown(
                             textDecoration = TextDecoration.Underline
                         )
                     ) {
-                        append(name)
+                        append(internalLinkLabel(type, name))
                     }
                 },
                 onClick = { onLinkClick(type, name) },
@@ -208,6 +247,10 @@ private fun FlowRowInternalLinks(links: List<Pair<String, String>>, onLinkClick:
                 "equipment" -> "⚔️ $name"
                 "spell" -> "✨ $name"
                 "rule" -> "📜 $name"
+                "event" -> "💬 Discussion avec : $name"
+                "epreuve" -> "⛰️ $name"
+                "evenement" -> "🎲 $name"
+                "combat" -> "⚔️ $name"
                 else -> "$type:$name"
             }
             Surface(
@@ -229,12 +272,15 @@ private fun FlowRowInternalLinks(links: List<Pair<String, String>>, onLinkClick:
 }
 
 /**
- * Liste tous les liens internes présents dans le contenu.
- * Format : #type:nom ou #type:[nom en plusieurs mots]
+ * Liste tous les liens internes présents dans le contenu (hors simples mentions #lieu, #perso,
+ * #faction). Format : #type:nom ou #type:[nom en plusieurs mots]
  */
 fun extractInternalLinks(content: String): List<Pair<String, String>> {
-    val regex = Regex("""(?<!\\)#(monster|pnj|npc|equipment|spell|rule):(?:\[([^\]\n]+)\]|([^\s\n\]]+))""")
-    return regex.findAll(content).map { it.groupValues[1] to it.internalLinkName() }.toList()
+    val regex = Regex(INTERNAL_LINK_PATTERN)
+    return regex.findAll(content)
+        .filter { it.groupValues[1] !in TYPES_MENTION }
+        .map { it.groupValues[1] to it.internalLinkName() }
+        .toList()
 }
 
 /**
@@ -249,7 +295,7 @@ fun buildClickableScenarioText(
     onLinkClick: (type: String, name: String) -> Unit
 ): AnnotatedString = buildAnnotatedString {
     withStyle(baseStyle.toSpanStyle()) {
-        val regex = Regex("""(?<!\\)#(monster|pnj|npc|equipment|spell|rule):(?:\[([^\]\n]+)\]|([^\s\n\]]+))""")
+        val regex = Regex(INTERNAL_LINK_PATTERN)
         var lastIndex = 0
         regex.findAll(content).forEach { match ->
             val name = match.internalLinkName()

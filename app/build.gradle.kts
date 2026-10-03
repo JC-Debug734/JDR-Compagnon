@@ -13,7 +13,7 @@ plugins {
 // les classes déjà chargées, sans repasser par la résolution de version.
 apply(plugin = "org.jetbrains.kotlin.android")
 
-// AUTO-VERSION: 2.6.5
+// AUTO-VERSION: 5.1.8
 // ── Auto-incrémentation de version à chaque compilation ──────────────────
 // Format X.Y.Z : Z va de 0 à 9 puis repasse à 0 en incrémentant Y ; Y suit
 // la même règle sur X ; X n'a pas de limite.
@@ -114,6 +114,7 @@ dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.core.ktx)
     implementation(libs.material)
+    implementation(libs.androidx.documentfile)
 
     // Compose (BOM aligne toutes les versions)
     implementation(platform(libs.androidx.compose.bom))
@@ -160,6 +161,10 @@ dependencies {
     implementation("androidx.room:room-runtime:2.8.5")
     implementation("androidx.room:room-ktx:2.8.5")
     ksp("androidx.room:room-compiler:2.8.5")
+
+    // NanoHTTPD — petit serveur HTTP embarqué pour la page d'affichage table
+    // (accessible aux joueurs depuis un navigateur, cf. MjWebServer.kt)
+    implementation("org.nanohttpd:nanohttpd:2.3.1")
 
     // Tests
     testImplementation(libs.junit)

@@ -23,17 +23,11 @@ class VillesListViewModel(
         .map { points -> points.filter { it.type == TypePointInteret.VILLE } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    /** Placée à une position aléatoire de la carte (pour ne pas superposer plusieurs villes créées
-     * depuis ce menu) ; déplaçable ensuite depuis l'écran Carte par glisser-déposer. */
+    /** Créée sans être placée sur une carte (carteId null) : le MJ la place lui-même ensuite,
+     * sur la carte de son choix, depuis l'écran Carte ("Placer un lieu existant"). */
     fun onCreerVille(nom: String, description: String) {
         viewModelScope.launch {
-            val carte = repository.getCarte(campagneId)
-            creerPointInteret(
-                campagneId, nom, TypePointInteret.VILLE,
-                x = (0 until carte.largeurCases).random(),
-                y = (0 until carte.hauteurCases).random(),
-                description = description
-            )
+            creerPointInteret(campagneId, nom, TypePointInteret.VILLE, x = 0, y = 0, description = description, carteId = null)
         }
     }
 }

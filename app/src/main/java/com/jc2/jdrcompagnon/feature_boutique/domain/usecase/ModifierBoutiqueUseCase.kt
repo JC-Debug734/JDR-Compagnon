@@ -39,8 +39,8 @@ class ModifierBoutiqueUseCase(
             },
             services = when {
                 !standingOuTypeAChange -> boutiqueExistante.services
-                type == TypeBoutique.MARCHAND -> emptyList()
-                else -> genererServices(type, nouveauStanding)
+                type == TypeBoutique.MARCHAND -> boutiqueExistante.services.filter { it.personnalise }
+                else -> boutiqueExistante.services.filter { it.personnalise } + genererServices(type, nouveauStanding)
             },
             employes = if (standingOuTypeAChange) genererEmployes(nouveauStanding) else boutiqueExistante.employes
         )

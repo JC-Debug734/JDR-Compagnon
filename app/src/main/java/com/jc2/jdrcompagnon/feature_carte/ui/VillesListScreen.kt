@@ -1,16 +1,19 @@
 package com.jc2.jdrcompagnon.feature_carte.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.LocationCity
 import androidx.compose.material.icons.filled.Menu
@@ -18,7 +21,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -26,14 +28,12 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -47,34 +47,49 @@ fun VillesListScreen(
     onBack: () -> Unit,
     onOpenMenu: () -> Unit = {},
     onOpenVille: (String) -> Unit,
+    // Côté joueur, l'écran de campagne est limité à la consultation : pas de
+    // création de ville (réservée au MJ).
+    readOnly: Boolean = false,
     viewModel: VillesListViewModel = viewModel(factory = VillesListViewModelFactory(campagneId)),
 ) {
-    val villes by viewModel.villes.collectAsStateWithLifecycle()
+    val toutesLesVilles by viewModel.villes.collectAsStateWithLifecycle()
+    // Joueur : seules les villes révélées par le MJ.
+    val villes = if (readOnly) toutesLesVilles.filter { it.visibleJoueurs } else toutesLesVilles
     var afficherCreation by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text("VILLES") },
-                navigationIcon = {
-                    IconButton(onClick = onOpenMenu) { Icon(Icons.Default.Menu, contentDescription = "Menu") }
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent),
-            )
+            Column {
+                CenterAlignedTopAppBar(
+                    title = { Text("VILLES") },
+                    navigationIcon = {
+                        IconButton(onClick = onOpenMenu) { Icon(Icons.Default.Menu, contentDescription = "Menu") }
+                    },
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surface)
+                        .padding(horizontal = 8.dp),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
+                    }
+                    if (!readOnly) {
+                        IconButton(onClick = { afficherCreation = true }) {
+                            Icon(Icons.Default.Add, contentDescription = "Nouvelle ville")
+                        }
+                    }
+                }
+            }
         },
-        containerColor = Color.Transparent,
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { afficherCreation = true },
-                icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("Nouvelle ville") }
-            )
-        }
     ) { padding ->
         if (villes.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize().padding(padding)) {
                 Text(
-                    "Aucune ville pour l'instant. Créez-en une avec le bouton +, ou depuis la carte de la campagne.",
+                    if (readOnly) "Aucune ville pour l'instant."
+                    else "Aucune ville pour l'instant. Créez-en une avec le bouton +, ou depuis la carte de la campagne.",
                     modifier = Modifier.padding(24.dp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

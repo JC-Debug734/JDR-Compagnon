@@ -45,6 +45,8 @@ import com.jc2.jdrcompagnon.ui.Character
 import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.ProficiencyLevel
 import com.jc2.jdrcompagnon.ui.calculateProficiencyBonus
+import com.jc2.jdrcompagnon.ui.screens.joueur.characterPortraitOptions
+import com.jc2.jdrcompagnon.ui.components.PnjPortraits
 import com.jc2.jdrcompagnon.ui.screens.joueur.dndBackgrounds
 import com.jc2.jdrcompagnon.ui.screens.joueur.dndClasses
 import com.jc2.jdrcompagnon.ui.screens.joueur.dndAlignments
@@ -73,12 +75,24 @@ fun MjCharacterCreationScreen(
     onCharacterCreated: () -> Unit,
     onBack: () -> Unit,
     onOpenMenu: () -> Unit = {},
+    // Type présélectionné ("PJ", "PNJ", "Monstre", "Boss"), choisi dans l'outil Fiches.
+    initialType: String = "PJ",
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     // Type de personnage (PJ/PNJ/Monstre)
-    var characterType by remember { mutableStateOf("Personnage Joueur (PJ)") }
+    var characterType by remember {
+        mutableStateOf(
+            when (initialType) {
+                "PNJ" -> characterTypes[1]
+                "Monstre" -> characterTypes[2]
+                "Boss" -> characterTypes[3]
+                else -> characterTypes[0]
+            }
+        )
+    }
     var npcType by remember { mutableStateOf("") }
-    var isPnj by remember { mutableStateOf(value = false) }
-    var isMonster by remember { mutableStateOf(value = false) }
+    var isPnj by remember { mutableStateOf(value = initialType == "PNJ") }
+    var isMonster by remember { mutableStateOf(value = initialType == "Monstre" || initialType == "Boss") }
     
     // ... rest of the states ...
     
@@ -617,9 +631,21 @@ fun MjCharacterCreationScreen(
                         bonds = "",
                         flaws = "",
                         dmNotes = dmNotes,
-                        createdBy = "MJ"
+                        createdBy = "MJ",
+                        // Les PJ passent par l'assistant de création qui impose un portrait ;
+                        // les PNJ/monstres créés ici n'ont pas cette étape, donc sans portrait
+                        // assigné automatiquement, la fiche PNJ (côté MJ, joueurs, page table)
+                        // n'affiche jamais d'image — juste le nom.
+                        // Un PNJ ne prend que les portraits du dossier assets/dnd/PNJ.
+                        portrait = (if (isPnj && !isMonster) PnjPortraits.defaultFor(context, characterName) else null)
+                            ?: characterPortraitOptions[
+                                Math.floorMod(characterName.hashCode(), characterPortraitOptions.size)
+                            ].id
                     )
                     GameState.addCharacter(character)
+                    // Équipement de base garanti (sac à dos + sacoche) pour un PJ uniquement,
+                    // cf. GameState.equipStarterGear.
+                    if (character.type == "PJ") GameState.equipStarterGear(character.id)
                     onCharacterCreated()
                 },
                 modifier = Modifier

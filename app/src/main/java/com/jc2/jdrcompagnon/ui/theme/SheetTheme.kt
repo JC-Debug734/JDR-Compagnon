@@ -76,7 +76,8 @@ fun SheetCard(
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        color = SheetSurface,
+        // Carte translucide à 75% (thème général de l'app), cf. MjHomeScreen.DashboardToolCard.
+        color = SheetSurface.copy(alpha = 0.75f),
         border = BorderStroke(1.dp, SheetBorder)
     ) {
         Column(modifier = Modifier.padding(16.dp), content = content)

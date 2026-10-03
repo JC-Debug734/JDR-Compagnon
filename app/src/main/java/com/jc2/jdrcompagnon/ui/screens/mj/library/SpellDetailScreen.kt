@@ -1,5 +1,6 @@
 package com.jc2.jdrcompagnon.ui.screens.mj.library
 
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -126,16 +127,25 @@ fun SpellDetailScreen(
                         .verticalScroll(rememberScrollState())
                         .padding(16.dp)
                 ) {
-                    spell!!.category.ifBlank { null }?.let { school ->
-                        Text(
-                            text = "École de magie : $school",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(bottom = 8.dp),
-                        )
+                    // Même carte translucide arrondie que le reste de l'app.
+                    androidx.compose.material3.Surface(
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            spell!!.category.ifBlank { null }?.let { school ->
+                                Text(
+                                    text = "École de magie : $school",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(bottom = 8.dp),
+                                )
+                            }
+                            Markdown(content = spell!!.rawMarkdown)
+                        }
                     }
-                    Markdown(content = spell!!.rawMarkdown)
                 }
             }
         }

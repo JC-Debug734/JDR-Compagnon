@@ -1,16 +1,11 @@
 package com.jc2.jdrcompagnon.ui.screens.mj
 
-import android.graphics.BitmapFactory
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.*
@@ -21,29 +16,33 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.WorldState
+import com.jc2.jdrcompagnon.ui.rememberImageCampagne
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.ui.layout.ContentScale
 import com.jc2.jdrcompagnon.ui.screens.mj.scenario.ScenarioReaderContent
 
 data class MjTool(
     val id: String,
     val label: String,
-    val description: String,
     val icon: ImageVector,
-    val color: Color,
 )
+
+// Couleur unique appliquée à toutes les icônes d'outils du tableau de bord ("icônes
+// classiques, toutes de la même couleur") au lieu d'une couleur par outil.
+private val ToolIconColor = Color.White
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -52,41 +51,56 @@ fun MjHomeScreen(
     onCreateCharacter: () -> Unit,
     onViewCharacters: () -> Unit,
     onOpenScenarioEditor: (String?) -> Unit,
+    onOpenScenarios: () -> Unit = {},
     onOpenCampaigns: () -> Unit,
+    onOpenCampaign: (String) -> Unit = {},
     onOpenGroups: () -> Unit,
     onOpenBoutiques: () -> Unit,
+    onOpenEnvironnements: () -> Unit = {},
+    onOpenTableAleatoire: () -> Unit = {},
+    onOpenEpreuves: () -> Unit = {},
+    onOpenEvenements: () -> Unit = {},
+    onOpenCombatActions: () -> Unit = {},
     onOpenMusic: () -> Unit,
+    onOpenClock: () -> Unit = {},
+    onOpenImport: () -> Unit = {},
     onOpenInternalLink: (type: String, name: String) -> Unit = { _, _ -> },
     onBack: () -> Unit,
     onOpenMenu: () -> Unit = {},
 ) {
 
-    val context = LocalContext.current
-    val couleurTexteParchemin = Color(0xFF3E2723)
-    val parcheminBitmap = remember {
-        runCatching {
-            context.assets.open("dnd/theme/th_parchemin.png").use { BitmapFactory.decodeStream(it) }?.asImageBitmap()
-        }.getOrNull()
-    }
-    val caseBitmap = remember {
-        runCatching {
-            context.assets.open("dnd/theme/th_case.png").use { BitmapFactory.decodeStream(it) }?.asImageBitmap()
-        }.getOrNull()
-    }
-
     // "Bibliothèque" et "Connexion/Partie" ne sont pas repris ici : déjà accessibles
     // depuis la barre du bas globale (AppBottomBar), un outil dédié ici ferait doublon.
     val tools = listOf(
-        MjTool("characters", "FICHES", "Voir et modifier", Icons.Default.People, MaterialTheme.colorScheme.secondary),
-        MjTool("campaigns", "CAMPAGNES", "Suivi d'objectifs", Icons.Default.Checklist, MaterialTheme.colorScheme.tertiary),
-        MjTool("groups", "GROUPES", "Gérer les groupes", Icons.Default.Group, MaterialTheme.colorScheme.tertiary),
-        MjTool("music", "MUSIQUE", "Ambiance sonore", Icons.Default.MusicNote, MaterialTheme.colorScheme.primary),
+        MjTool("characters", "FICHES", Icons.Default.People),
+        MjTool("scenarios", "SCÉNARIOS", Icons.AutoMirrored.Filled.MenuBook),
+        MjTool("campaigns", "CAMPAGNES", Icons.Default.Checklist),
+        MjTool("groups", "GROUPES", Icons.Default.Group),
+        MjTool("boutiques", "BOUTIQUES", Icons.Default.Storefront),
+        MjTool("environnements", "ENVIRONNEMENTS", Icons.Default.Terrain),
+        MjTool("table_aleatoire", "TABLE ALÉATOIRE", Icons.Default.Casino),
+        MjTool("epreuves", "ÉPREUVES", Icons.Default.Hiking),
+        MjTool("evenements", "ÉVÉNEMENTS", Icons.Default.AutoStories),
+        MjTool("combat_actions", "ACTIONS DE COMBAT", Icons.Default.Shield),
+        MjTool("music", "MUSIQUE", Icons.Default.MusicNote),
+        MjTool("time", "HORLOGE", Icons.Default.Schedule),
+        MjTool("import", "IMPORT", Icons.Default.UploadFile),
     )
 
-    var showReader by remember { mutableStateOf(false) }
+    // rememberSaveable : restauré au retour d'un autre écran (lien, combat, fiche...) — avec un
+    // simple remember, revenir en arrière ramenait sur l'accueil au lieu du scénario en lecture.
+    var showReader by rememberSaveable { mutableStateOf(false) }
 
-    val mjScenarios by GameState.mjScenarios.collectAsState()
-    val mjCampaigns by GameState.mjCampaigns.collectAsState()
+    // Retour système sur la première scène : revient au tableau de bord au lieu de quitter l'app
+    // (le lecteur, composé après, intercepte lui-même le retour tant qu'il y a une scène précédente).
+    androidx.activity.compose.BackHandler(enabled = showReader) { showReader = false }
+
+    // Limités au monde courant : sans ce filtre, le scénario sélectionné dans un autre
+    // univers restait ouvrable depuis le tableau de bord après un changement de monde.
+    val allScenarios by GameState.mjScenarios.collectAsState()
+    val allCampaigns by GameState.mjCampaigns.collectAsState()
+    val mjScenarios = allScenarios.filter { it.worldId == (currentWorld?.id ?: "") }
+    val mjCampaigns = allCampaigns.filter { it.worldId == (currentWorld?.id ?: "") }
     // Sélection de campagne/scénario : état global (persisté par monde), pas
     // local à cet écran — pour que le tiroir MJ, partagé par tous les écrans
     // (voir MjDrawer), retrouve toujours la même sélection quel que soit
@@ -98,7 +112,7 @@ fun MjHomeScreen(
     val visibleScenarios = if (selectedCampaign != null) {
         mjScenarios.filter { it.id in selectedCampaign.scenarioIds }
     } else {
-        mjScenarios
+        mjScenarios.filter { com.jc2.jdrcompagnon.ui.PorteeCampagne.scenarioVisible(it) }
     }
 
     LaunchedEffect(mjCampaigns, selectedCampaignId) {
@@ -120,12 +134,29 @@ fun MjHomeScreen(
         if (lastScenarioId == null) showReader = false
     }
 
+    val homeResetRequested by GameState.homeResetRequested.collectAsState()
+    LaunchedEffect(homeResetRequested) {
+        if (homeResetRequested) {
+            showReader = false
+            GameState.consumeHomeResetRequest()
+        }
+    }
+
     fun handleToolClick(toolId: String) {
         when (toolId) {
             "characters" -> onViewCharacters()
+            "scenarios" -> onOpenScenarios()
             "campaigns" -> onOpenCampaigns()
             "groups" -> onOpenGroups()
+            "boutiques" -> onOpenBoutiques()
+            "environnements" -> onOpenEnvironnements()
+            "table_aleatoire" -> onOpenTableAleatoire()
+            "epreuves" -> onOpenEpreuves()
+            "evenements" -> onOpenEvenements()
+            "combat_actions" -> onOpenCombatActions()
             "music" -> onOpenMusic()
+            "time" -> onOpenClock()
+            "import" -> onOpenImport()
         }
     }
 
@@ -133,38 +164,29 @@ fun MjHomeScreen(
             topBar = {
                 CenterAlignedTopAppBar(
                     title = {
-                        Box(contentAlignment = Alignment.Center) {
-                            if (parcheminBitmap != null) {
-                                Image(
-                                    bitmap = parcheminBitmap,
-                                    contentDescription = null,
-                                    modifier = Modifier.matchParentSize(),
-                                    contentScale = ContentScale.FillBounds
-                                )
-                            }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 text = if (showReader && selectedScenario != null) selectedScenario.title else "MAÎTRE DU JEU",
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black, letterSpacing = 2.sp),
-                                color = if (parcheminBitmap != null) couleurTexteParchemin else Color.Unspecified,
+                                color = Color.White,
                                 maxLines = 1,
                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                // Texte à sa taille d'origine ; seul le fond parchemin (padding autour) est agrandi de 20%.
-                                modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp)
                             )
+                            // Heure de scénario qui défile sous le titre du scénario en lecture ;
+                            // un clic la met en pause / la relance.
+                            if (showReader && selectedScenario != null) {
+                                com.jc2.jdrcompagnon.ui.components.ScenarioClockTicker()
+                            }
                         }
                     },
                     navigationIcon = {
-                        if (showReader) {
-                            IconButton(onClick = { showReader = false }) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour au tableau de bord")
-                            }
-                        } else {
-                            IconButton(onClick = onOpenMenu) {
-                                Icon(Icons.Default.Menu, contentDescription = "Ouvrir le menu")
-                            }
+                        IconButton(onClick = onOpenMenu) {
+                            Icon(Icons.Default.Menu, contentDescription = "Ouvrir le menu")
                         }
                     },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent),
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f)
+                    ),
                 )
             },
             containerColor = Color.Transparent,
@@ -190,32 +212,30 @@ fun MjHomeScreen(
 
                     Spacer(modifier = Modifier.height(20.dp))
 
+                    // --- Carte "campagne en cours" : remplace la carte scénario quand une campagne
+                    // est sélectionnée ; ouvre sa page (carte de la zone, scénarios, fiche de suivi).
+                    if (selectedCampaign != null) {
+                        CampagneEnCoursCard(
+                            campaign = selectedCampaign,
+                            worldName = currentWorld?.name,
+                            scenarioEnCours = selectedScenario?.takeIf { it.id in selectedCampaign.scenarioIds },
+                            onOpenCampaign = { onOpenCampaign(selectedCampaign.id) },
+                            onResumeScenario = { showReader = true },
+                        )
+                    } else if (selectedScenario != null) {
                     // --- Carte "scénario en cours" (équivalent réel de "prochaine partie") ---
-                    // Fond th_case dessiné derrière la Surface, rendue transparente quand
-                    // l'asset est chargé, même principe que th_cadre sur DashboardToolCard.
-                    // Case agrandie de 20% (260dp -> 312dp).
-                    Box(modifier = Modifier.fillMaxWidth().heightIn(min = 312.dp)) {
-                        if (caseBitmap != null) {
-                            Image(
-                                bitmap = caseBitmap,
-                                contentDescription = null,
-                                modifier = Modifier.matchParentSize(),
-                                contentScale = ContentScale.FillBounds
-                            )
-                        }
-                    if (selectedScenario != null) {
+                    // Carte classique Material, translucide (75% d'opacité), sans image de fond.
                         Surface(
-                            modifier = Modifier.fillMaxSize(),
+                            modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(24.dp),
-                            color = if (caseBitmap != null) Color.Transparent else MaterialTheme.colorScheme.surface,
-                            border = if (caseBitmap != null) null else androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
                         ) {
                             Column(modifier = Modifier.padding(28.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Filled.MenuBook,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.secondary,
+                                        tint = Color.White,
                                         modifier = Modifier.size(18.dp)
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
@@ -223,7 +243,7 @@ fun MjHomeScreen(
                                         text = "SCÉNARIO EN COURS",
                                         style = MaterialTheme.typography.labelLarge,
                                         fontWeight = FontWeight.Black,
-                                        color = if (caseBitmap != null) couleurTexteParchemin else MaterialTheme.colorScheme.secondary,
+                                        color = Color.White,
                                         letterSpacing = 1.sp
                                     )
                                 }
@@ -232,25 +252,25 @@ fun MjHomeScreen(
                                     text = selectedScenario.title,
                                     style = MaterialTheme.typography.headlineSmall,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (caseBitmap != null) couleurTexteParchemin else MaterialTheme.colorScheme.onSurface
+                                    color = Color.White
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Casino, contentDescription = null, tint = if (caseBitmap != null) couleurTexteParchemin else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                                    Icon(Icons.Default.Casino, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
                                         text = currentWorld?.name ?: "Monde inconnu",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = if (caseBitmap != null) couleurTexteParchemin else MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = Color.White
                                     )
                                     if (selectedScenario.scenes.size > 1) {
                                         Spacer(modifier = Modifier.width(16.dp))
-                                        Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = null, tint = if (caseBitmap != null) couleurTexteParchemin else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                                        Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                                         Spacer(modifier = Modifier.width(6.dp))
                                         Text(
                                             text = "${selectedScenario.scenes.size} scènes",
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = if (caseBitmap != null) couleurTexteParchemin else MaterialTheme.colorScheme.onSurfaceVariant
+                                            color = Color.White
                                         )
                                     }
                                 }
@@ -268,39 +288,25 @@ fun MjHomeScreen(
                         }
                     } else {
                         Surface(
-                            modifier = Modifier.fillMaxSize(),
+                            modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(24.dp),
-                            color = if (caseBitmap != null) Color.Transparent else MaterialTheme.colorScheme.surfaceVariant,
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
                         ) {
                             Column(modifier = Modifier.padding(28.dp)) {
                                 Text(
                                     text = "Aucun scénario sélectionné",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (caseBitmap != null) couleurTexteParchemin else MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = Color.White
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = "Choisissez un scénario existant ou créez-en un nouveau.",
+                                    text = "Sélectionnez une campagne ou un scénario depuis le menu.",
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = if (caseBitmap != null) couleurTexteParchemin else MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = Color.White
                                 )
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Button(onClick = onOpenMenu) {
-                                        Icon(Icons.Default.Menu, contentDescription = null, modifier = Modifier.size(18.dp))
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text("Charger un scénario")
-                                    }
-                                    OutlinedButton(onClick = { onOpenScenarioEditor(null) }) {
-                                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text("Nouveau")
-                                    }
-                                }
                             }
                         }
-                    }
                     }
 
                     Spacer(modifier = Modifier.height(28.dp))
@@ -343,66 +349,149 @@ fun MjHomeScreen(
         }
 }
 
+/**
+ * Carte de l'accueil MJ pour la campagne sélectionnée : son image occupe tout le fond de la carte
+ * (assombrie pour la lisibilité) et les infos s'affichent par-dessus, en passant à la ligne quand
+ * elles ne tiennent pas sur une seule.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun CampagneEnCoursCard(
+    campaign: GameState.MjCampaign,
+    worldName: String?,
+    scenarioEnCours: GameState.MjScenario?,
+    onOpenCampaign: () -> Unit,
+    onResumeScenario: () -> Unit,
+) {
+    val image = rememberImageCampagne(campaign)
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
+        onClick = onOpenCampaign,
+    ) {
+        Box {
+            if (image != null) {
+                Image(
+                    bitmap = image,
+                    contentDescription = "Image de la campagne",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.matchParentSize()
+                )
+                // Voile sombre dégradé : texte blanc lisible quelle que soit l'image.
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(
+                            androidx.compose.ui.graphics.Brush.verticalGradient(
+                                listOf(Color.Black.copy(alpha = 0.35f), Color.Black.copy(alpha = 0.75f))
+                            )
+                        )
+                )
+            }
+            Column(modifier = Modifier.padding(28.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Flag, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "CAMPAGNE EN COURS",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White,
+                        letterSpacing = 1.sp
+                    )
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = campaign.title,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                // Infos en « puces » qui passent à la ligne au lieu de s'écraser.
+                androidx.compose.foundation.layout.FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    val nb = campaign.scenarioIds.size
+                    CampagneInfo(Icons.Default.Casino, worldName ?: "Monde inconnu")
+                    CampagneInfo(Icons.AutoMirrored.Filled.MenuBook, "$nb scénario${if (nb > 1) "s" else ""}")
+                    if (campaign.quests.isNotEmpty()) {
+                        val enCours = campaign.quests.count { it.status == com.jc2.jdrcompagnon.feature_quete.domain.model.QuestStatus.EN_COURS }
+                        CampagneInfo(Icons.Default.Flag, "$enCours quête${if (enCours > 1) "s" else ""} en cours")
+                    }
+                    if (campaign.pnjIds.isNotEmpty()) {
+                        CampagneInfo(Icons.Default.Person, "${campaign.pnjIds.size} PNJ")
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(
+                    onClick = onOpenCampaign,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(50)
+                ) {
+                    Text("Ouvrir la campagne")
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
+                }
+                // Raccourci vers le scénario en lecture, pour ne pas perdre "Reprendre la lecture".
+                if (scenarioEnCours != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = onResumeScenario,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(50)
+                    ) {
+                        Text(
+                            "Reprendre : ${scenarioEnCours.title}",
+                            color = Color.White,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Une info de la carte de campagne : icône + texte (qui peut lui-même passer à la ligne). */
+@Composable
+private fun CampagneInfo(icon: androidx.compose.ui.graphics.vector.ImageVector, texte: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(texte, style = MaterialTheme.typography.bodySmall, color = Color.White)
+    }
+}
+
 @Composable
 private fun DashboardToolCard(
     tool: MjTool,
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    // Cadre décoratif fourni en asset (pas en drawable, même convention que ic_acceuil dans
-    // AppBottomBar) ; repli silencieux sur la Surface nue si le fichier est absent, pour ne
-    // jamais casser le tableau de bord.
-    val context = LocalContext.current
-    val cadreBitmap = remember {
-        runCatching {
-            context.assets.open("dnd/theme/th_cadre.png").use { BitmapFactory.decodeStream(it) }?.asImageBitmap()
-        }.getOrNull()
-    }
-    Box(modifier = modifier.fillMaxWidth()) {
-        // th_cadre.png est un fond de case complet (pas juste une bordure creuse) : il doit
-        // être dessiné EN DESSOUS du contenu, pas par-dessus, sinon il masque le texte.
-        if (cadreBitmap != null) {
-            Image(
-                bitmap = cadreBitmap,
-                contentDescription = null,
-                modifier = Modifier.matchParentSize(),
-                contentScale = ContentScale.FillBounds
-            )
-        }
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            color = if (cadreBitmap != null) Color.Transparent else MaterialTheme.colorScheme.surface,
-            onClick = onClick,
+    // Carte classique Material, translucide (75% d'opacité), sans image de fond : nom et
+    // icône uniquement (l'icône garde une couleur unique pour tous les outils, cf. ToolIconColor).
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
+        onClick = onClick,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .background(tool.color.copy(alpha = 0.12f), RoundedCornerShape(12.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(tool.icon, contentDescription = null, tint = tool.color, modifier = Modifier.size(22.dp))
-                }
-                Spacer(modifier = Modifier.height(10.dp))
-                Text(
-                    text = tool.label,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                    color = if (cadreBitmap != null) Color.White else MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = tool.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (cadreBitmap != null) Color.White.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    maxLines = 2
-                )
-            }
+            Icon(tool.icon, contentDescription = null, tint = ToolIconColor, modifier = Modifier.size(28.dp))
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = tool.label,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                color = Color.White
+            )
         }
     }
 }

@@ -18,26 +18,51 @@ interface CarteDao {
     @Query("DELETE FROM points_interet WHERE id = :id")
     suspend fun supprimerPoint(id: String)
 
-    @Query("SELECT * FROM cartes_campagne WHERE campagneId = :campagneId")
-    suspend fun getCarte(campagneId: String): CarteCampagneEntity?
+    /** UPDATE plutôt que REPLACE : un REPLACE supprimerait d'abord la ligne (lieux notables en cascade). */
+    @Query("UPDATE points_interet SET fx = :fx, fy = :fy WHERE id = :id")
+    suspend fun deplacerPoint(id: String, fx: Float, fy: Float)
+
+    @Query("UPDATE points_interet SET visibleJoueurs = :visible WHERE id = :id")
+    suspend fun definirVisibiliteJoueurs(id: String, visible: Boolean)
+
+    @Query("SELECT * FROM cartes_campagne WHERE id = :carteId")
+    suspend fun getCarte(carteId: String): CarteCampagneEntity?
+
+    /** Carte historique en premier (id = campagneId), puis les autres par nom. */
+    @Query("SELECT * FROM cartes_campagne WHERE campagneId = :campagneId ORDER BY (id != campagneId), nom ASC")
+    fun observerCartes(campagneId: String): Flow<List<CarteCampagneEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun sauvegarderCarte(carte: CarteCampagneEntity)
 
-    @Query("SELECT * FROM evenements_aleatoires WHERE campagneId = :campagneId ORDER BY titre ASC")
-    fun observerEvenementsCustom(campagneId: String): Flow<List<EvenementAleatoireEntity>>
+    @Query("DELETE FROM cartes_campagne WHERE id = :carteId")
+    suspend fun supprimerCarte(carteId: String)
 
-    @Query("SELECT * FROM evenements_aleatoires WHERE villeId = :villeId ORDER BY titre ASC")
-    fun observerEvenementsDeVille(villeId: String): Flow<List<EvenementAleatoireEntity>>
+    /** Lieux d'une carte supprimée : conservés, simplement retirés de la carte (non placés). */
+    @Query("UPDATE points_interet SET carteId = NULL WHERE carteId = :carteId")
+    suspend fun retirerPointsDeCarte(carteId: String)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun sauvegarderEvenement(evenement: EvenementAleatoireEntity)
+    /** UPDATE plutôt que REPLACE, comme deplacerPoint (lieux notables en cascade). */
+    @Query("UPDATE points_interet SET evenementIds = :evenementIds WHERE id = :id")
+    suspend fun definirEvenementsDuPoint(id: String, evenementIds: String)
+
+    @Query("SELECT evenementIds FROM points_interet WHERE id = :id")
+    suspend fun getEvenementsDuPoint(id: String): String?
+
+    // Anciens événements de campagne/ville, antérieurs à la bibliothèque (feature_evenement) :
+    // lus une seule fois pour être convertis (voir ConversionEvenementsCarte), puis supprimés.
+    @Query("SELECT * FROM evenements_aleatoires")
+    suspend fun anciensEvenements(): List<EvenementAleatoireEntity>
 
     @Query("DELETE FROM evenements_aleatoires WHERE id = :id")
-    suspend fun supprimerEvenement(id: String)
+    suspend fun supprimerAncienEvenement(id: String)
 
     @Query("SELECT * FROM lieux_notables WHERE villeId = :villeId ORDER BY nom ASC")
     fun observerLieuxNotables(villeId: String): Flow<List<LieuNotableEntity>>
+
+    /** Lieux notables de toutes les villes de la campagne (partage réseau, menu joueur). */
+    @Query("SELECT l.* FROM lieux_notables l INNER JOIN points_interet p ON l.villeId = p.id WHERE p.campagneId = :campagneId ORDER BY l.nom ASC")
+    fun observerLieuxNotablesCampagne(campagneId: String): Flow<List<LieuNotableEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun sauvegarderLieuNotable(lieu: LieuNotableEntity)

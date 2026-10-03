@@ -16,11 +16,20 @@ import kotlinx.serialization.json.Json
 @Serializable
 data class CreationSnapshot(
     val step: String,
-    val nomPersonnage: String,
+    val nomPersonnage: String? = null, // choisi en toute dernière étape (CreationStep.NOM)
+    val portrait: String? = null, // id dans characterPortraitOptions, choisi juste après le nom (CreationStep.PORTRAIT)
     val classeNom: String? = null,
     val competencesClasse: List<String> = emptyList(),
+    // Choix intégrés aux aptitudes de niveau 1 (ex. Protecteur/Thaumaturge de l'Ordre divin
+    // du Clerc) : clé = id de l'aptitude (AptitudeClasse.id), valeur = nom de l'option choisie.
+    val classeChoixNiveau1: Map<String, String> = emptyMap(),
     val especeNom: String? = null,
+    // Ancien format (un seul sous-choix d'espèce) : ignoré, gardé pour relire les brouillons existants.
     val especeChoixSupplementaire: String? = null,
+    // Choix balisés de l'espèce : id du choix -> valeurs retenues (cf. choixEspece).
+    val especeChoix: Map<String, List<String>> = emptyMap(),
+    // Choix balisés de la classe, de l'historique et des dons (cf. CharacterDraft.choixComplementaires).
+    val choixComplementaires: Map<String, List<String>> = emptyMap(),
     val historiqueNom: String? = null,
     val histoirePersonnalite: String = "",
     val languesNoms: List<String> = emptyList(),
@@ -31,6 +40,7 @@ data class CreationSnapshot(
     val alignementNom: String? = null,
     val equipementClasseTexte: String? = null,
     val equipementHistoriqueTexte: String? = null,
+    val sortsMineursChoisis: List<String> = emptyList(),
     val sortsChoisis: List<String> = emptyList(),
     val stepsConfirmees: List<String> = emptyList()
 )

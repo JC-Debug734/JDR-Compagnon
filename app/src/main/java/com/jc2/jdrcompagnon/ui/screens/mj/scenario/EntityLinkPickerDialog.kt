@@ -9,6 +9,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.jc2.jdrcompagnon.di.EnvironmentDependencies
+import com.jc2.jdrcompagnon.di.EvenementDependencies
+import kotlinx.coroutines.flow.first
+import com.jc2.jdrcompagnon.feature_environnement.domain.usecase.catalogueEpreuves
 import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdRepository
 import kotlinx.coroutines.Dispatchers
@@ -20,7 +24,10 @@ private val LinkTypes = listOf(
     "npc" to "PNJ (alias)",
     "equipment" to "Équipement",
     "spell" to "Sort",
-    "rule" to "Règle"
+    "rule" to "Règle",
+    "event" to "Discussion avec un PNJ",
+    "epreuve" to "Épreuve environnementale",
+    "evenement" to "Événement (bibliothèque)"
 )
 
 private val typeDisplayNames = mapOf(
@@ -29,7 +36,10 @@ private val typeDisplayNames = mapOf(
     "npc" to "PNJ",
     "equipment" to "Équipement",
     "spell" to "Sort",
-    "rule" to "Règle"
+    "rule" to "Règle",
+    "event" to "Discussion avec un PNJ",
+    "epreuve" to "Épreuve",
+    "evenement" to "Événement"
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -38,7 +48,9 @@ fun EntityLinkPickerDialog(
     visible: Boolean,
     onDismiss: () -> Unit,
     onSelect: (type: String, name: String) -> Unit,
-    initialType: String = "monster"
+    initialType: String = "monster",
+    // Monstres attachés à la campagne du scénario : listés en tête pour le type "Monstre".
+    bestiaireCampagne: List<String> = emptyList(),
 ) {
     if (!visible) return
     val context = LocalContext.current
@@ -58,10 +70,19 @@ fun EntityLinkPickerDialog(
                 "monster" -> SrdRepository.loadMonsters(context, currentWorldId).map { it.name }
                 "equipment" -> SrdRepository.loadEquipmentList(context, currentWorldId).map { it.name }
                 "spell" -> SrdRepository.loadSpells(context, currentWorldId).map { it.name }
-                "rule" -> SrdRepository.loadRuleSections(context, currentWorldId).map { it.title }
+                "rule" -> SrdRepository.loadRuleEntries(context, currentWorldId).map { it.name }
                 "pnj", "npc" -> GameState.characters.value
                     .filter { it.type == "PNJ" || it.type == "Monstre" }
                     .map { it.name }
+                "event" -> GameState.characters.value
+                    .filter { it.type == "PNJ" }
+                    .map { it.name }
+                "evenement" -> currentWorldId?.let { monde ->
+                    EvenementDependencies.seedSiNecessaire(context.applicationContext, monde)
+                    EvenementDependencies.repository.observerEvenements(monde).first().map { it.titre }.distinct()
+                }.orEmpty()
+                "epreuve" -> (EnvironmentDependencies.epreuvesDuMonde(currentWorldId).map { it.second.nom } +
+                    catalogueEpreuves.map { it.nom }).distinct()
                 else -> emptyList()
             }
             val q = query.trim()
@@ -73,6 +94,10 @@ fun EntityLinkPickerDialog(
         }
         isLoading = false
     }
+
+    val campagneFiltres = if (selected.first != "monster") emptyList() else
+        bestiaireCampagne.filter { query.isBlank() || it.contains(query.trim(), ignoreCase = true) }
+    val autresResultats = results.filterNot { nom -> campagneFiltres.any { it.equals(nom, ignoreCase = true) } }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -112,7 +137,7 @@ fun EntityLinkPickerDialog(
                 )
                 if (isLoading) {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                } else if (results.isEmpty()) {
+                } else if (campagneFiltres.isEmpty() && autresResultats.isEmpty()) {
                     Text(
                         "Aucun résultat",
                         style = MaterialTheme.typography.bodySmall,
@@ -120,7 +145,36 @@ fun EntityLinkPickerDialog(
                     )
                 } else {
                     LazyColumn(modifier = Modifier.height(220.dp)) {
-                        items(results) { name ->
+                        if (campagneFiltres.isNotEmpty()) {
+                            item {
+                                Text(
+                                    "Bestiaire de la campagne",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            items(campagneFiltres) { name ->
+                                TextButton(
+                                    onClick = { onSelect(selected.first, name) },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("🐲 $name")
+                                }
+                            }
+                            if (autresResultats.isNotEmpty()) {
+                                item {
+                                    Text(
+                                        "Tout le bestiaire",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(top = 8.dp)
+                                    )
+                                }
+                            }
+                        }
+                        items(autresResultats) { name ->
                             TextButton(
                                 onClick = { onSelect(selected.first, name) },
                                 modifier = Modifier.fillMaxWidth()

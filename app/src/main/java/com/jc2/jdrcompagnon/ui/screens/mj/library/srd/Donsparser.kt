@@ -4,39 +4,39 @@ package com.jc2.jdrcompagnon.ui.screens.mj.library.srd
  * Parser dédié à `dons_srd521.md`, décrit par `guide_format_dons.md` : chaque don est un
  * bloc "### Nom" avec ses champs en gras ("**Champ** valeur", sans deux-points), suivi
  * d'un ou plusieurs sous-blocs "#### Nom de compétence" (ses bénéfices), chacun avec ses
- * propres champs. Contrairement à `equipement_srd521.md`, il n'y a pas de champ
- * `Description` au niveau du don, et la catégorie (Origines/Général/Style de combat/
- * Faveur épique) a été volontairement retirée — voir le guide, §2 et §6.3.
+ * propres champs. La catégorie (Origines, Général, Style de combat, Faveur épique) vient de
+ * la balise `<!-- id: …; categorie: … -->` du don.
  *
  * Produit une liste de [SrdSectionEntry], une par don, avec [SrdSectionEntry.rawMarkdown]
- * reconstruit en markdown lisible (champs du don + une section par compétence) pour
- * l'écran de détail, qui l'affiche tel quel via [com.mikepenz.markdown.m3.Markdown].
+ * reconstruit en markdown à structure unique — lu tel quel par l'écran de détail de la
+ * bibliothèque ([com.mikepenz.markdown.m3.Markdown]) et par la section « Dons » de la fiche
+ * (CapaciteDescription) :
  *
- * [SrdSectionEntry.category] vaut toujours [CATEGORY_LABEL] pour tous les dons : ce champ
- * n'existe plus dans la source (voir ci-dessus), mais le laisser vide ferait disparaître
- * les dons de [SectionEntryByCategoryList], qui filtre les entrées à catégorie vide.
+ * ```
+ * *Don — Origines*
+ *
+ * - **Prérequis** : …            (champs du don, « - » omis)
+ *
+ * ### Nom de la compétence       (« Utilisation » si c'est le nom du don)
+ * - **Type** : Actif
+ * - **Coût** : …                 (champs de la compétence, « - » omis)
+ *
+ * Effet de la compétence.
+ * ```
  */
 object DonsParser {
 
-    private const val CATEGORY_LABEL = "Dons"
+    /** Catégorie d'un don sans balise `categorie:` (ex. don personnalisé mal balisé). */
+    private const val CATEGORIE_PAR_DEFAUT = "Général"
 
     private val boldFieldRegex = Regex("""^\*\*(.+?)\*\*\s?(.*)$""")
+    private val categorieRegex = Regex("""categorie:\s*([^;>]+?)\s*(?:;|-->)""")
 
     private val donSplitRegex = Regex("""(?m)^### """)
     private val skillSplitRegex = Regex("""(?m)^#### """)
 
-    private val donFieldOrder = listOf(
-        "Prérequis" to "Prérequis",
-        "Répétable" to "Répétable",
-        "Augmentation de caractéristique" to "Augmentation de caractéristique",
-        "Compétences" to "Compétences",
-    )
-    private val skillFieldOrder = listOf(
-        "Coût" to "Coût",
-        "Condition" to "Condition",
-        "Limitation" to "Limitation",
-        "Récupération" to "Récupération",
-    )
+    private val donFieldOrder = listOf("Prérequis", "Répétable", "Augmentation de caractéristique", "Compétences")
+    private val skillFieldOrder = listOf("Coût", "Condition", "Limitation", "Récupération")
 
     fun parse(rawMarkdown: String): List<SrdSectionEntry> {
         val entries = mutableListOf<SrdSectionEntry>()
@@ -53,17 +53,22 @@ object DonsParser {
             // sépare maintenant ses propres champs (avant la première "#### ") de ses
             // sous-blocs de compétence, un niveau plus profond.
             val skillSplit = block.split(skillSplitRegex)
-            val donFields = parseBoldFields(skillSplit.first().lines().drop(1))
+            val entete = skillSplit.first()
+            val donFields = parseBoldFields(entete.lines().drop(1))
             val skillBlocks = skillSplit.drop(1)
+            val balises = entete.lines().map { it.trim() }.filter { it.startsWith("<!--") && it.endsWith("-->") }
+            val categorie = balises.firstNotNullOfOrNull { categorieRegex.find(it)?.groupValues?.get(1) } ?: CATEGORIE_PAR_DEFAUT
 
             val rawContent = buildString {
-                donFieldOrder.forEach { (label, key) ->
-                    val value = donFields[key]?.takeIf { it.isNotBlank() && it != "-" }
-                    if (value != null) {
-                        appendLine("**$label :** $value")
-                        appendLine()
-                    }
+                // Balises du don (catégorie, choix à la création), conservées telles quelles :
+                // lues par DonParser.depuisEntrees, invisibles à l'affichage.
+                balises.forEach { appendLine(it) }
+                appendLine("*Don — $categorie*")
+                appendLine()
+                donFieldOrder.forEach { label ->
+                    valeur(donFields[label])?.let { appendLine("- **$label** : $it") }
                 }
+                appendLine()
 
                 skillBlocks.forEach { skillBlock ->
                     val skillLines = skillBlock.lines()
@@ -71,39 +76,26 @@ object DonsParser {
                     if (skillName.isBlank()) return@forEach
                     val skillFields = parseBoldFields(skillLines.drop(1))
 
-                    appendLine("### $skillName")
-                    val category = skillFields["Catégorie"]?.takeIf { it.isNotBlank() && it != "-" }
-                    if (category != null) {
-                        appendLine("*$category*")
+                    appendLine("### " + if (skillName.equals(donName, ignoreCase = true)) "Utilisation" else skillName)
+                    valeur(skillFields["Catégorie"])?.let { appendLine("- **Type** : $it") }
+                    skillFieldOrder.forEach { label ->
+                        valeur(skillFields[label])?.let { appendLine("- **$label** : $it") }
                     }
-                    appendLine()
-
-                    skillFieldOrder.forEach { (label, key) ->
-                        val value = skillFields[key]?.takeIf { it.isNotBlank() && it != "-" }
-                        if (value != null) {
-                            appendLine("- $label : $value")
-                        }
-                    }
-
-                    val effet = skillFields["Effet"]?.takeIf { it.isNotBlank() }
-                    if (effet != null) {
+                    skillFields["Effet"]?.takeIf { it.isNotBlank() }?.let {
                         appendLine()
-                        appendLine(effet)
+                        appendLine(it)
                     }
                     appendLine()
                 }
             }.trim()
 
-            entries.add(
-                SrdSectionEntry(
-                    name = donName,
-                    category = CATEGORY_LABEL,
-                    rawMarkdown = rawContent,
-                )
-            )
+            entries.add(SrdSectionEntry(name = donName, category = categorie, rawMarkdown = rawContent))
         }
         return entries
     }
+
+    /** Valeur affichable d'un champ : null si absent, vide ou « - ». */
+    private fun valeur(brut: String?): String? = brut?.trim()?.takeIf { it.isNotBlank() && it != "-" }
 
     /**
      * Parse une suite de lignes "**Champ** valeur" en table champ → valeur, en s'arrêtant

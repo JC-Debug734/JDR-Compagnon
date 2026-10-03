@@ -12,7 +12,11 @@ class CreerPointInteretUseCase(private val repository: CarteRepository) {
         type: TypePointInteret,
         x: Int,
         y: Int,
-        description: String = ""
+        description: String = "",
+        carteId: String? = null,
+        // Position libre du centre de l'icône (fractions de la carte), voir PointInteret.fx.
+        fx: Float? = null,
+        fy: Float? = null
     ): PointInteret {
         val point = PointInteret(
             id = UUID.randomUUID().toString(),
@@ -21,7 +25,10 @@ class CreerPointInteretUseCase(private val repository: CarteRepository) {
             type = type,
             x = x,
             y = y,
-            description = description
+            description = description,
+            carteId = carteId,
+            fx = fx,
+            fy = fy
         )
         repository.sauvegarderPoint(point)
         return point
