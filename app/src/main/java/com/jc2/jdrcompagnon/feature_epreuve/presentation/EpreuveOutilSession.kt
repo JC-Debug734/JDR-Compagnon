@@ -1,0 +1,104 @@
+package com.jc2.jdrcompagnon.feature_epreuve.presentation
+
+import com.jc2.jdrcompagnon.feature_epreuve.domain.model.ComplicationEpreuve
+import com.jc2.jdrcompagnon.feature_epreuve.domain.model.Epreuve
+import com.jc2.jdrcompagnon.feature_epreuve.domain.model.ReglesEpreuve
+import kotlin.random.Random
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+
+/** Une tentative annoncée par un joueur : [joueur]/[action] facultatifs, saisis par le MJ. */
+data class TentativeEpreuve(
+    val joueur: String?,
+    val action: String?,
+    val reussite: Boolean,
+    val complication: ComplicationEpreuve? = null,
+)
+
+/**
+ * Épreuve en cours de résolution. [numeroComplication] s'incrémente à chaque complication tirée :
+ * la page table s'en sert pour rejouer son animation même si le tirage retombe sur un titre déjà vu.
+ */
+data class EpreuveActive(
+    val epreuve: Epreuve,
+    val tentatives: List<TentativeEpreuve> = emptyList(),
+    val numeroComplication: Int = 0,
+    val terminee: Boolean = false,
+) {
+    val reussites: Int get() = tentatives.count { it.reussite }
+    val echecs: Int get() = tentatives.count { !it.reussite }
+    val reussie: Boolean get() = reussites >= epreuve.reussitesRequises
+    val derniereComplication: ComplicationEpreuve?
+        get() = tentatives.lastOrNull()?.takeIf { !it.reussite }?.complication
+}
+
+/**
+ * Épreuve active côté MJ, au niveau application (comme EpreuveSession/CombatSession) : survit à
+ * la navigation, et MjWebServer la lit directement pour l'afficher sur la page table.
+ */
+object EpreuveOutilSession {
+
+    private val _etat = MutableStateFlow<EpreuveActive?>(null)
+    val etat: StateFlow<EpreuveActive?> = _etat.asStateFlow()
+
+    fun demarrer(epreuve: Epreuve) {
+        _etat.value = EpreuveActive(epreuve.copy(reussitesRequises = epreuve.reussitesRequises.coerceAtLeast(ReglesEpreuve.REUSSITES_MIN)))
+    }
+
+    /** L'épreuve en cours a été modifiée dans l'éditeur (image, complications...) : la session suit. */
+    fun epreuveModifiee(epreuve: Epreuve) {
+        _etat.update { courant ->
+            if (courant == null || courant.epreuve.id != epreuve.id) courant
+            else courant.copy(epreuve = epreuve.copy(reussitesRequises = epreuve.reussitesRequises.coerceAtLeast(ReglesEpreuve.REUSSITES_MIN)))
+        }
+    }
+
+    fun reussite(joueur: String?, action: String?) = modifier { etat ->
+        val suivant = etat.copy(tentatives = etat.tentatives + TentativeEpreuve(joueur.nettoye(), action.nettoye(), reussite = true))
+        if (suivant.reussie) suivant.copy(terminee = true) else suivant
+    }
+
+    /** Un échec déclenche toujours une complication de l'épreuve (si elle en a). */
+    fun echec(joueur: String?, action: String?, random: Random = Random.Default) = modifier { etat ->
+        val precedente = etat.tentatives.lastOrNull { it.complication != null }?.complication
+        val complication = ReglesEpreuve.tirerComplication(etat.epreuve.complications, precedente, random)
+        etat.copy(
+            tentatives = etat.tentatives + TentativeEpreuve(joueur.nettoye(), action.nettoye(), reussite = false, complication = complication),
+            numeroComplication = if (complication != null) etat.numeroComplication + 1 else etat.numeroComplication,
+        )
+    }
+
+    /** Relance une autre complication pour le dernier échec (le MJ trouve la première inadaptée). */
+    fun relancerComplication(random: Random = Random.Default) = modifier { etat ->
+        val derniere = etat.tentatives.lastOrNull()?.takeIf { !it.reussite } ?: return@modifier etat
+        val complication = ReglesEpreuve.tirerComplication(etat.epreuve.complications, derniere.complication, random)
+            ?: return@modifier etat
+        etat.copy(
+            tentatives = etat.tentatives.dropLast(1) + derniere.copy(complication = complication),
+            numeroComplication = etat.numeroComplication + 1,
+        )
+    }
+
+    /** Annule la dernière tentative (erreur de saisie), y compris après la réussite finale. */
+    fun annulerDerniere() {
+        _etat.update { courant ->
+            if (courant == null || courant.tentatives.isEmpty()) courant
+            else courant.copy(tentatives = courant.tentatives.dropLast(1), terminee = false)
+        }
+    }
+
+    /** Arrête l'épreuve (abandon ou fin décidée par le MJ) : elle reste affichée jusqu'à [fermer]. */
+    fun terminer() = modifier { it.copy(terminee = true) }
+
+    fun fermer() {
+        _etat.value = null
+    }
+
+    private fun modifier(transformation: (EpreuveActive) -> EpreuveActive) {
+        _etat.update { courant -> if (courant == null || courant.terminee) courant else transformation(courant) }
+    }
+
+    private fun String?.nettoye(): String? = this?.trim()?.takeIf { it.isNotEmpty() }
+}
