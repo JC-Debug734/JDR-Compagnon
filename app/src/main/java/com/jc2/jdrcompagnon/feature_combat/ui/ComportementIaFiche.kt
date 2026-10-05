@@ -87,10 +87,5 @@ fun ComportementIaPnjCard(character: Character) {
 @Composable
 fun ComportementIaMonstreCard(rawMarkdown: String) {
     val comportement = remember(rawMarkdown) { ProfilCombatMonstre.depuisFiche(rawMarkdown).comportement }
-    CarteComportement("🧠 Comportement en combat (IA) : ${comportement.profil.label}") {
-        Text(
-            "Modifiable pendant un combat (menu de la carte du monstre → Comportement IA). Jamais montré aux joueurs.",
-            style = MaterialTheme.typography.bodySmall,
-        )
-    }
+    CarteComportement("🧠 Comportement en combat (IA) : ${comportement.profil.label}") {}
 }

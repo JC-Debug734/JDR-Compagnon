@@ -3,7 +3,6 @@ package com.jc2.jdrcompagnon.feature_environnement.data
 import com.jc2.jdrcompagnon.feature_environnement.data.local.EnvironnementDao
 import com.jc2.jdrcompagnon.feature_environnement.data.local.EnvironnementEntity
 import com.jc2.jdrcompagnon.feature_environnement.domain.model.Environnement
-import com.jc2.jdrcompagnon.feature_environnement.domain.model.EpreuveEnvironnementale
 import com.jc2.jdrcompagnon.feature_environnement.domain.model.LootEntry
 import com.jc2.jdrcompagnon.feature_evenement.data.EvenementRepository
 import com.jc2.jdrcompagnon.feature_evenement.domain.model.Evenement
@@ -102,7 +101,6 @@ private fun EnvironnementEntity.toDomain(): Environnement = Environnement(
     monstresIds = runCatching { json.decodeFromString<List<String>>(monstresJson) }.getOrDefault(emptyList()),
     tableButin = runCatching { json.decodeFromString<List<LootEntryDto>>(butinJson) }.getOrDefault(emptyList())
         .map { LootEntry(it.nomObjet, it.poids) },
-    epreuves = runCatching { json.decodeFromString<List<EpreuveEnvironnementale>>(epreuvesJson) }.getOrDefault(emptyList()),
     terrains = runCatching { json.decodeFromString<List<String>>(terrainsJson) }.getOrDefault(emptyList()),
     tablesAleatoiresIds = runCatching { json.decodeFromString<List<String>>(tablesAleatoiresJson) }.getOrDefault(emptyList()),
     evenementIds = decoderTextes(evenementsJson)
@@ -119,7 +117,9 @@ private fun Environnement.toEntity(): EnvironnementEntity = EnvironnementEntity(
     rencontresJson = json.encodeToString(rencontresAleatoires),
     monstresJson = json.encodeToString(monstresIds),
     butinJson = json.encodeToString(tableButin.map { LootEntryDto(it.nomObjet, it.poids) }),
-    epreuvesJson = json.encodeToString(epreuves),
+    // Ancien système d'épreuves Progrès/Menace retiré (outil ÉPREUVES à la place) : colonne
+    // conservée pour éviter une migration, toujours vide.
+    epreuvesJson = "[]",
     terrainsJson = json.encodeToString(terrains),
     tablesAleatoiresJson = json.encodeToString(tablesAleatoiresIds),
     evenementsJson = json.encodeToString(evenementIds.distinct())

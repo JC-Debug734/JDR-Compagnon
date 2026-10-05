@@ -44,6 +44,7 @@ import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Backpack
+import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -189,6 +190,8 @@ fun CharacterSheetScreen(
     // son briefing (comportement / intentions / objectif) dans Notes.
     val isPnj = currentCharacter.type == "PNJ"
     val tabs = buildList {
+        // PNJ : vue simplifiée façon bloc de stats du bestiaire, ouverte par défaut.
+        if (isPnj) add(SheetTab.FICHE)
         add(SheetTab.APERCU)
         add(SheetTab.COMBAT)
         add(SheetTab.EQUIPEMENT)
@@ -274,8 +277,9 @@ fun CharacterSheetScreen(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Carte d'en-tête commune, présente sur les 5 onglets
-                CharacterStatsHeader(currentCharacter, isMjMode)
+                // Carte d'en-tête commune, présente sur tous les onglets sauf la vue simplifiée
+                // du PNJ (son bloc de stats reprend déjà ces informations).
+                if (tabs[selectedTab] != SheetTab.FICHE) CharacterStatsHeader(currentCharacter, isMjMode)
 
                 // Tab selector, sous la carte d'en-tête — icônes uniquement, toujours visible
                 // quel que soit l'onglet sélectionné (y compris Sorts).
@@ -307,6 +311,7 @@ fun CharacterSheetScreen(
                 }
 
                 when (tabs[selectedTab]) {
+                    SheetTab.FICHE -> PnjFicheSimplifiee(currentCharacter, isMjMode)
                     SheetTab.APERCU -> OverviewTab(currentCharacter, isMjMode)
                     SheetTab.COMBAT -> CombatTab(currentCharacter, isMjMode)
                     SheetTab.EQUIPEMENT -> EquipmentTab(currentCharacter, isMjMode)
@@ -342,6 +347,7 @@ fun CharacterSheetScreen(
 
 /** Onglets de la fiche (le PNJ n'a pas l'onglet Sorts, cf. CharacterSheetScreen). */
 private enum class SheetTab(val titre: String, val icone: androidx.compose.ui.graphics.vector.ImageVector) {
+    FICHE("Fiche simplifiée", Icons.Default.Badge),
     APERCU("Aperçu", Icons.Default.Person),
     COMBAT("Combat", Icons.Default.Shield),
     EQUIPEMENT("Équipement", Icons.Default.Backpack),
@@ -391,6 +397,45 @@ private fun LevelBar(level: Int, experience: Int) {
                 color = SheetTextPrimary
             )
         }
+    }
+}
+
+/**
+ * Vue simplifiée d'un PNJ : bloc de stats façon bestiaire, puis (MJ) son comportement, ses
+ * possessions à échanger et une conversation improvisée. Les autres onglets restent la fiche
+ * complète, pour l'éditer en détail.
+ */
+@Composable
+private fun PnjFicheSimplifiee(character: Character, isMjMode: Boolean) {
+    var afficherButin by remember { mutableStateOf(false) }
+    var conversation by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        com.jc2.jdrcompagnon.ui.screens.mj.library.PnjStatBlock(
+            character,
+            modifier = Modifier.clip(RoundedCornerShape(8.dp))
+        )
+        if (isMjMode) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = { conversation = true }, modifier = Modifier.weight(1f)) {
+                    Text("💬 Conversation", color = SheetTextPrimary)
+                }
+                OutlinedButton(onClick = { afficherButin = true }, modifier = Modifier.weight(1f)) {
+                    Text("💰 Possessions", color = SheetTextPrimary)
+                }
+            }
+            com.jc2.jdrcompagnon.ui.screens.mj.scenario.InfosComportementalesPnj(character)
+        }
+    }
+    if (afficherButin) {
+        com.jc2.jdrcompagnon.feature_butin.ui.ButinPersonnageDialog(character, onDismiss = { afficherButin = false })
+    }
+    if (conversation) {
+        val groupeId by GameState.currentGroupId.collectAsState()
+        com.jc2.jdrcompagnon.ui.screens.mj.scenario.PnjBriefingOverlay(
+            character = character,
+            reputationGroupe = groupeId?.let { character.groupReputations[it] },
+            onDismiss = { conversation = false }
+        )
     }
 }
 

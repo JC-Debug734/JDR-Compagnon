@@ -197,7 +197,7 @@ class RoundCombatTest {
         val d = IaMonstre.decider(monstre("Orque", ProfilIA.BRUTE, listOf(cimeterre)), listOf(pj("Aldric")), mapOf("Aldric" to Distance.LONGUE))
         assertNull(d.attaque)
         assertTrue(d.libelle.startsWith("Se précipiter"))
-        assertEquals(mapOf("Aldric" to Distance.COURTE), d.deplacements)
+        assertEquals(mapOf("Aldric" to Distance.M12), d.deplacements)
     }
 
     @Test
@@ -215,7 +215,7 @@ class RoundCombatTest {
     fun `le tireur au contact recule puis tire`() {
         val d = IaMonstre.decider(monstre("Archer", ProfilIA.TIREUR, listOf(cimeterre, arc)), listOf(pj("Aldric")), mapOf("Aldric" to Distance.CONTACT))
         assertEquals("Arc court", d.attaque?.nom)
-        assertEquals(mapOf("Aldric" to Distance.COURTE), d.deplacements)
+        assertEquals(mapOf("Aldric" to Distance.M12), d.deplacements)
         assertTrue(!d.desengage)
     }
 
@@ -224,7 +224,7 @@ class RoundCombatTest {
         val lache = monstre("Kobold", ProfilIA.LACHE, pv = 5)
         val auContact = IaMonstre.decider(lache, listOf(pj("Aldric")), mapOf("Aldric" to Distance.CONTACT))
         assertTrue(auContact.desengage)
-        assertEquals(mapOf("Aldric" to Distance.COURTE), auContact.deplacements)
+        assertEquals(mapOf("Aldric" to Distance.M12), auContact.deplacements)
         val aCourte = IaMonstre.decider(lache, listOf(pj("Aldric")), mapOf("Aldric" to Distance.COURTE))
         assertEquals(mapOf("Aldric" to Distance.LONGUE), aCourte.deplacements)
     }

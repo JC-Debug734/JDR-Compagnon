@@ -64,6 +64,8 @@ data class DeclarationJoueurData(
     val attaques: List<String> = emptyList(),
     // Sort de zone : ids de toutes les créatures visées ([cibleId] est la première).
     val ciblesZone: List<String> = emptyList(),
+    // Zone du sort (ZoneEffet.versTexte), pour proposer les créatures touchées autour de la cible.
+    val zone: String? = null,
 )
 
 /** Joueur → MJ (TYPE_COMBAT_ROLL) : jet de dés libre (tiré par l'appli ou saisi à la main). */

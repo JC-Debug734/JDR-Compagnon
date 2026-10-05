@@ -29,6 +29,8 @@ fun SendItemToCharacterDialog(
     itemName: String,
     worldId: String?,
     onDismiss: () -> Unit,
+    // Appelé quand l'objet est réellement remis (pas sur Annuler).
+    onSent: (characterId: String) -> Unit = {},
 ) {
     val characters by GameState.characters.collectAsState()
     val claimedCharacters by NetworkSessionManager.claimedCharacters.collectAsState()
@@ -56,6 +58,7 @@ fun SendItemToCharacterDialog(
                             } else {
                                 GameState.addItemToBackpack(character.id, itemName)
                             }
+                            onSent(character.id)
                             onDismiss()
                         }
                     )
@@ -85,6 +88,7 @@ fun SendItemsToGroupDialog(
     itemNames: List<String>,
     worldId: String?,
     onDismiss: () -> Unit,
+    onSent: () -> Unit = {},
 ) {
     val mjGroups by GameState.mjGroups.collectAsState()
     val worldGroups = remember(mjGroups, worldId) {
@@ -104,6 +108,7 @@ fun SendItemsToGroupDialog(
                         headlineContent = { Text(group.name) },
                         modifier = Modifier.clickable {
                             itemNames.forEach { NetworkSessionManager.sendLootOfferToGroup(group.id, it) }
+                            onSent()
                             onDismiss()
                         }
                     )

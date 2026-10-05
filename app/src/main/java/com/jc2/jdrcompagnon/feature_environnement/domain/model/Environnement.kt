@@ -11,7 +11,7 @@ data class LootEntry(
  * [com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdEntry.environments]) ou à une scène de
  * scénario ([com.jc2.jdrcompagnon.ui.GameState.MjScene.environmentId]). Regroupe tout ce que
  * le MJ veut préparer à l'avance pour un lieu type : ambiance sonore, rumeurs, rencontres
- * aléatoires, bestiaire, table de butin et épreuves environnementales.
+ * aléatoires, bestiaire et table de butin (les épreuves ont leur propre outil, ÉPREUVES).
  */
 data class Environnement(
     val id: String = java.util.UUID.randomUUID().toString(),
@@ -30,7 +30,6 @@ data class Environnement(
     // partir de SrdEntry.environments (voir SrdRepository.searchMonsters).
     val monstresIds: List<String> = emptyList(),
     val tableButin: List<LootEntry> = emptyList(),
-    val epreuves: List<EpreuveEnvironnementale> = emptyList(),
     // Types de terrain SRD (voir TERRAINS_SRD) filtrant le bestiaire suggéré ; vide = devinés
     // depuis le nom (voir terrainsEffectifs).
     val terrains: List<String> = emptyList(),

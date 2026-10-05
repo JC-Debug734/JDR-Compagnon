@@ -429,7 +429,9 @@ private fun EtapeEspece(state: CharacterCreationUiState, holder: CharacterCreati
                 ChoixCard(
                     titre = e.nom,
                     sousTitre = listOfNotNull(
-                        DESCRIPTIONS_ESPECES[e.nom],
+                        // Espèce importée : première phrase de sa présentation.
+                        DESCRIPTIONS_ESPECES[e.nom] ?: e.description.takeIf { it.isNotBlank() }
+                            ?.let { d -> d.substringBefore(". ").trimEnd('.') + "." },
                         "Taille ${e.taille} · Vitesse ${e.vitesse} · ${e.traits.count { !it.base }} traits" +
                             choixEspece(e, holder.donsOriginesNoms).count { it.niveau <= 1 }
                                 .takeIf { it > 0 }?.let { " · $it choix à faire" }.orEmpty()

@@ -28,6 +28,10 @@ object EpreuveImageStore {
     fun copierDepuisAsset(context: Context, assetName: String, epreuveId: String): String? =
         ecrire(context, epreuveId) { context.assets.open("${EnvironmentImageStore.DOSSIER_ASSETS}/$assetName") }
 
+    /** Image embarquée dans un fichier d'import (voir EpreuveImport). */
+    fun ecrireOctets(context: Context, epreuveId: String, bytes: ByteArray): String? =
+        ecrire(context, epreuveId) { bytes.inputStream() }
+
     fun supprimer(context: Context, fileName: String?) {
         if (fileName != null) fichier(context, fileName).delete()
     }

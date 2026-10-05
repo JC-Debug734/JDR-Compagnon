@@ -183,9 +183,8 @@ fun PnjBriefingOverlay(
                 com.jc2.jdrcompagnon.ui.components.DiscussionNoticesPanel(notices, Modifier.padding(vertical = 6.dp))
                 com.jc2.jdrcompagnon.ui.components.SocialRequestsPanel(requests, Modifier.padding(vertical = 6.dp))
 
-                BriefingSection("Comportement", character.comportement)
-                BriefingSection("Intentions", character.intentions)
-                BriefingSection("Objectif", character.objectif)
+                // Comportement, personnalité, secrets (ou personnalité improvisée), MJ uniquement.
+                InfosComportementalesPnj(character)
 
                 // Aide de jeu de la discussion (confidentielle, jamais envoyée aux joueurs).
                 DiscussionAideDeJeu(discussion = discussion, reputationGroupe = reputationGroupe)
@@ -234,23 +233,5 @@ internal fun PortraitPlaceholder(size: androidx.compose.ui.unit.Dp = 140.dp) {
             modifier = Modifier.size(size / 2),
             tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
-    }
-}
-
-@Composable
-private fun BriefingSection(title: String, content: String) {
-    if (content.isBlank()) return
-    Card(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
-            contentColor = Color.White,
-        ),
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Black)
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(content, style = MaterialTheme.typography.bodyMedium)
-        }
     }
 }

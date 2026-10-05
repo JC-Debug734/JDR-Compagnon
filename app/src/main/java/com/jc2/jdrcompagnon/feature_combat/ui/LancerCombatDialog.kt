@@ -413,6 +413,7 @@ fun LancerCombatDialog(
                                 pv = pv,
                                 bonusInitiative = profil.bonusInitiative,
                                 attaques = profil.actions.attaques,
+                                vitesse = profil.vitesse,
                                 nbAttaquesMultiples = profil.actions.nbAttaquesMultiples,
                                 profilIA = profil.comportement.profil,
                                 raisonProfil = profil.comportement.raison

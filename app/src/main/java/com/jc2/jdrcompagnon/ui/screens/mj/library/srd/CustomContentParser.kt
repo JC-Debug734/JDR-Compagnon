@@ -107,6 +107,7 @@ object CustomContentParser {
     private val typeMarkerLineRegex = Regex("""(?m)^[ \t]*<!--\s*type:\s*[\p{L}_]+\s*-->[ \t]*\r?\n?""", RegexOption.IGNORE_CASE)
     private val level2HeaderRegex = Regex("""(?m)^##\s+(.+)$""")
     private val level3HeaderRegex = Regex("""(?m)^###\s+(.+)$""")
+    private val level1HeaderRegex = Regex("""(?m)^#\s+(.+)$""")
 
     // Chaque type est normalisé (accents retirés, minuscule) vers une clé canonique unique.
     private val typeAliases = mapOf(
@@ -224,10 +225,15 @@ object CustomContentParser {
     private fun level3EntryBlocks(markdown: String): List<Triple<String, String, IntRange>> {
         val level3Matches = level3HeaderRegex.findAll(markdown).toList()
         if (level3Matches.isEmpty()) return emptyList()
-        val level2Starts = level2HeaderRegex.findAll(markdown)
-            .filter { normalizeLabel(it.groupValues[1]) !in knownEntrySubsections }
-            .map { it.range.first }
-            .toList()
+        // Un titre "# " (début d'un autre fichier quand plusieurs .md d'une archive sont mis bout
+        // à bout, ex. bestiaire puis objets magiques) termine lui aussi le bloc : sans ça, le
+        // titre et l'introduction du fichier suivant finissaient dans la fiche du dernier monstre.
+        val level2Starts = (
+            level2HeaderRegex.findAll(markdown)
+                .filter { normalizeLabel(it.groupValues[1]) !in knownEntrySubsections }
+                .map { it.range.first } +
+                level1HeaderRegex.findAll(markdown).map { it.range.first }
+            ).sorted().toList()
 
         return level3Matches.mapIndexed { index, match ->
             val title = match.groupValues[1].trim()

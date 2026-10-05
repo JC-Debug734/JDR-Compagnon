@@ -24,6 +24,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -61,6 +63,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.jc2.jdrcompagnon.feature_epreuve.domain.model.DifficulteEpreuve
+import com.jc2.jdrcompagnon.feature_epreuve.domain.model.ReglesEpreuve
 import com.jc2.jdrcompagnon.feature_epreuve.presentation.EpreuveActive
 import com.jc2.jdrcompagnon.feature_epreuve.presentation.EpreuveOutilSession
 import com.jc2.jdrcompagnon.feature_epreuve.presentation.TentativeEpreuve
@@ -69,6 +73,9 @@ import com.jc2.jdrcompagnon.ui.theme.ForcedDarkPalette
 
 private val VertReussite = Color(0xFF43A047)
 private val RougeEchec = Color(0xFFC62828)
+
+/** Dernière épreuve dont la musique a été lancée (voir EpreuveResolutionScreen). */
+private var musiqueLanceePour: String? = null
 
 /**
  * Résolution MJ de l'épreuve active (EpreuveOutilSession) : chaque joueur annonce son action,
@@ -82,6 +89,18 @@ fun EpreuveResolutionScreen(
     onOpenMenu: () -> Unit = {},
 ) {
     val etat by EpreuveOutilSession.etat.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    // Musique de l'épreuve : lancée une seule fois par épreuve démarrée (revenir sur l'écran ne la
+    // relance pas si le MJ l'a coupée entre-temps).
+    androidx.compose.runtime.LaunchedEffect(etat?.lancement) {
+        val epreuve = etat?.epreuve ?: return@LaunchedEffect
+        val lancement = "${epreuve.id}:${etat?.lancement}"
+        if (musiqueLanceePour == lancement) return@LaunchedEffect
+        musiqueLanceePour = lancement
+        val piste = com.jc2.jdrcompagnon.ui.availableLoopTracks.firstOrNull { it.id.equals(epreuve.musicTrackId, ignoreCase = true) }
+            ?: return@LaunchedEffect
+        com.jc2.jdrcompagnon.ui.MusicManager.play(context, piste)
+    }
 
     Scaffold(
         topBar = {
@@ -146,6 +165,8 @@ private fun ContenuResolution(etat: EpreuveActive, modifier: Modifier) {
 
         Compteur(etat)
 
+        if (!etat.terminee) ReglageGroupe(etat)
+
         when {
             etat.terminee -> Issue(etat)
             else -> {
@@ -209,6 +230,41 @@ private fun ContenuResolution(etat: EpreuveActive, modifier: Modifier) {
             }
             Journal(etat.tentatives)
         }
+    }
+}
+
+/**
+ * Groupe pour lequel l'épreuve est calibrée (nombre de joueurs, niveau) : le MJ le corrige si le
+ * groupe détecté n'est pas le bon, réussites et DD suivent (EpreuveOutilSession.ajusterGroupe).
+ */
+@Composable
+private fun ReglageGroupe(etat: EpreuveActive) {
+    val groupe = etat.groupe
+    val difficulte = etat.source.difficulte ?: DifficulteEpreuve.MOYENNE
+    Card(colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.35f), contentColor = Color.White)) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Text(
+                (etat.source.difficulte?.let { "Difficulté ${it.libelle.lowercase()}" } ?: "Réussites fixes") +
+                    " · DD ${ReglesEpreuve.ddPour(difficulte, groupe.niveau)} · dégâts ${ReglesEpreuve.degatsPour(difficulte.gravite, groupe.niveau)}" +
+                    if (groupe.parDefaut) "\nAucun groupe détecté : ajustez joueurs et niveau." else "",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Reglage("Joueurs", groupe.joueurs) { EpreuveOutilSession.ajusterGroupe(it, groupe.niveau) }
+                Spacer(Modifier.weight(1f))
+                Reglage("Niveau", groupe.niveau) { EpreuveOutilSession.ajusterGroupe(groupe.joueurs, it) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun Reglage(libelle: String, valeur: Int, onChange: (Int) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(libelle, style = MaterialTheme.typography.bodyMedium)
+        IconButton(onClick = { onChange(valeur - 1) }) { Icon(Icons.Default.Remove, contentDescription = "$libelle moins", tint = Color.White) }
+        Text("$valeur", fontWeight = FontWeight.Bold)
+        IconButton(onClick = { onChange(valeur + 1) }) { Icon(Icons.Default.Add, contentDescription = "$libelle plus", tint = Color.White) }
     }
 }
 

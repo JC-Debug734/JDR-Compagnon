@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -34,6 +36,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.RotateRight
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Explore
@@ -158,6 +162,9 @@ private data class EtapeTrace(val pointId: String?, val fx: Float, val fy: Float
 /** [EtapeTrace.pointId] d'une étape posée sur l'icône du groupe. */
 private const val ETAPE_GROUPE = "__groupe__"
 
+/** Rotation (degrés) de la carte affichée : les icônes et noms sont contre-tournés pour rester lisibles. */
+private val LocalRotationCarte = androidx.compose.runtime.compositionLocalOf { 0f }
+
 /**
  * Groupe montré sur la carte : côté MJ le groupe sélectionné, côté joueur celui diffusé par le
  * MJ (sinon, hors réseau, le groupe local du personnage choisi).
@@ -244,6 +251,10 @@ fun CarteCampagneScreen(
     var afficherNoms by remember(cleCarte) { mutableStateOf(CarteGrillePrefs.afficherNoms(context, cleCarte)) }
     var afficherGrille by remember(cleCarte) { mutableStateOf(CarteGrillePrefs.afficherGrille(context, cleCarte)) }
     var iconesVerrouillees by remember(cleCarte) { mutableStateOf(CarteGrillePrefs.iconesVerrouillees(context, cleCarte)) }
+    // Orientation de la carte (MJ, par quarts de tour) et celle enregistrée par défaut.
+    var rotationDefaut by remember(cleCarte) { mutableStateOf(CarteGrillePrefs.rotationDegres(context, cleCarte)) }
+    var rotation by remember(cleCarte) { mutableStateOf(rotationDefaut) }
+    val tourne = rotation % 180 != 0
     // Réglages d'affichage modifiés pendant la session ; les autres sont relus dans les préférences.
     var reglagesPoints by remember(cleCarte) { mutableStateOf(mapOf<String, ReglagePoint>()) }
     fun reglageDe(pointId: String): ReglagePoint = reglagesPoints[pointId] ?: CartePointPrefs.lire(context, pointId)
@@ -275,7 +286,10 @@ fun CarteCampagneScreen(
     var decalageX by remember(cleCarte) { mutableFloatStateOf(0f) }
     var decalageY by remember(cleCarte) { mutableFloatStateOf(0f) }
     var tailleVue by remember { mutableStateOf(IntSize.Zero) }
-    val tailleBasePx by rememberUpdatedState(with(density) { largeurBase.toPx() to hauteurBase.toPx() })
+    // Taille affichée : largeur et hauteur échangées quand la carte est tournée d'un quart de tour.
+    val tailleBasePx by rememberUpdatedState(
+        with(density) { if (tourne) hauteurBase.toPx() to largeurBase.toPx() else largeurBase.toPx() to hauteurBase.toPx() }
+    )
     val scopeCarte = rememberCoroutineScope()
     var elanCarte by remember { mutableStateOf<Job?>(null) }
     fun bornerDecalage(x: Float, y: Float) {
@@ -401,7 +415,7 @@ fun CarteCampagneScreen(
                                         DropdownMenuItem(
                                             text = { Text("Envoyer à l'écran de table") },
                                             leadingIcon = { Icon(Icons.Default.Send, contentDescription = null) },
-                                            onClick = { menuImageOuvert = false; envoyerCarteALaTable(context, carteActuelle) }
+                                            onClick = { menuImageOuvert = false; envoyerCarteALaTable(context, carteActuelle, rotation) }
                                         )
                                         DropdownMenuItem(
                                             text = { Text("Retirer l'image de fond") },
@@ -493,6 +507,29 @@ fun CarteCampagneScreen(
                                         )
                                     }
                                 }
+                            }
+                        }
+                    }
+                    // MJ : rotation de la carte par quarts de tour ; l'orientation choisie peut être
+                    // enregistrée comme orientation par défaut de cette carte.
+                    if (!readOnly) {
+                        IconButton(onClick = {
+                            rotation = (rotation + 90) % 360
+                            // L'écran de table suit l'orientation choisie (photos, carte, fonds).
+                            NetworkSessionManager.updateTableRotation(rotation)
+                        }) {
+                            Icon(Icons.Default.RotateRight, contentDescription = "Pivoter la carte de 90°")
+                        }
+                        if (rotation != rotationDefaut) {
+                            IconButton(onClick = {
+                                CarteGrillePrefs.setRotationDegres(context, cleCarte, rotation)
+                                rotationDefaut = rotation
+                            }) {
+                                Icon(
+                                    Icons.Default.Save,
+                                    contentDescription = "Enregistrer l'orientation ($rotation°) par défaut",
+                                    tint = Color(0xFFFFD54F)
+                                )
                             }
                         }
                     }
@@ -729,11 +766,20 @@ fun CarteCampagneScreen(
                         val largeurBox = largeurBase * zoom
                         val hauteurBox = hauteurBase * zoom
 
+                        // Carte tournée (MJ) : la zone affichée prend la taille tournée, et la carte y
+                        // est centrée puis pivotée ; gestes et positions restent dans son repère.
                         Box(
                             modifier = Modifier
                                 .wrapContentSize(Alignment.TopStart, unbounded = true)
                                 .offset { androidx.compose.ui.unit.IntOffset(-decalageX.roundToInt(), -decalageY.roundToInt()) }
-                                .size(largeurBox, hauteurBox)
+                                .size(if (tourne) hauteurBox else largeurBox, if (tourne) largeurBox else hauteurBox),
+                            contentAlignment = Alignment.Center
+                        ) {
+                        androidx.compose.runtime.CompositionLocalProvider(LocalRotationCarte provides rotation.toFloat()) {
+                        Box(
+                            modifier = Modifier
+                                .requiredSize(largeurBox, hauteurBox)
+                                .graphicsLayer { rotationZ = rotation.toFloat() }
                         ) {
                             if (imageFondBitmap != null) {
                                 Image(
@@ -836,6 +882,8 @@ fun CarteCampagneScreen(
                                     } else null,
                                 )
                             }
+                        }
+                        }
                         }
                     }
 
@@ -1286,7 +1334,9 @@ private fun PointSurCarte(
             },
         contentAlignment = Alignment.Center
     ) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        // Carte tournée : l'icône et son nom restent droits à l'écran.
+        val rotationCarte = LocalRotationCarte.current
+        Box(modifier = Modifier.fillMaxSize().graphicsLayer { rotationZ = -rotationCarte }, contentAlignment = Alignment.Center) {
             Box(modifier = Modifier.size(tailleIcone)) {
                 Box(
                     modifier = Modifier
@@ -1691,6 +1741,7 @@ private fun MarqueurSurCarte(
     val centreActuel by rememberUpdatedState(Offset(x, y))
     val tailleCarte by rememberUpdatedState(largeurPx to hauteurPx)
     var dragOffset by remember { mutableStateOf(Offset.Zero) }
+    val rotationCarte = LocalRotationCarte.current
     Box(
         modifier = Modifier
             .size(taille)
@@ -1715,6 +1766,8 @@ private fun MarqueurSurCarte(
                     }
                 } else Modifier
             )
+            // Carte tournée : le marqueur et son nom restent droits à l'écran.
+            .graphicsLayer { rotationZ = -rotationCarte }
             .background(couleur, CircleShape)
             .border(2.dp, Color.White, CircleShape),
         contentAlignment = Alignment.Center
@@ -1831,15 +1884,23 @@ private fun OutlinedButtonCompat(text: String, onClick: () -> Unit) {
 /**
  * Affiche l'image de fond de [carte] sur la page d'affichage table (MjWebServer), comme une photo
  * envoyée par le MJ : elle remplace ce qui y était montré. Un message indique le résultat.
+ * La table adopte [rotation] (par défaut l'orientation enregistrée pour cette carte).
  */
-internal fun envoyerCarteALaTable(context: android.content.Context, carte: CarteCampagne) {
+internal fun envoyerCarteALaTable(
+    context: android.content.Context,
+    carte: CarteCampagne,
+    rotation: Int = CarteGrillePrefs.rotationDegres(context, carte.id),
+) {
     val message = when {
         carte.imageFileName == null -> "Cette carte n'a pas d'image à envoyer."
         !NetworkSessionManager.isTableDisplayOnline -> "Écran de table hors ligne : lancez la partie (Connexion) pour l'afficher."
         NetworkSessionManager.sendImageFileToWeb(
             CarteImageStore.fichier(context, carte.imageFileName),
             carte.nom.ifBlank { "Carte" },
-        ) -> "Carte « ${carte.nom.ifBlank { "Carte" }} » envoyée à l'écran de table."
+        ) -> {
+            NetworkSessionManager.updateTableRotation(rotation)
+            "Carte « ${carte.nom.ifBlank { "Carte" }} » envoyée à l'écran de table."
+        }
         else -> "Impossible d'envoyer la carte à l'écran de table."
     }
     android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()

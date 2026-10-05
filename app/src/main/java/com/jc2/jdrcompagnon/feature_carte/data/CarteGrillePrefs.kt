@@ -83,6 +83,14 @@ object CarteGrillePrefs {
         prefs(context).edit().putBoolean("afficher_grille_$campagneId", afficher).apply()
     }
 
+    /** Orientation par défaut de la carte, enregistrée par le MJ : 0, 90, 180 ou 270 degrés. */
+    fun rotationDegres(context: Context, carteId: String): Int =
+        prefs(context).getInt("rotation_$carteId", 0).let { ((it % 360) + 360) % 360 }
+
+    fun setRotationDegres(context: Context, carteId: String, degres: Int) {
+        prefs(context).edit().putInt("rotation_$carteId", ((degres % 360) + 360) % 360).apply()
+    }
+
     /** Verrouille l'emplacement de toutes les icônes de la carte (plus de glisser-déposer). */
     fun iconesVerrouillees(context: Context, campagneId: String): Boolean =
         prefs(context).getBoolean("icones_verrouillees_$campagneId", false)

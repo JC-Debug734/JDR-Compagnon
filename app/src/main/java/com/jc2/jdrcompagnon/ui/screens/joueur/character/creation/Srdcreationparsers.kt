@@ -385,6 +385,11 @@ private fun balisesDe(texte: String): List<Map<String, String>> =
 private fun sansBalises(texte: String): String =
     texte.replace(REGEX_BALISE, "").replace(Regex("""\n{3,}"""), "\n\n").trim()
 
+/** Clé d'une valeur dans une balise "options-<valeur>" : minuscules, sans accents ni espaces. */
+private fun cleOption(valeur: String): String =
+    java.text.Normalizer.normalize(valeur, java.text.Normalizer.Form.NFD)
+        .replace(Regex("\\p{M}"), "").lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-')
+
 private fun listeValeurs(valeur: String?): List<String> =
     valeur?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() }.orEmpty()
 
@@ -473,7 +478,23 @@ fun construireChoix(
     valeursAutres: Map<String, List<String>> = emptyMap(),
 ): ChoixBalise? {
     val effet = b["effet"] ?: EffetBalise.OPTION
-    val spec = b["options"].orEmpty().trim()
+    // "selon: <id>" : les options dépendent de la valeur d'un autre choix de la même source,
+    // listées par "options-<valeur>: ..." (ex. sorts de la lune choisie, « options-nuitari: ... »).
+    val selon = b["selon"]
+    val valeurSelon = selon?.let { valeursAutres[prefixeId + it]?.firstOrNull() }
+    if (selon != null && valeurSelon == null) {
+        return ChoixBalise(
+            id = prefixeId + (b["id"] ?: source),
+            nomTrait = source,
+            raison = raison,
+            nombre = b["choix"]?.toIntOrNull() ?: 1,
+            effet = effet,
+            options = emptyList(),
+            libelle = b["libelle"],
+            enAttente = "Faites d'abord le choix précédent.",
+        )
+    }
+    val spec = (if (valeurSelon != null) b["options-${cleOption(valeurSelon)}"] else b["options"]).orEmpty().trim()
     // "options: sorts-mineurs" / "sorts-niveau-1" + "liste: initie-liste" : sorts de la classe choisie.
     val niveauSorts = when {
         spec.equals("sorts-mineurs", ignoreCase = true) -> 0
@@ -482,7 +503,10 @@ fun construireChoix(
     }
     if (niveauSorts != null) {
         val listeRef = b["liste"]
-        val classeSorts = listeRef?.let { valeursAutres[prefixeId + it]?.firstOrNull() }
+        // "liste: <id d'un autre choix>" (liste choisie par le joueur) ou "liste: Magicien" (liste
+        // imposée, sans choix intermédiaire à une seule option).
+        val classeFixe = listeRef?.takeIf { ref -> ctx.sorts.any { s -> s.classes.any { it.equals(ref, ignoreCase = true) } } }
+        val classeSorts = listeRef?.let { valeursAutres[prefixeId + it]?.firstOrNull() } ?: classeFixe
         val sorts = ctx.sorts.filter { s ->
             s.niveau == niveauSorts && (listeRef == null || s.classes.any { it.equals(classeSorts, ignoreCase = true) })
         }
@@ -521,7 +545,14 @@ fun construireChoix(
                     else -> listeValeurs(morceau)
                 }
             }.distinct()
-            liste to DESCRIPTIONS_COMPETENCES.filterKeys { it in liste }
+            // Description de chaque option : compétence connue, sort (son résumé), ou puce
+            // « - **Option** : texte » du texte de la source (ex. les lunes d'un don).
+            liste to liste.mapNotNull { option ->
+                val texte = DESCRIPTIONS_COMPETENCES[option]
+                    ?: descriptionOption(raison, option)?.trimStart('—', '–', ':', ' ')
+                    ?: ctx.sorts.firstOrNull { it.nom.equals(option, ignoreCase = true) }?.resume
+                texte?.let { option to it }
+            }.toMap()
         }
     }
     if (options.isEmpty()) return null
@@ -1011,7 +1042,10 @@ data class Espece(
     val typeCreature: String,
     val taille: String,
     val vitesse: String,
-    val traits: List<Trait>
+    val traits: List<Trait>,
+    // Paragraphe de présentation écrit sous les champs de base (espèce importée, ex. le kender) ;
+    // vide pour les espèces du SRD, présentées par l'assistant de création.
+    val description: String = "",
 ) {
     fun versOption() = OptionChoisie(id = id ?: nom.lowercase(), label = nom)
 }
@@ -1039,8 +1073,12 @@ object EspeceParser {
     fun parse(contenuMd: String): List<Espece> =
         decouperSections(contenuMd, 2).map { section ->
             val champs = extraireChamps(section.corps)
-            // Balises des champs de base (avant "### Traits"), hors l'id de l'espèce elle-même.
-            val corpsBase = section.corps.substringBefore("\n### ")
+            // Balises des champs de base (avant "### Traits"), hors l'id de l'espèce elle-même. Une
+            // espèce importée n'a pas de "### Traits spéciaux" (un "### " y couperait l'entrée,
+            // cf. CustomContentParser) : ses champs s'arrêtent alors au premier trait "#### ",
+            // sans quoi les balises de tous ses traits étaient comptées une seconde fois.
+            val corpsBase = if ("\n### " in section.corps) section.corps.substringBefore("\n### ")
+            else section.corps.substringBefore("\n#### ")
             val traitBase = balisesDe(corpsBase).filter { it.size > 1 && it.containsKey("id") }
                 .takeIf { it.isNotEmpty() }
                 ?.let { balises ->
@@ -1058,7 +1096,11 @@ object EspeceParser {
                 typeCreature = champs["Type de créature"].orEmpty(),
                 taille = champs["Catégorie de taille"].orEmpty(),
                 vitesse = champs["Vitesse"].orEmpty(),
-                traits = traits
+                traits = traits,
+                description = sansBalises(corpsBase).lines()
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() && !it.startsWith("-") && !it.startsWith("#") && it != "---" }
+                    .joinToString(" "),
             )
         }
 }

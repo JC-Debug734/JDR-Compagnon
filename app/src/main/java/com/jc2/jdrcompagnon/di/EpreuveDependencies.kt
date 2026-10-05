@@ -11,6 +11,7 @@ import com.jc2.jdrcompagnon.feature_epreuve.domain.model.Epreuve
 import com.jc2.jdrcompagnon.feature_epreuve.presentation.EpreuveListViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -24,6 +25,14 @@ object EpreuveDependencies {
     }
 
     fun newListViewModel(): EpreuveListViewModel = EpreuveListViewModel(repository)
+
+    /** Épreuves d'un monde (instantané), pour les liens de scénario `#epreuve:[Nom]`. */
+    suspend fun epreuvesDuMonde(worldId: String?): List<Epreuve> =
+        worldId?.let { repository.observerEpreuves(it).first() }.orEmpty()
+
+    /** Résout un lien de scénario `#epreuve:[Nom]` parmi les épreuves de l'outil ÉPREUVES. */
+    suspend fun trouverEpreuve(worldId: String?, nom: String): Epreuve? =
+        epreuvesDuMonde(worldId).firstOrNull { it.nom.equals(nom.trim(), ignoreCase = true) }
 
     private const val PREFS = "epreuves_outil"
 

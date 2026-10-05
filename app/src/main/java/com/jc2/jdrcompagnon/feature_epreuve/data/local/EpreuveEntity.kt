@@ -18,4 +18,8 @@ data class EpreuveEntity(
     val reussitesRequises: Int = 3,
     val imageFileName: String? = null,
     val complicationsJson: String = "[]",
+    // Ajoutée en version 22 (AppDatabase.MIGRATION_21_22).
+    val musicTrackId: String? = null,
+    // Ajoutée en version 23 (AppDatabase.MIGRATION_22_23) : nom de DifficulteEpreuve, null = réussites fixes.
+    val difficulte: String? = null,
 )

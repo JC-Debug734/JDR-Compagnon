@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jc2.jdrcompagnon.feature_combat.domain.model.Etats
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdEntry
 
 // Palette "manuel des monstres" : parchemin, rouge sombre des titres, liseré orangé.
@@ -88,17 +89,62 @@ private val motsClesItalique = Regex(
     """(Corps à corps ou distance :|Corps à corps :|Distance :|Touché :|Échec ou réussite :|Échec :|Réussite :|Raté :|JS [\p{L}]+ :)"""
 )
 
+// Noms des états des règles (Agrippé, À terre…), mis en gras rouge dans le texte des capacités.
+private val nomsEtats = Regex(
+    "(?<!\\p{L})(" + Etats.fiches.filter { it.officiel }.map { it.condition.label }
+        .sortedByDescending { it.length }.joinToString("|") { Regex.escape(it) } + ")(?!\\p{L})"
+)
+
 private fun texteCapacite(capacite: CapaciteMonstre): AnnotatedString = buildAnnotatedString {
     capacite.nom?.let {
         withStyle(SpanStyle(fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic)) { append("$it. ") }
     }
+    // Mots-clés en italique et noms d'états en gras, dans l'ordre du texte.
+    val reperes = (motsClesItalique.findAll(capacite.texte).map { it to false } +
+        nomsEtats.findAll(capacite.texte).map { it to true })
+        .sortedBy { it.first.range.first }
     var dernier = 0
-    motsClesItalique.findAll(capacite.texte).forEach { m ->
+    reperes.forEach { (m, estEtat) ->
+        if (m.range.first < dernier) return@forEach
         append(capacite.texte.substring(dernier, m.range.first))
-        withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { append(m.value) }
+        val style = if (estEtat) SpanStyle(fontWeight = FontWeight.Bold, color = RougeTitre) else SpanStyle(fontStyle = FontStyle.Italic)
+        withStyle(style) { append(m.value) }
         dernier = m.range.last + 1
     }
     append(capacite.texte.substring(dernier))
+}
+
+/**
+ * États reconnus dans une capacité, et ce qu'en fait le combat : la section « Actions » est jouée
+ * par l'application (état appliqué d'office si l'attaque touche, ou proposé au MJ sur JS raté) ;
+ * les autres sections (traits, réactions, actions légendaires) restent à appliquer par le MJ.
+ */
+@Composable
+private fun EtatsInfliges(capacite: CapaciteMonstre, section: String) {
+    val infliges = Etats.infligesPar(capacite.texte)
+    if (infliges.isEmpty()) return
+    val joueeEnCombat = section.equals("Actions", ignoreCase = true)
+    Text(
+        buildAnnotatedString {
+            withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = RougeTitre)) { append("⚠ Inflige : ") }
+            append(infliges.joinToString(" · ") { inflige ->
+                inflige.libelle + when {
+                    !joueeEnCombat -> ""
+                    inflige.surEchecJs -> " — sur JS raté"
+                    else -> " — si l'attaque touche"
+                }
+            })
+            if (!joueeEnCombat) {
+                withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { append(" (à appliquer par le MJ)") }
+            }
+        },
+        color = Encre,
+        fontSize = 12.sp,
+        modifier = Modifier
+            .padding(top = 2.dp)
+            .background(RougeTitre.copy(alpha = 0.08f))
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+    )
 }
 
 /** Filet rouge effilé vers la droite qui sépare les blocs, comme dans le manuel. */
@@ -222,6 +268,7 @@ fun MonsterStatBlock(monster: SrdEntry, modifier: Modifier = Modifier) {
                         fontStyle = if (capacite.nom == null && section.titre.isNotBlank()) FontStyle.Italic else FontStyle.Normal,
                         modifier = Modifier.padding(top = 6.dp),
                     )
+                    EtatsInfliges(capacite, section.titre)
                 }
             }
         }

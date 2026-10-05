@@ -7,8 +7,8 @@ import com.jc2.jdrcompagnon.feature_combat.domain.model.Distance
 import com.jc2.jdrcompagnon.feature_combat.presentation.CombatSession
 import com.jc2.jdrcompagnon.feature_combat.presentation.DeclarationAction
 import com.jc2.jdrcompagnon.feature_combat.presentation.JetCombat
-import com.jc2.jdrcompagnon.feature_environnement.presentation.EpreuveEnCours
-import com.jc2.jdrcompagnon.feature_environnement.presentation.EpreuveSession
+import com.jc2.jdrcompagnon.feature_epreuve.presentation.EpreuveActive
+import com.jc2.jdrcompagnon.feature_epreuve.presentation.EpreuveOutilSession
 import com.jc2.jdrcompagnon.ui.Character
 import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.ScenarioClockData
@@ -100,10 +100,10 @@ object NetworkSessionManager {
                 }
         }
 
-        // Rediffuse aux joueurs l'épreuve environnementale en cours (vue joueur uniquement :
-        // Progrès, pas la Menace) à chaque changement côté MJ.
+        // Rediffuse aux joueurs l'épreuve en cours de l'outil ÉPREUVES (réussites obtenues)
+        // à chaque changement côté MJ.
         scope.launch {
-            EpreuveSession.etat
+            EpreuveOutilSession.etat
                 .map { it?.toJoueurData() }
                 .distinctUntilChanged()
                 .collect { data ->
@@ -234,19 +234,21 @@ object NetworkSessionManager {
         gameServer?.sendToClient(clientId, networkJson.encodeToString(questsStateMessage()))
     }
 
-    private fun EpreuveEnCours.toJoueurData() = EpreuveJoueurData(
-        id = id,
+    // Vue joueur de l'épreuve de l'outil ÉPREUVES : réussites obtenues sur réussites requises
+    // (les complications restent annoncées par le MJ).
+    private fun EpreuveActive.toJoueurData() = EpreuveJoueurData(
+        id = epreuve.id,
         nom = epreuve.nom,
-        type = epreuve.type.label,
+        type = "Épreuve",
         description = epreuve.description,
-        competences = epreuve.competences,
-        progres = progres,
-        progresMax = progresMax,
-        issue = issue?.label
+        competences = emptyList(),
+        progres = reussites.coerceAtMost(epreuve.reussitesRequises),
+        progresMax = epreuve.reussitesRequises,
+        issue = if (terminee) (if (reussie) "Réussite" else "Épreuve arrêtée") else null
     )
 
     private fun sendEpreuveStateTo(clientId: String) {
-        val data = EpreuveSession.etat.value?.toJoueurData() ?: return
+        val data = EpreuveOutilSession.etat.value?.toJoueurData() ?: return
         val message = NetworkMessage(type = NetworkMessage.TYPE_EPREUVE_STATE, epreuve = data)
         gameServer?.sendToClient(clientId, networkJson.encodeToString(message))
     }
@@ -434,6 +436,7 @@ object NetworkSessionManager {
             updateWebServerStatus(ScenarioClockState.state.value)
             server.updateScene(tableScene)
             server.updateExploration(tableExploration)
+            server.updateRotation(tableRotation)
         } catch (e: Exception) {
             webServer = null
             _webServerUrl.value = null
@@ -487,6 +490,16 @@ object NetworkSessionManager {
     fun updateTableExploration(info: MjWebServer.ExplorationInfo?) {
         tableExploration = info
         webServer?.updateExploration(info)
+    }
+
+    // Orientation des images de la table (rotation de l'écran de carte du MJ), gardée même sans
+    // serveur web pour l'appliquer dès son démarrage.
+    private var tableRotation = 0
+
+    /** Fait pivoter toutes les images de la page d'affichage table (degrés, par quarts de tour). */
+    fun updateTableRotation(degres: Int) {
+        tableRotation = degres
+        webServer?.updateRotation(degres)
     }
 
     /** La page d'affichage table est-elle en ligne (partie hébergée) ? */
@@ -935,7 +948,7 @@ object NetworkSessionManager {
         webServer?.updateStatus(
             time = ScenarioClockState.formattedCalendarDate(state.scenarioMinutes, seconds = state.scenarioSeconds),
             weatherKey = state.weather.name.lowercase(),
-            weatherLabel = weatherLabel(state.weather)
+            weatherLabel = weatherLabel(state.weather) + " · " + state.temperature.label
         )
     }
 
@@ -997,9 +1010,16 @@ object NetworkSessionManager {
                     visee != null && combat.combattants.any { it.id == d.deplacementCibleId && it.estMonstre } ->
                         mapOf(d.deplacementCibleId!! to visee)
                     // Se désengager sans précision : quitte le contact de tous les monstres.
-                    desengage -> combat.distancesDe(combattant.id).filterValues { it == Distance.CONTACT }.mapValues { Distance.COURTE }
+                    desengage -> combat.distancesDe(combattant.id).filterValues { it == Distance.CONTACT }
+                        .mapValues { it.value.eloigne(combattant.vitesse) }
                     else -> emptyMap()
                 }
+                // Sort de zone : les créatures dans la zone autour de la cible (sphère) ou devant le
+                // lanceur (cône, ligne) sont ajoutées d'office à celles touchées par le joueur.
+                val declarees = d.ciblesZone.filter { id -> combat.combattants.any { it.id == id } }
+                val ciblesZone = com.jc2.jdrcompagnon.feature_combat.domain.model.ZoneEffet.depuisTexteCode(d.zone)
+                    ?.let { zone -> (declarees + combat.dansLaZone(zone, combattant.id, declarees.firstOrNull() ?: d.cibleId).map { it.id }).distinct() }
+                    ?: declarees
                 CombatSession.declarer(
                     DeclarationAction(
                         combattantId = combattant.id,
@@ -1011,7 +1031,7 @@ object NetworkSessionManager {
                         deplacements = deplacements,
                         desengage = desengage,
                         attaquesJoueur = d.attaques,
-                        ciblesZone = d.ciblesZone.filter { id -> combat.combattants.any { it.id == id } },
+                        ciblesZone = ciblesZone,
                     )
                 )
             }
@@ -1333,12 +1353,13 @@ object NetworkSessionManager {
         distanceVisee: String? = null,
         attaques: List<String> = emptyList(),
         ciblesZone: List<String> = emptyList(),
+        zone: String? = null,
     ) {
         val combat = _combatEnCours.value ?: return
         val socket = currentSocket ?: return
         val declaration = DeclarationJoueurData(
             combat.id, combat.round, libelle, actionId, cibleId, cibleNom, detail?.takeIf { it.isNotBlank() },
-            deplacementCibleId.takeIf { distanceVisee != null }, distanceVisee, attaques, ciblesZone,
+            deplacementCibleId.takeIf { distanceVisee != null }, distanceVisee, attaques, ciblesZone, zone,
         )
         // Affichage immédiat, confirmé par le prochain TYPE_COMBAT_STATE du MJ.
         _combatEnCours.value = combat.copy(maDeclaration = declaration)

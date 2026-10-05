@@ -202,16 +202,29 @@ private fun CombatEnCoursScreenInterne(
         CombatContenu(etat = courant, modifier = Modifier.fillMaxSize().padding(padding))
     }
 
+    var butinFin by remember { mutableStateOf<Combattant?>(null) }
+    butinFin?.let { c -> ButinCombattantDialog(combattant = c, onDismiss = { butinFin = null }) }
+
     if (confirmerFin) {
         val courant = etat
+        val vaincus = courant?.combattants?.filter { it.estMonstre && it.horsCombat }.orEmpty()
         AlertDialog(
             onDismissRequest = { confirmerFin = false },
             title = { Text("Terminer le combat ?") },
             text = {
-                Text(
-                    if (courant != null && courant.monstresRestants > 0) "Il reste ${courant.monstresRestants} adversaire(s) debout. Les PV des personnages sont déjà reportés sur leurs fiches."
-                    else "Les PV des personnages sont déjà reportés sur leurs fiches."
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        if (courant != null && courant.monstresRestants > 0) "Il reste ${courant.monstresRestants} adversaire(s) debout. Les PV des personnages sont déjà reportés sur leurs fiches."
+                        else "Les PV des personnages sont déjà reportés sur leurs fiches."
+                    )
+                    // Dernière occasion de fouiller les vaincus avant que le combat ne disparaisse.
+                    if (vaincus.isNotEmpty()) {
+                        Text("Butin des vaincus", fontWeight = FontWeight.Bold)
+                        vaincus.forEach { v ->
+                            TextButton(onClick = { butinFin = v }) { Text("💰 ${v.nom}") }
+                        }
+                    }
+                }
             },
             confirmButton = {
                 TextButton(onClick = {
@@ -240,6 +253,8 @@ private fun CombatContenu(etat: CombatEnCours, modifier: Modifier) {
     var resolutionPour by remember { mutableStateOf<String?>(null) }
     var profilPour by remember { mutableStateOf<String?>(null) }
     var positionsPour by remember { mutableStateOf<String?>(null) }
+    var butinPour by remember { mutableStateOf<Combattant?>(null) }
+    var reglagesPour by remember { mutableStateOf<String?>(null) }
 
     // PJ tenus par un joueur connecté : ceux-là déclarent depuis leur appareil.
     val clients by NetworkSessionManager.connectedClients.collectAsState()
@@ -254,46 +269,32 @@ private fun CombatContenu(etat: CombatEnCours, modifier: Modifier) {
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 88.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        item {
-            Text(etat.titre, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text(
-                "${etat.combattants.count { !it.estMonstre }} personnage(s) · ${etat.monstresRestants} adversaire(s) debout",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        if (!etat.demarre) {
+        if (etat.demarre) {
             item {
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
-                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Préparation", fontWeight = FontWeight.Bold)
-                        Text(
-                            "L'initiative a été lancée pour tout le monde. Un joueur a lancé son propre dé ? " +
-                                "Appuyez sur sa valeur pour la modifier, puis commencez.",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        FlowRow2 {
-                            OutlinedButton(onClick = { CombatSession.lancerInitiatives(seulementMonstres = false) }) {
-                                Icon(Icons.Default.Casino, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Tout relancer")
-                            }
-                            Button(onClick = { CombatSession.commencer() }, enabled = etat.combattants.isNotEmpty()) {
-                                Text("Commencer le combat")
-                            }
-                        }
-                        Text(
-                            "Chaque round, les joueurs choisissent leur action sur leur appareil et les monstres " +
-                                "décident seuls selon leur profil ; vous résolvez ensuite dans l'ordre d'initiative.",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        Text(
-                            "Placez chaque monstre avant de commencer : appuyez sur sa ligne « 📍 » pour indiquer s'il est " +
-                                "au contact, à courte ou à longue distance de chaque personnage (courte par défaut).",
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Bold
-                        )
+                Text(etat.titre, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    "${etat.combattants.count { !it.estMonstre }} personnage(s) · ${etat.monstresRestants} adversaire(s) debout",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        } else {
+            // Préparation : deux boutons, le réglage de chaque combattant se fait en appuyant sur sa carte.
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(
+                        onClick = { CombatSession.lancerInitiatives(seulementMonstres = false) },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.Casino, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Lancer l'initiative")
                     }
+                    Button(
+                        onClick = { CombatSession.commencer() },
+                        enabled = etat.combattants.isNotEmpty(),
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Démarrer le combat") }
                 }
             }
         }
@@ -319,8 +320,29 @@ private fun CombatContenu(etat: CombatEnCours, modifier: Modifier) {
                 }
             }
         }
-        items(etat.combattants, key = { it.id }) { combattant ->
+        // En préparation, chaque camp est regroupé ; ensuite, l'ordre d'initiative prime.
+        val groupes = if (etat.demarre) listOf<Pair<String?, List<Combattant>>>(null to etat.combattants)
+        else listOf(
+            "Personnages" to etat.combattants.filter { !it.estMonstre },
+            "Adversaires" to etat.combattants.filter { it.estMonstre },
+        ).filter { it.second.isNotEmpty() }
+        groupes.forEach { (titreGroupe, membres) ->
+        if (titreGroupe != null) {
+            item(key = "groupe-$titreGroupe") {
+                Text(
+                    "$titreGroupe (${membres.size})",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = if (titreGroupe == "Adversaires") Color(0xFFE57373) else Color(0xFF64B5F6),
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+        }
+        items(membres, key = { it.id }) { combattant ->
             CarteCombattant(
+                onReglages = if (!etat.demarre) {
+                    { reglagesPour = combattant.id }
+                } else null,
                 combattant = combattant,
                 actif = etat.actif?.id == combattant.id,
                 phase = etat.phase,
@@ -345,8 +367,12 @@ private fun CombatContenu(etat: CombatEnCours, modifier: Modifier) {
                 onPositions = { positionsPour = combattant.id },
                 onImpossible = { CombatSession.annulerAction(combattant.id) },
                 combattantsEnJeu = etat.combattants,
-                relances = etat.relances[combattant.id] ?: 0
+                relances = etat.relances[combattant.id] ?: 0,
+                onButin = if (combattant.estMonstre && combattant.horsCombat) {
+                    { butinPour = combattant }
+                } else null
             )
+        }
         }
         item {
             HorizontalDivider()
@@ -376,6 +402,9 @@ private fun CombatContenu(etat: CombatEnCours, modifier: Modifier) {
             ConditionsDialog(combattant = cible, onDismiss = { cibleConditions = null })
         } ?: run { cibleConditions = null }
     }
+    butinPour?.let { c ->
+        ButinCombattantDialog(combattant = c, onDismiss = { butinPour = null })
+    }
     ficheMonstre?.let { nom ->
         FicheMonstreDialog(nom = nom, onDismiss = { ficheMonstre = null })
     }
@@ -403,12 +432,75 @@ private fun CombatContenu(etat: CombatEnCours, modifier: Modifier) {
             ComportementIADialog(combattant = c, onDismiss = { profilPour = null })
         } ?: run { profilPour = null }
     }
+    reglagesPour?.let { id ->
+        etat.combattants.firstOrNull { it.id == id }?.let { c ->
+            val joueurConnecte = c.characterId != null && c.characterId in personnagesConnectes
+            ReglagesCombattantDialog(
+                combattant = c,
+                resumePositions = resumePositions(etat, c),
+                joueurConnecte = joueurConnecte,
+                onInitiative = { cibleInitiative = c },
+                onPositions = { positionsPour = c.id },
+                onProfil = { profilPour = c.id },
+                onDegats = { cibleDegats = c },
+                onConditions = { cibleConditions = c.id },
+                onFiche = c.monstreNom?.let { nom -> { ficheMonstre = nom } },
+                onRetirer = { CombatSession.retirer(c.id) },
+                onDismiss = { reglagesPour = null }
+            )
+        } ?: run { reglagesPour = null }
+    }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/** Préparation : tous les réglages d'un combattant en un appui sur sa carte. */
 @Composable
-private fun FlowRow2(content: @Composable () -> Unit) {
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { content() }
+private fun ReglagesCombattantDialog(
+    combattant: Combattant,
+    resumePositions: String?,
+    joueurConnecte: Boolean,
+    onInitiative: () -> Unit,
+    onPositions: () -> Unit,
+    onProfil: () -> Unit,
+    onDegats: () -> Unit,
+    onConditions: () -> Unit,
+    onFiche: (() -> Unit)?,
+    onRetirer: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    @Composable
+    fun Ligne(libelle: String, valeur: String? = null, action: () -> Unit) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onDismiss(); action() }
+                .padding(vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(libelle, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            if (valeur != null) {
+                Text(valeur, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(combattant.nom, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                Ligne("🎲 Initiative", combattant.initiative?.toString() ?: "–", onInitiative)
+                Ligne("📍 Position", resumePositions ?: "Courte par défaut", onPositions)
+                if (!joueurConnecte) {
+                    val pilote = if (combattant.piloteParIa) (combattant.profilIA ?: ProfilIA.BRUTE).label else "MJ"
+                    Ligne("🧠 Comportement", pilote, onProfil)
+                }
+                Ligne("❤️ PV", "${combattant.pv}/${combattant.pvMax}", onDegats)
+                Ligne("Conditions", combattant.conditions.size.takeIf { it > 0 }?.toString(), onConditions)
+                if (onFiche != null) Ligne("Voir la fiche", action = onFiche)
+                Ligne("Retirer du combat", action = onRetirer)
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Fermer") } }
+    )
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -435,12 +527,17 @@ private fun CarteCombattant(
     onImpossible: () -> Unit,
     combattantsEnJeu: List<Combattant> = emptyList(),
     relances: Int = 0,
+    // Adversaire vaincu : fouiller le corps (butin à distribuer aux joueurs).
+    onButin: (() -> Unit)? = null,
+    // Préparation : appui sur la carte = fenêtre de réglages du combattant.
+    onReglages: (() -> Unit)? = null,
 ) {
     val couleurCamp = if (combattant.estMonstre) Color(0xFFE57373) else Color(0xFF64B5F6)
     var menuOuvert by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .then(if (onReglages != null) Modifier.clickable(onClick = onReglages) else Modifier)
             .then(if (actif) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, MaterialTheme.shapes.medium) else Modifier),
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(
@@ -559,6 +656,11 @@ private fun CarteCombattant(
                         .padding(top = 6.dp)
                         .clickable(onClick = onProfil)
                 )
+            }
+            if (onButin != null) {
+                TextButton(onClick = onButin, modifier = Modifier.padding(top = 4.dp)) {
+                    Text("💰 Fouiller le corps (butin)")
+                }
             }
             if (!combattant.horsCombat) {
                 // Appui : placer ce combattant par rapport à chacun de ses adversaires.
@@ -686,6 +788,25 @@ private fun ConditionsDialog(combattant: Combattant, onDismiss: () -> Unit) {
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Fermer") } }
     )
+}
+
+/**
+ * Butin d'un adversaire vaincu : monstre du bestiaire (butin généré d'après sa fiche) ou
+ * personnage ennemi (ses possessions réelles). Même butin à chaque réouverture pour ce combattant.
+ */
+@Composable
+private fun ButinCombattantDialog(combattant: Combattant, onDismiss: () -> Unit) {
+    val personnage = combattant.characterId?.let { id -> GameState.characters.value.firstOrNull { it.id == id } }
+    if (personnage != null) {
+        com.jc2.jdrcompagnon.feature_butin.ui.ButinPersonnageDialog(personnage, cle = "combat:${combattant.id}", onDismiss = onDismiss)
+    } else {
+        com.jc2.jdrcompagnon.feature_butin.ui.ButinMonstreDialog(
+            nom = combattant.monstreNom ?: combattant.nom,
+            cle = "combat:${combattant.id}",
+            worldId = GameState.currentWorldId(),
+            onDismiss = onDismiss,
+        )
+    }
 }
 
 @Composable
@@ -839,7 +960,8 @@ private suspend fun ajouterMonstres(context: Context, nom: String, quantite: Int
             attaques = profil.actions.attaques,
             nbAttaquesMultiples = profil.actions.nbAttaquesMultiples,
             profilIA = profil.comportement.profil,
-            raisonProfil = profil.comportement.raison
+            raisonProfil = profil.comportement.raison,
+            vitesse = profil.vitesse
         )
     })
 }

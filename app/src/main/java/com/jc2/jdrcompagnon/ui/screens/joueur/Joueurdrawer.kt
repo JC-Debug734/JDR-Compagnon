@@ -192,23 +192,9 @@ fun JoueurDrawer(
                 style = MaterialTheme.typography.labelSmall,
                 color = ForcedDarkPalette.Content,
             )
-            // Côté joueur, l'écran de campagne se limite aux villes et à la carte
-            // (pas la fiche de suivi MJ, ni les lieux/événements réservés au MJ).
+            // Côté joueur, l'écran de campagne se limite à la carte (pas la fiche de suivi MJ,
+            // ni les lieux/événements réservés au MJ) ; la ville du groupe s'affiche dessous.
             if (campagneId != null) {
-                NavigationDrawerItem(
-                    icon = { Icon(Icons.Default.Place, null, tint = ForcedDarkPalette.Content) },
-                    label = { Text("Villes", color = ForcedDarkPalette.Content) },
-                    selected = false,
-                    onClick = {
-                        onClose()
-                        onOpenVilles(campagneId)
-                    },
-                    colors = NavigationDrawerItemDefaults.colors(
-                        unselectedContainerColor = ForcedDarkPalette.Surface,
-                        unselectedIconColor = ForcedDarkPalette.Content,
-                        unselectedTextColor = ForcedDarkPalette.Content
-                    )
-                )
                 NavigationDrawerItem(
                     icon = { Icon(Icons.Default.Map, null, tint = ForcedDarkPalette.Content) },
                     label = { Text("Carte", color = ForcedDarkPalette.Content) },

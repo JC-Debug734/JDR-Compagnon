@@ -2,6 +2,10 @@ package com.jc2.jdrcompagnon.feature_combat.presentation
 
 import com.jc2.jdrcompagnon.feature_combat.domain.model.AttaqueMonstre
 import com.jc2.jdrcompagnon.feature_combat.domain.model.Combattant
+import com.jc2.jdrcompagnon.feature_combat.domain.model.FormeZone
+import com.jc2.jdrcompagnon.feature_combat.domain.model.ZoneEffet
+import com.jc2.jdrcompagnon.feature_combat.domain.model.formatMetres
+import com.jc2.jdrcompagnon.feature_combat.domain.model.vitesseEnMetres
 import com.jc2.jdrcompagnon.feature_combat.domain.model.ConditionCombat
 import com.jc2.jdrcompagnon.feature_combat.domain.model.Distance
 import com.jc2.jdrcompagnon.feature_combat.domain.model.Etats
@@ -111,7 +115,30 @@ data class CombatEnCours(
     // Jets supplémentaires accordés par le MJ à un combattant ce round (sinon un seul jet par type).
     val relances: Map<String, Int> = emptyMap(),
 ) {
-    fun distance(a: String, b: String): Distance = distances[cleDistance(a, b)] ?: Distance.COURTE
+    /**
+     * Distance entre deux combattants. Non placés : 9 m entre adversaires, 3 m entre membres d'un
+     * même camp (groupés), pour que les zones d'effet aient une base réaliste.
+     */
+    fun distance(a: String, b: String): Distance = distances[cleDistance(a, b)] ?: run {
+        val ca = combattants.firstOrNull { it.id == a }
+        val cb = combattants.firstOrNull { it.id == b }
+        if (ca != null && cb != null && ca.estMonstre == cb.estMonstre) Distance.ALLIES_PAR_DEFAUT else Distance.COURTE
+    }
+
+    /**
+     * Créatures prises dans [zone] : autour de la cible visée (sphère, cube, cylindre), ou du
+     * lanceur pour un cône, une ligne ou une émanation (le lanceur lui-même exclu). Un cône ou une
+     * ligne ne touche que le camp adverse du lanceur (la zone part dans une direction).
+     */
+    fun dansLaZone(zone: ZoneEffet, lanceurId: String, cibleId: String?): List<Combattant> {
+        val lanceur = combattants.firstOrNull { it.id == lanceurId }
+        val centreId = if (zone.forme.depuisLanceur || cibleId == null) lanceurId else cibleId
+        return combattants.filter { c ->
+            !c.horsCombat && c.id != lanceurId &&
+                (c.id == centreId || distance(centreId, c.id).metres <= zone.portee + 0.01) &&
+                !(zone.forme in setOf(FormeZone.CONE, FormeZone.LIGNE) && lanceur != null && c.estMonstre == lanceur.estMonstre)
+        }
+    }
 
     /** Distances de [combattantId] à chaque combattant du camp adverse. */
     fun distancesDe(combattantId: String): Map<String, Distance> {
@@ -131,7 +158,7 @@ data class CombatEnCours(
 }
 
 /**
- * Combat actif au niveau application (comme EpreuveSession) : survit à la navigation, pour que
+ * Combat actif au niveau application (comme EpreuveOutilSession) : survit à la navigation, pour que
  * le MJ puisse revenir au scénario puis reprendre le combat depuis le même lien #combat:.
  *
  * Temps de fiction : tant qu'un combat est ouvert, l'horloge de scénario est en pause
@@ -204,6 +231,7 @@ object CombatSession {
         bonusInitiative = character.initiativeBonus,
         // États du champ condition de la fiche (Paralysé, Empoisonné…), suivis ensuite dans les deux sens.
         conditions = Etats.lire(character.condition),
+        vitesse = vitesseEnMetres(character.speed),
     )
 
     fun ajouter(combattants: List<Combattant>) = modifier { etat ->
@@ -656,12 +684,17 @@ object CombatSession {
         val declaration = etat.declarations[actif.id]?.takeIf { it.deplacements.isNotEmpty() } ?: return etat
         val lignes = mutableListOf<String>()
         var distances = etat.distances
-        declaration.deplacements.forEach { (autreId, nouvelle) ->
+        // Déplacement limité à la vitesse du combattant (doublée s'il se précipite).
+        val precipite = declaration.actionId == "dash" || declaration.libelle.contains("précipit", ignoreCase = true)
+        val maxMetres = actif.vitesse * if (precipite) 2 else 1
+        declaration.deplacements.forEach { (autreId, visee) ->
             val autre = etat.combattants.firstOrNull { it.id == autreId } ?: return@forEach
             val ancienne = etat.distance(actif.id, autreId)
+            val nouvelle = ancienne.versAvecDeplacement(visee, maxMetres)
             if (ancienne == nouvelle) return@forEach
             distances = distances + (cleDistance(actif.id, autreId) to nouvelle)
-            lignes += "${actif.nom} → ${nouvelle.label.lowercase()} de ${autre.nom}"
+            lignes += "${actif.nom} → ${nouvelle.label.lowercase()} de ${autre.nom}" +
+                if (nouvelle != visee) " (déplacement limité à ${formatMetres(maxMetres)}, visait ${visee.label.lowercase()})" else ""
             if (ancienne == Distance.CONTACT && !declaration.desengage && !autre.horsCombat) {
                 lignes += "⚠ Attaque d'opportunité : ${autre.nom} peut frapper ${actif.nom} qui quitte son contact"
             }

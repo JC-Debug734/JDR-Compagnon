@@ -21,7 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.RemoveCircleOutline
-import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material.icons.filled.DriveFolderUpload
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.ExpandLess
@@ -56,14 +56,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jc2.jdrcompagnon.ui.WorldState
+import com.jc2.jdrcompagnon.ui.GameState
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
 
 /**
  * Outil IMPORT (tableau de bord MJ) : un seul endroit pour importer n'importe quel fichier ou
- * dossier — le genre de contenu est reconnu automatiquement par [ImportCentral] — et
- * l'historique de tous les imports ([ImportHistorique]). Chaque import de l'historique peut
+ * dossier — le genre de contenu est reconnu automatiquement par [ImportCentral] — et la liste
+ * des imports encore présents dans l'app ([ImportHistorique]). Chaque import peut
  * être supprimé en entier : tout ce qu'il a créé est retiré ([ImportCentral.supprimerImport]).
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -80,7 +81,20 @@ fun ImportScreen(
     var dernier by remember { mutableStateOf<ImportHistorique.Entree?>(null) }
     var aideOuverte by remember { mutableStateOf(ImportPrefs.aideOuverte(context)) }
     var aSupprimer by remember { mutableStateOf<ImportHistorique.Entree?>(null) }
-    var confirmerVider by remember { mutableStateOf(false) }
+    // Imports dont il reste quelque chose dans l'app, avec ces éléments-là seulement : un fichier
+    // supprimé (ici ou ailleurs dans l'app) n'apparaît plus.
+    val scenarios by GameState.mjScenarios.collectAsState()
+    val campagnes by GameState.mjCampaigns.collectAsState()
+    val personnages by GameState.characters.collectAsState()
+    val musiques by com.jc2.jdrcompagnon.ui.ImportedMusicStore.tracks.collectAsState()
+    var presents by remember { mutableStateOf<List<Pair<ImportHistorique.Entree, List<ImportHistorique.ElementImporte>>>?>(null) }
+    LaunchedEffect(entrees, scenarios, campagnes, personnages, musiques, enCours) {
+        if (enCours) return@LaunchedEffect
+        presents = entrees
+            .filter { it.succes && !it.supprime }
+            .map { it to ImportCentral.elementsPresents(context, it) }
+            .filter { it.second.isNotEmpty() }
+    }
 
     fun lancer(action: suspend () -> ImportHistorique.Entree) {
         enCours = true
@@ -104,13 +118,6 @@ fun ImportScreen(
                 navigationIcon = {
                     IconButton(onClick = onOpenMenu) {
                         Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White)
-                    }
-                },
-                actions = {
-                    if (entrees.isNotEmpty()) {
-                        IconButton(onClick = { confirmerVider = true }) {
-                            Icon(Icons.Default.DeleteSweep, contentDescription = "Vider l'historique", tint = Color.White)
-                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
@@ -203,47 +210,30 @@ fun ImportScreen(
                 }
             }
 
-            item(key = "titre_historique") {
-                Text(
-                    "Historique",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            }
-            if (entrees.isEmpty()) {
-                item(key = "vide") {
-                    Text("Aucun import pour l'instant.", color = Color.White.copy(alpha = 0.8f))
-                }
-            }
-            items(entrees, key = { "${it.date}_${it.fichier}" }) { entree ->
+            item(key = "presents") {
                 Carte {
-                    LigneHistorique(
-                        entree,
-                        onSupprimer = if (entree.elements.isNotEmpty() && !entree.supprime && !enCours) {
-                            { aSupprimer = entree }
-                        } else null,
+                    Text(
+                        "Imports présents",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
                     )
+                    when {
+                        presents == null -> CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        presents!!.isEmpty() -> Text("Aucun import dans l'app.", color = Color.White.copy(alpha = 0.8f))
+                        else -> presents!!.forEach { (entree, elements) ->
+                            LigneImport(
+                                entree = entree,
+                                elements = elements,
+                                onSupprimer = if (!enCours) {
+                                    { aSupprimer = entree.copy(elements = elements) }
+                                } else null,
+                            )
+                        }
+                    }
                 }
             }
         }
-    }
-
-    if (confirmerVider) {
-        AlertDialog(
-            onDismissRequest = { confirmerVider = false },
-            title = { Text("Vider l'historique ?") },
-            text = { Text("La liste des imports est effacée. Le contenu importé reste dans l'app, mais ne pourra plus être retiré depuis cet écran.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmerVider = false
-                    ImportHistorique.vider(context)
-                    dernier = null
-                }) { Text("Vider", color = MaterialTheme.colorScheme.error) }
-            },
-            dismissButton = { TextButton(onClick = { confirmerVider = false }) { Text("Annuler") } },
-        )
     }
 
     aSupprimer?.let { entree ->
@@ -286,6 +276,7 @@ private fun libelleType(type: String): String = when (type) {
     "livre" -> "Livres"
     "univers" -> "Univers"
     "musique" -> "Musiques"
+    "epreuve" -> "Épreuves"
     else -> type
 }
 
@@ -359,6 +350,53 @@ private fun LigneHistorique(
             contentDescription = if (deplie) "Masquer les détails" else "Voir les détails",
             tint = Color.White.copy(alpha = 0.7f),
             modifier = Modifier.padding(top = if (deplie) 2.dp else 0.dp),
+        )
+    }
+}
+
+/**
+ * Import encore présent : nom du fichier et genre ; un tap déplie ce qu'il a ajouté (éléments
+ * toujours dans l'app) et le bouton pour tout retirer.
+ */
+@Composable
+private fun LigneImport(
+    entree: ImportHistorique.Entree,
+    elements: List<ImportHistorique.ElementImporte>,
+    onSupprimer: (() -> Unit)?,
+) {
+    var deplie by remember(entree.date, entree.fichier) { mutableStateOf(false) }
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable { deplie = !deplie }.padding(vertical = 4.dp),
+        verticalAlignment = if (deplie) Alignment.Top else Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(entree.fichier, fontWeight = FontWeight.Bold, color = Color.White)
+            Text(
+                "${entree.genre.libelle} · ${DateFormat.getDateInstance(DateFormat.SHORT).format(Date(entree.date))}",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White.copy(alpha = 0.7f),
+            )
+            if (deplie) {
+                elements.groupBy { it.type }.forEach { (type, liste) ->
+                    Text(
+                        libelleType(type) + " : " + liste.joinToString(", ") { it.libelle },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White,
+                    )
+                }
+            }
+        }
+        if (deplie && onSupprimer != null) {
+            IconButton(onClick = onSupprimer) {
+                Icon(Icons.Default.Delete, contentDescription = "Supprimer cet import", tint = MaterialTheme.colorScheme.error)
+            }
+        }
+        Icon(
+            if (deplie) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+            contentDescription = if (deplie) "Masquer les détails" else "Voir les détails",
+            tint = Color.White.copy(alpha = 0.7f),
         )
     }
 }

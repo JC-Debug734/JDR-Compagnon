@@ -182,6 +182,19 @@ fun BestiaryDetailScreen(
                                 Box(modifier = Modifier.padding(bottom = 12.dp)) {
                                     com.jc2.jdrcompagnon.feature_combat.ui.ComportementIaMonstreCard(entry.rawMarkdown)
                                 }
+                                // Butin crédible tiré d'après la fiche (type, puissance, équipement).
+                                var afficherButin by remember { mutableStateOf(false) }
+                                OutlinedButton(onClick = { afficherButin = true }, modifier = Modifier.padding(bottom = 12.dp)) {
+                                    Text("💰 Tirer un butin")
+                                }
+                                if (afficherButin) {
+                                    com.jc2.jdrcompagnon.feature_butin.ui.ButinMonstreDialog(
+                                        nom = entry.name,
+                                        cle = "bestiaire:${entry.name}",
+                                        worldId = currentWorld?.id,
+                                        onDismiss = { afficherButin = false },
+                                    )
+                                }
                             }
                             if (entry.aUnBlocDeStats()) {
                                 MonsterStatBlock(entry, modifier = Modifier.clip(RoundedCornerShape(4.dp)))

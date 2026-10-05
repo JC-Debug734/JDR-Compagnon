@@ -55,6 +55,8 @@ data class ExplorationEtat(
     val afficheeSurTable: Boolean,
     val zones: List<ZoneExploration> = emptyList(),
     val lieux: List<LieuExploration> = emptyList(),
+    // Zone sur laquelle la page table est zoomée (double appui du MJ) ; null = carte entière.
+    val zoomZoneId: String? = null,
 ) {
     fun index(colonne: Int, ligne: Int): Int = ligne * colonnes + colonne
 
@@ -140,7 +142,7 @@ object ExplorationGrille {
 object ExplorationSession {
 
     const val COLONNES_DEFAUT = 20
-    val PLAGE_COLONNES = 4..80
+    val PLAGE_COLONNES = 4..250
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -251,11 +253,84 @@ object ExplorationSession {
         else prefs(context).edit().remove("revelees_$cle").apply()
     }
 
-    /** Un clic sur une zone : elle est dévoilée d'un coup (ou remasquée si elle l'était déjà). */
-    fun basculerZone(context: Context, zoneId: String) {
+    /**
+     * Un clic sur une zone : elle est dévoilée d'un coup. Un nouveau clic ne la remasque pas (geste
+     * trop facile à faire par erreur en jeu) : voir [remasquerZone].
+     */
+    fun revelerZone(context: Context, zoneId: String) {
         val e = _etat.value ?: return
         val zone = e.zones.firstOrNull { it.id == zoneId } ?: return
-        publier(context, e.copy(revelees = ExplorationGrille.basculerZone(e.revelees, zone)))
+        if (e.revelees.containsAll(zone.cases)) return
+        publier(context, e.copy(revelees = e.revelees + zone.cases))
+    }
+
+    /** Rectangle englobant d'une zone, en fractions de l'image (zoom de la page table). */
+    private fun cadreZone(zone: ZoneExploration, colonnes: Int, lignes: Int): MjWebServer.ZoomTable? {
+        if (zone.cases.isEmpty()) return null
+        val cols = zone.cases.map { it % colonnes }
+        val rows = zone.cases.map { it / colonnes }
+        return MjWebServer.ZoomTable(
+            x = cols.min().toFloat() / colonnes,
+            y = rows.min().toFloat() / lignes,
+            largeur = (cols.max() - cols.min() + 1).toFloat() / colonnes,
+            hauteur = (rows.max() - rows.min() + 1).toFloat() / lignes,
+        )
+    }
+
+    /** Remasque une zone (choix explicite dans le menu de la zone). */
+    fun remasquerZone(context: Context, zoneId: String) {
+        val e = _etat.value ?: return
+        val zone = e.zones.firstOrNull { it.id == zoneId } ?: return
+        publier(context, e.copy(revelees = e.revelees - zone.cases, zoomZoneId = e.zoomZoneId.takeIf { it != zoneId }))
+    }
+
+    /** Révèle une case (sans effet si elle l'est déjà). */
+    fun revelerCase(context: Context, index: Int) {
+        val e = _etat.value ?: return
+        if (index !in 0 until e.colonnes * e.lignes || index in e.revelees) return
+        publier(context, e.copy(revelees = e.revelees + index))
+    }
+
+    /**
+     * Zoom de la page table sur une zone révélée (double appui du MJ) ; sur la zone déjà zoomée,
+     * ou avec null, la table revient à la carte entière.
+     */
+    fun zoomerSurZone(context: Context, zoneId: String?) {
+        val e = _etat.value ?: return
+        val cible = zoneId?.takeIf { it != e.zoomZoneId && e.zones.any { z -> z.id == it } }
+        publier(context, e.copy(zoomZoneId = cible))
+    }
+
+    /** Zone préparée d'une carte de scénario, pour la révéler depuis la lecture du scénario. */
+    data class ZoneDeCarte(val cle: String, val imageFile: File, val zone: ZoneExploration, val revelee: Boolean)
+
+    // Incrémenté à chaque changement de brouillard : la lecture du scénario relit l'état des zones.
+    private val _version = MutableStateFlow(0)
+    val version: StateFlow<Int> = _version.asStateFlow()
+
+    /** Zones préparées des cartes [cartes] (clé → image), avec leur état révélé. */
+    fun zonesDesCartes(context: Context, cartes: List<Pair<String, File>>): List<ZoneDeCarte> {
+        val p = prefs(context)
+        return cartes.flatMap { (cle, image) ->
+            val ouverte = _etat.value?.takeIf { it.cle == cle }
+            val zones = ouverte?.zones ?: runCatching {
+                json.decodeFromString<List<ZoneExploration>>(p.getString("zones_$cle", "[]").orEmpty())
+            }.getOrDefault(emptyList())
+            val revelees = ouverte?.revelees ?: p.getString("revelees_$cle", "").orEmpty()
+                .split(',').mapNotNull { it.toIntOrNull() }.toSet()
+            zones.filter { it.cases.isNotEmpty() }.map { z -> ZoneDeCarte(cle, image, z, revelees.containsAll(z.cases)) }
+        }
+    }
+
+    /**
+     * Révèle une zone d'une carte depuis la lecture du scénario (icône œil) : la carte est chargée
+     * si besoin et envoyée sur la page table, zone dévoilée.
+     */
+    fun revelerZoneDeCarte(context: Context, cle: String, titre: String, imageFile: File, zoneId: String) {
+        ouvrir(context, cle, titre, imageFile)
+        val e = _etat.value?.takeIf { it.cle == cle } ?: return
+        val zone = e.zones.firstOrNull { it.id == zoneId } ?: return
+        publier(context, e.copy(revelees = e.revelees + zone.cases, afficheeSurTable = true))
     }
 
     /** Crée la zone, ou remplace celle de même id. Une zone sans case n'est pas enregistrée. */
@@ -307,6 +382,7 @@ object ExplorationSession {
      */
     private fun publier(context: Context, e: ExplorationEtat, majTable: Boolean = true) {
         _etat.value = e
+        _version.value++
         prefs(context).edit()
             .putInt("colonnes_${e.cle}", e.colonnes)
             .putString("revelees_${e.cle}", e.revelees.sorted().joinToString(","))
@@ -322,6 +398,7 @@ object ExplorationSession {
                     e.imageFile, e.colonnes, e.lignes, e.revelees,
                     // Seuls les lieux que le MJ a rendus visibles partent sur la table.
                     lieux = e.lieux.filter { it.visible }.map { MjWebServer.LieuTable(it.nom, it.fx, it.fy, it.emoji, it.couleurArgb) },
+                    zoom = e.zones.firstOrNull { it.id == e.zoomZoneId }?.let { cadreZone(it, e.colonnes, e.lignes) },
                 )
             } else null
         )

@@ -26,6 +26,11 @@ import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -52,15 +57,17 @@ import androidx.compose.ui.unit.dp
 import com.jc2.jdrcompagnon.feature_environnement.ui.GalerieImagesDialog
 import com.jc2.jdrcompagnon.feature_epreuve.data.EpreuveImageStore
 import com.jc2.jdrcompagnon.feature_epreuve.domain.model.ComplicationEpreuve
+import com.jc2.jdrcompagnon.feature_epreuve.domain.model.DifficulteEpreuve
 import com.jc2.jdrcompagnon.feature_epreuve.domain.model.Epreuve
 import com.jc2.jdrcompagnon.feature_epreuve.domain.model.ReglesEpreuve
+import com.jc2.jdrcompagnon.ui.availableLoopTracks
 
 /**
  * Création ([initiale] null) ou modification d'une épreuve. Les images choisies sont copiées
  * tout de suite (pour l'aperçu) ; à l'enregistrement on supprime celles qui ne servent plus,
  * à l'annulation toutes celles copiées pendant l'édition.
  */
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun EpreuveEditorDialog(
     initiale: Epreuve?,
@@ -73,11 +80,16 @@ fun EpreuveEditorDialog(
     var nom by remember { mutableStateOf(base.nom) }
     var description by remember { mutableStateOf(base.description) }
     var reussites by remember { mutableIntStateOf(base.reussitesRequises) }
+    var difficulte by remember { mutableStateOf(base.difficulte) }
     var image by remember { mutableStateOf(base.imageFileName) }
     val copiesEdition = remember { mutableStateListOf<String>() }
     val complications = remember { mutableStateListOf<ComplicationEpreuve>().apply { addAll(base.complications) } }
     var galerieOuverte by remember { mutableStateOf(false) }
     var erreurNom by remember { mutableStateOf(false) }
+    var musique by remember { mutableStateOf(base.musicTrackId) }
+    var musiqueOuverte by remember { mutableStateOf(false) }
+    // Inclut les musiques importées depuis l'écran Musique.
+    val pistes = remember { listOf("Aucune" to "") + availableLoopTracks.map { it.displayName to it.id } }
 
     fun nouvelleImage(fichier: String?) {
         if (fichier == null) return
@@ -129,15 +141,32 @@ fun EpreuveEditorDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Réussites nécessaires", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                    IconButton(onClick = { reussites = (reussites - 1).coerceAtLeast(ReglesEpreuve.REUSSITES_MIN) }) {
-                        Icon(Icons.Default.Remove, contentDescription = "Moins")
+                Text("Difficulté", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(selected = difficulte == null, onClick = { difficulte = null }, label = { Text("Fixe") })
+                    DifficulteEpreuve.entries.forEach { d ->
+                        FilterChip(selected = difficulte == d, onClick = { difficulte = d }, label = { Text(d.libelle) })
                     }
-                    Text("$reussites", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    IconButton(onClick = { reussites = (reussites + 1).coerceAtMost(ReglesEpreuve.REUSSITES_MAX) }) {
-                        Icon(Icons.Default.Add, contentDescription = "Plus")
+                }
+                val choisie = difficulte
+                if (choisie == null) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Réussites nécessaires", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                        IconButton(onClick = { reussites = (reussites - 1).coerceAtLeast(ReglesEpreuve.REUSSITES_MIN) }) {
+                            Icon(Icons.Default.Remove, contentDescription = "Moins")
+                        }
+                        Text("$reussites", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        IconButton(onClick = { reussites = (reussites + 1).coerceAtMost(ReglesEpreuve.REUSSITES_MAX) }) {
+                            Icon(Icons.Default.Add, contentDescription = "Plus")
+                        }
                     }
+                } else {
+                    Text(
+                        "Adaptée au groupe au lancement : ${ReglesEpreuve.reussitesPour(choisie, 4)} réussites pour 4 joueurs " +
+                            "(${ReglesEpreuve.reussitesPour(choisie, 3)} pour 3, ${ReglesEpreuve.reussitesPour(choisie, 5)} pour 5), " +
+                            "DD ${ReglesEpreuve.ddPour(choisie, 1)} au niveau 1, ${ReglesEpreuve.ddPour(choisie, 10)} au niveau 10.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                 }
 
                 Text("Image affichée sur la table", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
@@ -164,9 +193,38 @@ fun EpreuveEditorDialog(
                     }
                 }
 
+                Text("Musique d'ambiance", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                Text(
+                    "Jouée en boucle au lancement de l'épreuve (outil ÉPREUVES ou lien de scénario).",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                ExposedDropdownMenuBox(expanded = musiqueOuverte, onExpandedChange = { musiqueOuverte = !musiqueOuverte }) {
+                    OutlinedTextField(
+                        value = pistes.find { it.second == (musique ?: "") }?.first ?: "Aucune",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Piste") },
+                        modifier = Modifier.menuAnchor().fillMaxWidth(),
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(musiqueOuverte) },
+                    )
+                    ExposedDropdownMenu(expanded = musiqueOuverte, onDismissRequest = { musiqueOuverte = false }) {
+                        pistes.forEach { (label, id) ->
+                            DropdownMenuItem(
+                                text = { Text(label) },
+                                onClick = {
+                                    musique = id.ifBlank { null }
+                                    musiqueOuverte = false
+                                },
+                            )
+                        }
+                    }
+                }
+
                 Text("Complications en cas d'échec", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                 Text(
-                    "Chaque échec en tire une au hasard. Elles doivent toujours desservir le groupe.",
+                    "Chaque échec en tire une au hasard. Elles doivent toujours desservir le groupe.\n" +
+                        "Valeurs adaptées au niveau du groupe : {DD} (ou {DD+2}), {attaque}, {degats}, " +
+                        "{degats_leger}, {degats_lourd}, {po}. Ex : « JS de Constitution DD {DD} ou {degats} dégâts de froid ».",
                     style = MaterialTheme.typography.bodySmall,
                 )
                 complications.forEachIndexed { index, complication ->
@@ -213,7 +271,9 @@ fun EpreuveEditorDialog(
                         nom = nom.trim(),
                         description = description.trim(),
                         reussitesRequises = reussites,
+                        difficulte = difficulte,
                         imageFileName = image,
+                        musicTrackId = musique,
                         complications = complications
                             .map { ComplicationEpreuve(it.titre.trim(), it.description.trim()) }
                             .filter { it.titre.isNotEmpty() },

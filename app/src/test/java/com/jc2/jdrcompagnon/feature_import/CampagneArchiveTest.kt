@@ -12,6 +12,31 @@ class CampagneArchiveTest {
     private fun dossier(): File = Files.createTempDirectory("campagne").toFile()
 
     @Test
+    fun `les quetes detaillees donnent des quetes de l app`() {
+        val racine = dossier()
+        File(racine, "campagne.json").writeText(
+            """
+            { "titre": "Dragon", "objectifs": ["Ancien format ignoré"],
+              "quetes": [ { "titre": "Excavation naine", "description": "Prévenir les nains.", "notesMj": "Quête de départ.",
+                            "lieu": "Excavation naine", "donneur": "Inconnu", "recompenses": [ { "type": "or", "montant": 50 }, { "type": "BIZARRE" } ] },
+                          { "titre": "Le panneau", "statut": "EN_COURS", "visible": true } ] }
+            """.trimIndent()
+        )
+        val dto = CampagneArchive.lire(racine)!!.dto
+        val quetes = CampagneArchive.quetes(dto.quetes, "dnd", emptyList())
+        assertEquals(listOf("Excavation naine", "Le panneau"), quetes.map { it.title })
+        val excavation = quetes[0]
+        assertEquals(com.jc2.jdrcompagnon.feature_quete.domain.model.QuestStatus.EN_ATTENTE, excavation.status)
+        assertEquals("Excavation naine", excavation.location)
+        assertEquals("Quête de départ.", excavation.mjNotes)
+        assertNull(excavation.giverCharacterId)
+        assertEquals(50, excavation.rewards.single().amount)
+        assertEquals(com.jc2.jdrcompagnon.feature_quete.domain.model.QuestStatus.EN_COURS, quetes[1].status)
+        assertEquals(true, quetes[1].visibleToPlayers)
+        racine.deleteRecursively()
+    }
+
+    @Test
     fun `lit campagne json et l image de carte a cote`() {
         val racine = dossier()
         val sous = File(racine, "Campagne").apply { mkdirs() }

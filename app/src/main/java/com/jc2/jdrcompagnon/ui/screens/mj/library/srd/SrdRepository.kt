@@ -8,6 +8,7 @@ import com.jc2.jdrcompagnon.ui.screens.mj.readCustomBookContent
 import com.jc2.jdrcompagnon.ui.worlds.CustomWorldsRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.withLock
 import java.io.File
 
 /** Un fichier markdown de contenu personnalisé, et le dossier de ses images éventuelles. */
@@ -211,8 +212,18 @@ object SrdRepository {
      * cache, pour que le contenu importé soit toujours pris en compte.
      */
     private suspend fun ensureCustomContentLoaded(context: Context, worldId: String?) = withContext(Dispatchers.IO) {
+        // Verrou : un second chargement simultané (ex. bestiaire et création de personnage)
+        // attend la fin du premier. Sans lui, il trouvait le monde déjà marqué « chargé » alors
+        // que les caches custom* étaient encore vides, et mettait en cache une liste (espèces,
+        // classes...) privée du contenu importé jusqu'à la prochaine invalidation.
+        customContentMutex.withLock { chargerContenuPersonnalise(context, worldId) }
+    }
+
+    private val customContentMutex = kotlinx.coroutines.sync.Mutex()
+
+    private fun chargerContenuPersonnalise(context: Context, worldId: String?) {
         val key = worldId ?: ""
-        if (key in customContentLoadedWorlds) return@withContext
+        if (key in customContentLoadedWorlds) return
         customContentLoadedWorlds.add(key)
 
         // Chaque source garde son fichier et le dossier où chercher les images de ses monstres
@@ -233,7 +244,7 @@ object SrdRepository {
                 runCatching { file.readText() }.getOrNull()?.let { CustomContentSource(it, file, file.parentFile) }
             }
         val allContents = bookContents + worldContents
-        if (allContents.isEmpty()) return@withContext
+        if (allContents.isEmpty()) return
 
         val monsters = mutableListOf<SrdEntry>()
         val equipment = mutableListOf<EquipmentItem>()
@@ -386,16 +397,13 @@ object SrdRepository {
 
     private val etatsCache = mutableMapOf<String, List<SrdSectionEntry>>()
 
-    /**
-     * Livre « États » : généré depuis le catalogue des états (feature_combat, voir [LivreEtats]),
-     * avec les monstres du bestiaire du monde qui infligent chacun d'eux.
-     */
+    /** Livre « États » : généré depuis le catalogue des états (feature_combat, voir [LivreEtats]). */
     suspend fun loadEtats(context: Context, worldId: String? = "donjon_et_dragon"): List<SrdSectionEntry> =
         withContext(Dispatchers.IO) {
             if (!isLibraryAvailable(worldId)) return@withContext emptyList()
             val key = worldId ?: ""
             etatsCache[key]?.let { return@withContext it }
-            LivreEtats.construire(loadMonsters(context, worldId)).also { etatsCache[key] = it }
+            LivreEtats.construire().also { etatsCache[key] = it }
         }
 
     /** Fiche d'un état par son nom (« Paralysé ») ; « paralysée » ou « Incapable d'agir » sont reconnus aussi. */

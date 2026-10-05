@@ -2,40 +2,52 @@ package com.jc2.jdrcompagnon.ui.components
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.ui.draw.clip
-import androidx.compose.material.icons.filled.Sync
-import com.jc2.jdrcompagnon.network.NetworkSessionManager
-import com.jc2.jdrcompagnon.network.PlayerConnectionState
-import com.jc2.jdrcompagnon.network.SessionRole
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AcUnit
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Air
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Celebration
 import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Cyclone
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Grain
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.NightsStay
-import androidx.compose.material.icons.filled.Air
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.SevereCold
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Thermostat
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.filled.WbTwilight
+import androidx.compose.material.icons.filled.Whatshot
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -61,15 +73,22 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.jc2.jdrcompagnon.network.NetworkSessionManager
+import com.jc2.jdrcompagnon.network.PlayerConnectionState
+import com.jc2.jdrcompagnon.network.SessionRole
 import com.jc2.jdrcompagnon.ui.CalendarConfig
+import com.jc2.jdrcompagnon.ui.ClimatMois
 import com.jc2.jdrcompagnon.ui.DayPeriod
 import com.jc2.jdrcompagnon.ui.GameState
+import com.jc2.jdrcompagnon.ui.JourFerie
 import com.jc2.jdrcompagnon.ui.ScenarioClockState
+import com.jc2.jdrcompagnon.ui.ScenarioTemperature
 import com.jc2.jdrcompagnon.ui.ScenarioWeather
 import com.jc2.jdrcompagnon.ui.WeatherSoundManager
 import com.jc2.jdrcompagnon.ui.theme.ForcedDarkPalette
@@ -89,6 +108,9 @@ fun weatherIcon(weather: ScenarioWeather): ImageVector = when (weather) {
     ScenarioWeather.ORAGE -> Icons.Default.Bolt
     ScenarioWeather.NEIGE -> Icons.Default.AcUnit
     ScenarioWeather.BROUILLARD -> Icons.Default.Air
+    ScenarioWeather.FORTE_NEIGE -> Icons.Default.SevereCold
+    ScenarioWeather.VENT_FORT -> Icons.Default.Cyclone
+    ScenarioWeather.SEC -> Icons.Default.Whatshot
 }
 
 fun weatherLabel(weather: ScenarioWeather): String = when (weather) {
@@ -98,15 +120,29 @@ fun weatherLabel(weather: ScenarioWeather): String = when (weather) {
     ScenarioWeather.ORAGE -> "Orage"
     ScenarioWeather.NEIGE -> "Neige"
     ScenarioWeather.BROUILLARD -> "Brouillard"
+    ScenarioWeather.FORTE_NEIGE -> "Forte neige"
+    ScenarioWeather.VENT_FORT -> "Vent fort"
+    ScenarioWeather.SEC -> "Temps sec"
+}
+
+/** Couleur de la température : bleu glacé → rouge brûlant. */
+fun temperatureColor(temperature: ScenarioTemperature): Color = when (temperature) {
+    ScenarioTemperature.FROID_INTENSE -> Color(0xFF81D4FA)
+    ScenarioTemperature.FROID -> Color(0xFFB3E5FC)
+    ScenarioTemperature.FRAIS -> Color(0xFFE0F2F1)
+    ScenarioTemperature.DOUX -> Color.White
+    ScenarioTemperature.CHAUD -> Color(0xFFFFCC80)
+    ScenarioTemperature.FORTE_CHALEUR -> Color(0xFFFF8A65)
 }
 
 /**
  * Ligne compacte affichée dans les menus latéraux MJ et Joueur (Mjdrawer.kt / Joueurdrawer.kt) :
- * icône jour/nuit cohérente avec l'heure de scénario, heure, et icône météo en direct. N'affiche
- * rien tant que la fonction n'est pas activée par le MJ (ScenarioClockState.state.enabled).
+ * icône jour/nuit cohérente avec l'heure de scénario, heure, météo et température en direct,
+ * saison et jour férié du calendrier. N'affiche rien tant que la fonction n'est pas activée par
+ * le MJ (ScenarioClockState.state.enabled). [onClick] (côté MJ) ouvre [ReglageHorlogeDialog].
  */
 @Composable
-fun ScenarioClockRow(modifier: Modifier = Modifier) {
+fun ScenarioClockRow(modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
     val clock by ScenarioClockState.state.collectAsState()
     val calendars by ScenarioClockState.calendars.collectAsState()
     val activeCalendarId by ScenarioClockState.activeCalendarId.collectAsState()
@@ -118,10 +154,20 @@ fun ScenarioClockRow(modifier: Modifier = Modifier) {
     val activeCalendar = remember(calendars, activeCalendarId, remoteCalendar) { ScenarioClockState.activeCalendar() }
     val hour = ScenarioClockState.hourOfDay(clock.scenarioMinutes)
     val period = ScenarioClockState.dayPeriod(hour)
+    val saison = ScenarioClockState.climatCourant(clock.scenarioMinutes, activeCalendar)?.saison?.takeIf { it.isNotBlank() }
+    val ferie = ScenarioClockState.jourFerie(clock.scenarioMinutes, activeCalendar)
 
     // Date complète du calendrier actif, puis l'heure avec secondes (police à chasse fixe : sa
     // largeur ne bouge pas à chaque seconde), météo en dessous.
-    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .then(
+                if (onClick != null) Modifier.clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick).padding(4.dp)
+                else Modifier
+            ),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -132,9 +178,10 @@ fun ScenarioClockRow(modifier: Modifier = Modifier) {
                 tint = ForcedDarkPalette.AccentGold,
                 modifier = Modifier.size(20.dp),
             )
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = ScenarioClockState.formattedCalendarDay(clock.scenarioMinutes, activeCalendar),
+                    text = ScenarioClockState.formattedCalendarDay(clock.scenarioMinutes, activeCalendar) +
+                        (saison?.let { " · $it" } ?: ""),
                     style = MaterialTheme.typography.bodyMedium,
                     color = ForcedDarkPalette.Content,
                 )
@@ -145,6 +192,15 @@ fun ScenarioClockRow(modifier: Modifier = Modifier) {
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
                 )
+            }
+            if (onClick != null) {
+                Icon(Icons.Default.Tune, contentDescription = "Régler l'heure, la date et la météo", tint = ForcedDarkPalette.AccentGold, modifier = Modifier.size(18.dp))
+            }
+        }
+        ferie?.let {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Default.Celebration, contentDescription = null, tint = ForcedDarkPalette.AccentGold, modifier = Modifier.size(18.dp))
+                Text(text = it.nom, style = MaterialTheme.typography.bodySmall, color = ForcedDarkPalette.AccentGold, fontWeight = FontWeight.Bold)
             }
         }
         // Joueur connecté au MJ : état de la synchronisation de l'heure et du calendrier.
@@ -175,6 +231,17 @@ fun ScenarioClockRow(modifier: Modifier = Modifier) {
                 text = weatherLabel(clock.weather),
                 style = MaterialTheme.typography.bodySmall,
                 color = ForcedDarkPalette.Content,
+            )
+            Icon(
+                imageVector = Icons.Default.Thermostat,
+                contentDescription = null,
+                tint = temperatureColor(clock.temperature),
+                modifier = Modifier.size(18.dp),
+            )
+            Text(
+                text = clock.temperature.label,
+                style = MaterialTheme.typography.bodySmall,
+                color = temperatureColor(clock.temperature),
             )
         }
     }
@@ -224,14 +291,148 @@ fun ScenarioClockTicker(modifier: Modifier = Modifier) {
 }
 
 /**
+ * Réglage rapide de l'horloge, ouvert d'un appui sur l'heure dans le menu latéral MJ : heure,
+ * date et (si la météo automatique est coupée) météo et température. Ces réglages manuels ne sont
+ * plus sur l'écran Horloge & météo, qui ne garde que l'activation des fonctions et le calendrier.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun ReglageHorlogeDialog(onDismiss: () -> Unit) {
+    val clock by ScenarioClockState.state.collectAsState()
+    val calendars by ScenarioClockState.calendars.collectAsState()
+    val activeCalendarId by ScenarioClockState.activeCalendarId.collectAsState()
+    val activeCalendar = remember(calendars, activeCalendarId) { ScenarioClockState.activeCalendar() }
+    var heure by remember { mutableStateOf("%02d".format(ScenarioClockState.hourOfDay(clock.scenarioMinutes))) }
+    var minute by remember { mutableStateOf("%02d".format(ScenarioClockState.minuteOfHour(clock.scenarioMinutes))) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Régler l'horloge", fontWeight = FontWeight.Bold) },
+        text = {
+            CompositionLocalProvider(LocalContentColor provides Color.White) {
+                Column(
+                    modifier = Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        ScenarioClockState.formattedCalendarDate(clock.scenarioMinutes, activeCalendar, clock.scenarioSeconds),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    ToggleRow(
+                        label = "Défilement automatique de l'heure",
+                        checked = clock.autoAdvanceEnabled,
+                        onCheckedChange = { ScenarioClockState.setAutoAdvanceEnabled(it) },
+                    )
+
+                    Text("Heure", style = MaterialTheme.typography.labelLarge)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedButton(onClick = { ScenarioClockState.advanceManually(-60) }) { Text("-1 h") }
+                        OutlinedButton(onClick = { ScenarioClockState.advanceManually(-10) }) { Text("-10 min") }
+                        OutlinedButton(onClick = { ScenarioClockState.advanceManually(10) }) { Text("+10 min") }
+                        OutlinedButton(onClick = { ScenarioClockState.advanceManually(60) }) { Text("+1 h") }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = heure,
+                            onValueChange = { heure = it.filter(Char::isDigit).take(2) },
+                            label = { Text("h") },
+                            modifier = Modifier.width(70.dp),
+                            singleLine = true,
+                        )
+                        OutlinedTextField(
+                            value = minute,
+                            onValueChange = { minute = it.filter(Char::isDigit).take(2) },
+                            label = { Text("min") },
+                            modifier = Modifier.width(70.dp),
+                            singleLine = true,
+                        )
+                        OutlinedButton(onClick = {
+                            ScenarioClockState.setTimeOfDay(heure.toIntOrNull() ?: 0, minute.toIntOrNull() ?: 0)
+                        }) { Text("Régler") }
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                    Text("Jour", style = MaterialTheme.typography.labelLarge)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { ScenarioClockState.advanceDays(-1) }) { Text("-1 jour") }
+                        OutlinedButton(onClick = { ScenarioClockState.advanceDays(1) }) { Text("+1 jour") }
+                    }
+                    DatePickerRow(
+                        config = activeCalendar,
+                        initialMinutes = clock.scenarioMinutes,
+                        onSetDate = { year, month, day -> ScenarioClockState.setCurrentDate(year, month, day) },
+                    )
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                    Text("Météo", style = MaterialTheme.typography.labelLarge)
+                    if (clock.autoWeatherEnabled) {
+                        Text(
+                            "Météo automatique : ${weatherLabel(clock.weather)}, ${clock.temperature.label.lowercase()}. " +
+                                "Coupez-la sur l'écran Horloge & météo pour la choisir ici.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.8f),
+                        )
+                    } else {
+                        ChoixMeteo(
+                            meteos = setOf(clock.weather),
+                            onToggle = { ScenarioClockState.setWeather(it) },
+                        )
+                        Text("Température", style = MaterialTheme.typography.labelMedium)
+                        ChoixTemperatures(
+                            temperatures = setOf(clock.temperature),
+                            onToggle = { ScenarioClockState.setTemperature(it) },
+                        )
+                    }
+                    clock.temperature.regle?.let {
+                        Text("⚠ $it", style = MaterialTheme.typography.bodySmall, color = temperatureColor(clock.temperature))
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Fermer") } },
+    )
+}
+
+/** Puces de météo (sélection simple ou multiple selon l'appelant). */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ChoixMeteo(meteos: Set<ScenarioWeather>, onToggle: (ScenarioWeather) -> Unit) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        ScenarioWeather.entries.forEach { weather ->
+            FilterChip(
+                selected = weather in meteos,
+                onClick = { onToggle(weather) },
+                label = { Text(weatherLabel(weather)) },
+                leadingIcon = { Icon(weatherIcon(weather), contentDescription = null, modifier = Modifier.size(16.dp)) },
+            )
+        }
+    }
+}
+
+/** Puces de température (sélection simple ou multiple selon l'appelant). */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ChoixTemperatures(temperatures: Set<ScenarioTemperature>, onToggle: (ScenarioTemperature) -> Unit) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        ScenarioTemperature.entries.forEach { temperature ->
+            FilterChip(
+                selected = temperature in temperatures,
+                onClick = { onToggle(temperature) },
+                label = { Text(temperature.label, color = temperatureColor(temperature)) },
+            )
+        }
+    }
+}
+
+/**
  * Écran de gestion de l'horloge de scénario, ouvert depuis le tableau de bord MJ
- * (MjHomeScreen), même famille que les autres outils MJ (Campagnes, Groupes, Musique...) —
- * une page dédiée plutôt qu'une fenêtre de dialogue, pour rester cohérent avec le reste.
- * Permet d'activer la fonction, le défilement automatique de l'heure et la météo automatique,
- * plus des réglages manuels (heure, météo) utilisables quand l'automatique est coupé. Chaque
+ * (MjHomeScreen) : activation de la fonction, défilement automatique, météo automatique et
+ * ambiance sonore dans une première carte, calendrier (mois, semaine, jours fériés, climat par
+ * mois) dans une carte réductible séparée. Le réglage manuel de l'heure, de la date et de la
+ * météo se fait d'un appui sur l'horloge du menu latéral MJ ([ReglageHorlogeDialog]). Chaque
  * changement est rediffusé en direct aux joueurs connectés (voir
- * NetworkSessionManager.broadcastTimeState) : couper le défilement ou la fonction ici l'arrête
- * immédiatement aussi côté joueurs.
+ * NetworkSessionManager.broadcastTimeState).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -271,223 +472,182 @@ fun ScenarioClockScreen(
         },
         containerColor = Color.Transparent
     ) { innerPadding ->
-        // Contenu posé sur une Surface opaque (comme les autres écrans MJ, ex. MusicScreen) :
-        // sur le fond d'écran décoratif (Scaffold transparent), le texte par défaut n'était
-        // pas assez contrasté pour rester lisible.
-        Surface(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(16.dp),
-            shape = MaterialTheme.shapes.large,
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
-        ) {
         CompositionLocalProvider(LocalContentColor provides Color.White) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            // Carte "Horloge" : fond translucide commun à l'app, texte blanc.
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
+                contentColor = Color.White,
             ) {
-                Icon(dayPeriodIcon(period), contentDescription = null, modifier = Modifier.size(28.dp))
-                Icon(weatherIcon(clock.weather), contentDescription = null, modifier = Modifier.size(24.dp))
-                Text(weatherLabel(clock.weather), style = MaterialTheme.typography.bodyMedium)
-            }
-            Text(
-                text = ScenarioClockState.formattedCalendarDate(clock.scenarioMinutes, activeCalendar, clock.scenarioSeconds),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 12.dp),
-            )
-
-            ToggleRow(
-                label = "Activer la fonction",
-                checked = clock.enabled,
-                onCheckedChange = { ScenarioClockState.setEnabled(it) },
-            )
-            ToggleRow(
-                label = "Défilement automatique de l'heure",
-                checked = clock.autoAdvanceEnabled,
-                enabled = clock.enabled,
-                onCheckedChange = { ScenarioClockState.setAutoAdvanceEnabled(it) },
-            )
-            ToggleRow(
-                label = "Météo automatique",
-                checked = clock.autoWeatherEnabled,
-                enabled = clock.enabled,
-                onCheckedChange = { ScenarioClockState.setAutoWeatherEnabled(it) },
-            )
-            ToggleRow(
-                label = "Effets sonores météo",
-                checked = weatherSoundSettings.enabled,
-                enabled = clock.enabled,
-                onCheckedChange = {
-                    GameState.saveWeatherSoundSettings(weatherSoundSettings.copy(enabled = it))
-                    ScenarioClockState.refreshAmbientSound()
-                },
-            )
-            if (weatherSoundSettings.enabled) {
-                ToggleRow(
-                    label = "Scène en intérieur (pluie étouffée)",
-                    checked = weatherSoundSettings.indoor,
-                    enabled = clock.enabled,
-                    onCheckedChange = {
-                        GameState.saveWeatherSoundSettings(weatherSoundSettings.copy(indoor = it))
-                        ScenarioClockState.refreshAmbientSound()
-                    },
-                )
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(dayPeriodIcon(period), contentDescription = null, modifier = Modifier.size(28.dp))
+                        Icon(weatherIcon(clock.weather), contentDescription = null, modifier = Modifier.size(24.dp))
+                        Text(weatherLabel(clock.weather), style = MaterialTheme.typography.bodyMedium)
+                        Icon(Icons.Default.Thermostat, contentDescription = null, tint = temperatureColor(clock.temperature), modifier = Modifier.size(22.dp))
+                        Text(clock.temperature.label, style = MaterialTheme.typography.bodyMedium, color = temperatureColor(clock.temperature))
+                    }
                     Text(
-                        text = "Volume",
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.width(60.dp),
+                        text = ScenarioClockState.formattedCalendarDate(clock.scenarioMinutes, activeCalendar, clock.scenarioSeconds),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
                     )
-                    Slider(
-                        value = weatherSoundVolume,
-                        onValueChange = {
-                            weatherSoundVolume = it
-                            WeatherSoundManager.setVolume(it)
+                    ScenarioClockState.climatCourant(clock.scenarioMinutes, activeCalendar)?.saison?.takeIf { it.isNotBlank() }?.let {
+                        Text("Saison : $it", style = MaterialTheme.typography.bodySmall)
+                    }
+                    ScenarioClockState.jourFerie(clock.scenarioMinutes, activeCalendar)?.let {
+                        Text("🎉 ${it.nom}", style = MaterialTheme.typography.bodyMedium, color = ForcedDarkPalette.AccentGold, fontWeight = FontWeight.Bold)
+                    }
+                    clock.temperature.regle?.let {
+                        Text("⚠ $it", style = MaterialTheme.typography.bodySmall, color = temperatureColor(clock.temperature))
+                    }
+                    Text(
+                        "Heure, date et météo manuelle : touchez l'horloge dans le menu latéral.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.75f),
+                        modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+                    )
+
+                    ToggleRow(
+                        label = "Activer la fonction",
+                        checked = clock.enabled,
+                        onCheckedChange = { ScenarioClockState.setEnabled(it) },
+                    )
+                    ToggleRow(
+                        label = "Défilement automatique de l'heure",
+                        checked = clock.autoAdvanceEnabled,
+                        enabled = clock.enabled,
+                        onCheckedChange = { ScenarioClockState.setAutoAdvanceEnabled(it) },
+                    )
+                    ToggleRow(
+                        label = "Météo automatique (selon le climat du mois)",
+                        checked = clock.autoWeatherEnabled,
+                        enabled = clock.enabled,
+                        onCheckedChange = { ScenarioClockState.setAutoWeatherEnabled(it) },
+                    )
+                    ToggleRow(
+                        label = "Effets sonores météo",
+                        checked = weatherSoundSettings.enabled,
+                        enabled = clock.enabled,
+                        onCheckedChange = {
+                            GameState.saveWeatherSoundSettings(weatherSoundSettings.copy(enabled = it))
+                            ScenarioClockState.refreshAmbientSound()
                         },
-                        modifier = Modifier.weight(1f),
                     )
-                    Text(
-                        text = "${(weatherSoundVolume * 100).roundToInt()} %",
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.width(48.dp),
-                    )
-                }
-            }
-
-            if (clock.enabled) {
-                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-                Text(
-                    text = "Réglage manuel de l'heure",
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { ScenarioClockState.advanceManually(-60) }) { Text("-1 h") }
-                    OutlinedButton(onClick = { ScenarioClockState.advanceManually(-10) }) { Text("-10 min") }
-                    OutlinedButton(onClick = { ScenarioClockState.advanceManually(10) }) { Text("+10 min") }
-                    OutlinedButton(onClick = { ScenarioClockState.advanceManually(60) }) { Text("+1 h") }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Réglage manuel du jour",
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { ScenarioClockState.advanceDays(-1) }) { Text("-1 jour") }
-                    OutlinedButton(onClick = { ScenarioClockState.advanceDays(1) }) { Text("+1 jour") }
-                }
-
-                if (!clock.autoWeatherEnabled) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "Météo manuelle",
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    ScenarioWeather.entries.forEach { weather ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(weatherIcon(weather), contentDescription = null, modifier = Modifier.size(20.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
+                    if (weatherSoundSettings.enabled) {
+                        ToggleRow(
+                            label = "Scène en intérieur (pluie étouffée)",
+                            checked = weatherSoundSettings.indoor,
+                            enabled = clock.enabled,
+                            onCheckedChange = {
+                                GameState.saveWeatherSoundSettings(weatherSoundSettings.copy(indoor = it))
+                                ScenarioClockState.refreshAmbientSound()
+                            },
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                             Text(
-                                text = weatherLabel(weather),
-                                style = MaterialTheme.typography.bodyMedium,
+                                text = "Volume",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.width(60.dp),
+                            )
+                            Slider(
+                                value = weatherSoundVolume,
+                                onValueChange = {
+                                    weatherSoundVolume = it
+                                    WeatherSoundManager.setVolume(it)
+                                },
                                 modifier = Modifier.weight(1f),
                             )
-                            if (clock.weather == weather) {
-                                Text("Actuelle", style = MaterialTheme.typography.labelSmall, color = Color.White, fontWeight = FontWeight.Bold)
-                            } else {
-                                TextButton(onClick = { ScenarioClockState.setWeather(weather) }) { Text("Choisir", color = Color.White) }
-                            }
+                            Text(
+                                text = "${(weatherSoundVolume * 100).roundToInt()} %",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.width(48.dp),
+                            )
                         }
                     }
                 }
             }
 
-            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-            Text(text = "Calendrier", style = MaterialTheme.typography.labelLarge)
-            Spacer(modifier = Modifier.height(8.dp))
-
-            var calendarMenuExpanded by remember { mutableStateOf(false) }
-            ExposedDropdownMenuBox(
-                expanded = calendarMenuExpanded,
-                onExpandedChange = { calendarMenuExpanded = !calendarMenuExpanded },
-            ) {
-                OutlinedTextField(
-                    value = activeCalendar.nom,
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Calendrier actif") },
-                    modifier = Modifier.menuAnchor().fillMaxWidth(),
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(calendarMenuExpanded) },
+            // Carte "Calendrier", réductible (petite flèche) comme les autres sections de l'app.
+            CollapsibleSectionCard(ownerKey = "horloge", title = "Calendrier") {
+                CalendarSelector(calendars = calendars, activeCalendar = activeCalendar)
+                Spacer(modifier = Modifier.height(4.dp))
+                CalendarConfigEditor(
+                    config = activeCalendar,
+                    onConfigChanged = { ScenarioClockState.updateCalendar(it) },
                 )
-                ExposedDropdownMenu(expanded = calendarMenuExpanded, onDismissRequest = { calendarMenuExpanded = false }) {
-                    calendars.forEach { calendar ->
-                        DropdownMenuItem(
-                            text = { Text(calendar.nom) },
-                            onClick = {
-                                ScenarioClockState.setActiveCalendarId(calendar.id)
-                                calendarMenuExpanded = false
-                            },
-                        )
-                    }
-                }
             }
+
             Spacer(modifier = Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = {
-                    val created = ScenarioClockState.addCalendar("Nouveau calendrier ${calendars.size + 1}")
-                    ScenarioClockState.setActiveCalendarId(created.id)
-                }) { Text("Nouveau calendrier") }
-                if (calendars.none { it.nom == CalendarConfig.calendrierHarptos().nom }) {
-                    OutlinedButton(onClick = {
-                        val created = ScenarioClockState.addHarptosCalendar()
-                        ScenarioClockState.setActiveCalendarId(created.id)
-                    }) { Text("Calendrier D&D (Harpistes)") }
-                }
-                if (calendars.size > 1) {
-                    OutlinedButton(onClick = { ScenarioClockState.deleteCalendar(activeCalendar.id) }) {
-                        Text("Supprimer ce calendrier")
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-            DatePickerRow(
-                config = activeCalendar,
-                initialMinutes = clock.scenarioMinutes,
-                onSetDate = { year, month, day -> ScenarioClockState.setCurrentDate(year, month, day) },
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            CalendarConfigEditor(
-                config = activeCalendar,
-                onConfigChanged = { ScenarioClockState.updateCalendar(it) },
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-        }
         }
         }
     }
 }
 
+/** Choix du calendrier actif, création d'un calendrier vierge ou D&D, suppression. */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun CalendarSelector(calendars: List<CalendarConfig>, activeCalendar: CalendarConfig) {
+    var calendarMenuExpanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(
+        expanded = calendarMenuExpanded,
+        onExpandedChange = { calendarMenuExpanded = !calendarMenuExpanded },
+    ) {
+        OutlinedTextField(
+            value = activeCalendar.nom,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Calendrier actif") },
+            modifier = Modifier.menuAnchor().fillMaxWidth(),
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(calendarMenuExpanded) },
+        )
+        ExposedDropdownMenu(expanded = calendarMenuExpanded, onDismissRequest = { calendarMenuExpanded = false }) {
+            calendars.forEach { calendar ->
+                DropdownMenuItem(
+                    text = { Text(calendar.nom) },
+                    onClick = {
+                        ScenarioClockState.setActiveCalendarId(calendar.id)
+                        calendarMenuExpanded = false
+                    },
+                )
+            }
+        }
+    }
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(onClick = {
+            val created = ScenarioClockState.addCalendar("Nouveau calendrier ${calendars.size + 1}")
+            ScenarioClockState.setActiveCalendarId(created.id)
+        }) { Text("Nouveau calendrier", color = Color.White) }
+        if (calendars.none { it.nom == CalendarConfig.calendrierHarptos().nom }) {
+            OutlinedButton(onClick = {
+                val created = ScenarioClockState.addHarptosCalendar()
+                ScenarioClockState.setActiveCalendarId(created.id)
+            }) { Text("Calendrier D&D (Harpistes)", color = Color.White) }
+        }
+        if (calendars.size > 1) {
+            OutlinedButton(onClick = { ScenarioClockState.deleteCalendar(activeCalendar.id) }) {
+                Text("Supprimer ce calendrier", color = Color.White)
+            }
+        }
+    }
+}
+
 /**
- * Sélecteur de date (année/mois/jour) réutilisé par l'Horloge et l'écran Campagne — un seul
- * calendrier global, partagé entre les deux outils (voir ScenarioClockState).
+ * Sélecteur de date (année/mois/jour) réutilisé par le réglage de l'horloge et l'écran Campagne —
+ * un seul calendrier global, partagé entre les deux outils (voir ScenarioClockState).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -553,22 +713,15 @@ fun DatePickerRow(
 }
 
 /**
- * Édition des noms de mois/jours et du nombre de jours par mois — 12 mois et 7 jours de semaine
- * fixes (comme le calendrier grégorien), mais entièrement renommables et le nombre de jours par
- * mois ajustable, pour approcher un calendrier fantastique (ex. Calendrier des Harpistes).
+ * Édition complète du calendrier actif : nom, année de départ, mois (nombre, noms, jours, climat
+ * et saison de chacun), jours de la semaine (nombre et noms) et jours fériés.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CalendarConfigEditor(
     config: CalendarConfig,
     onConfigChanged: (CalendarConfig) -> Unit,
 ) {
-    var expanded by rememberSaveable { mutableStateOf(false) }
-
-    TextButton(onClick = { expanded = !expanded }) {
-        Text(if (expanded) "Masquer la configuration du calendrier" else "Configurer le calendrier", color = Color.White)
-    }
-    if (!expanded) return
-
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(
             value = config.nom,
@@ -588,31 +741,43 @@ fun CalendarConfigEditor(
             singleLine = true,
         )
 
-        Text(text = "Mois (nom et nombre de jours)", style = MaterialTheme.typography.labelMedium)
+        // --- Mois ---
+        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+        CompteurRow(
+            label = "Mois dans l'année",
+            valeur = config.monthNames.size,
+            onMoins = { onConfigChanged(config.avecMoisRetire(config.monthNames.lastIndex)) },
+            onPlus = { onConfigChanged(config.avecMoisAjoute()) },
+        )
+        Text(
+            "Nom et nombre de jours de chaque mois ; la flèche ouvre son climat (saison, météos et températures possibles).",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.White.copy(alpha = 0.75f),
+        )
+        TextButton(onClick = {
+            val n = config.monthNames.size
+            // Répartition en 4 saisons égales, l'année commençant en hiver.
+            var maj = config
+            for (i in 0 until n) maj = maj.avecClimat(i, ClimatMois.saisons[(i * 4 / n).coerceIn(0, 3)])
+            onConfigChanged(maj)
+        }) { Text("Répartir les 4 saisons sur l'année", color = Color.White) }
         config.monthNames.forEachIndexed { index, name ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { newName ->
-                        onConfigChanged(config.copy(monthNames = config.monthNames.toMutableList().apply { this[index] = newName }))
-                    },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                )
-                OutlinedTextField(
-                    value = config.daysPerMonth.getOrElse(index) { 30 }.toString(),
-                    onValueChange = { text ->
-                        val days = text.filter(Char::isDigit).toIntOrNull()?.coerceIn(1, 99) ?: return@OutlinedTextField
-                        onConfigChanged(config.copy(daysPerMonth = config.daysPerMonth.toMutableList().apply { this[index] = days }))
-                    },
-                    modifier = Modifier.width(70.dp),
-                    singleLine = true,
-                )
-            }
+            MoisEditor(
+                index = index,
+                config = config,
+                name = name,
+                onConfigChanged = onConfigChanged,
+            )
         }
 
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(text = "Jours de la semaine", style = MaterialTheme.typography.labelMedium)
+        // --- Semaine ---
+        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+        CompteurRow(
+            label = "Jours dans la semaine",
+            valeur = config.dayNames.size,
+            onMoins = { if (config.dayNames.size > 1) onConfigChanged(config.copy(dayNames = config.dayNames.dropLast(1))) },
+            onPlus = { onConfigChanged(config.copy(dayNames = config.dayNames + "Jour ${config.dayNames.size + 1}")) },
+        )
         config.dayNames.forEachIndexed { index, name ->
             OutlinedTextField(
                 value = name,
@@ -620,6 +785,183 @@ fun CalendarConfigEditor(
                     onConfigChanged(config.copy(dayNames = config.dayNames.toMutableList().apply { this[index] = newName }))
                 },
                 modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+            )
+        }
+
+        // --- Jours fériés ---
+        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Jours fériés et fêtes", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+            IconButton(onClick = {
+                onConfigChanged(config.copy(joursFeries = config.joursFeries + JourFerie("Nouvelle fête", 0, 1)))
+            }) { Icon(Icons.Default.Add, contentDescription = "Ajouter un jour férié") }
+        }
+        if (config.joursFeries.isEmpty()) {
+            Text("Aucun jour férié.", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.75f))
+        }
+        config.joursFeries.forEachIndexed { index, ferie ->
+            JourFerieEditor(
+                ferie = ferie,
+                config = config,
+                onChange = { maj ->
+                    onConfigChanged(config.copy(joursFeries = config.joursFeries.toMutableList().apply { this[index] = maj }))
+                },
+                onDelete = {
+                    onConfigChanged(config.copy(joursFeries = config.joursFeries.filterIndexed { i, _ -> i != index }))
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun CompteurRow(label: String, valeur: Int, onMoins: () -> Unit, onPlus: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Text(label, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+        IconButton(onClick = onMoins, enabled = valeur > 1) { Icon(Icons.Default.Remove, contentDescription = "Retirer") }
+        Text("$valeur", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        IconButton(onClick = onPlus) { Icon(Icons.Default.Add, contentDescription = "Ajouter") }
+    }
+}
+
+/** Ligne d'un mois : nom, nombre de jours, et climat dépliable. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun MoisEditor(
+    index: Int,
+    config: CalendarConfig,
+    name: String,
+    onConfigChanged: (CalendarConfig) -> Unit,
+) {
+    var climatOuvert by rememberSaveable(config.id, index) { mutableStateOf(false) }
+    val climat = config.climat(index) ?: ClimatMois()
+    Column {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { newName ->
+                    onConfigChanged(config.copy(monthNames = config.monthNames.toMutableList().apply { this[index] = newName }))
+                },
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+                supportingText = climat.saison.takeIf { it.isNotBlank() }?.let { saison -> { Text(saison) } },
+            )
+            OutlinedTextField(
+                value = config.daysPerMonth.getOrElse(index) { 30 }.toString(),
+                onValueChange = { text ->
+                    val days = text.filter(Char::isDigit).toIntOrNull()?.coerceIn(1, 99) ?: return@OutlinedTextField
+                    onConfigChanged(config.copy(daysPerMonth = config.daysPerMonth.toMutableList().apply { this[index] = days }))
+                },
+                modifier = Modifier.width(64.dp),
+                singleLine = true,
+            )
+            IconButton(onClick = { climatOuvert = !climatOuvert }) {
+                Icon(
+                    if (climatOuvert) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (climatOuvert) "Masquer le climat" else "Climat du mois",
+                )
+            }
+        }
+        if (climatOuvert) {
+            Column(
+                modifier = Modifier.padding(start = 8.dp, bottom = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text("Saison", style = MaterialTheme.typography.labelMedium)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ClimatMois.saisons.forEach { preset ->
+                        FilterChip(
+                            selected = climat.saison == preset.saison,
+                            onClick = { onConfigChanged(config.avecClimat(index, preset)) },
+                            label = { Text(preset.saison) },
+                        )
+                    }
+                    FilterChip(
+                        selected = climat == ClimatMois(),
+                        onClick = { onConfigChanged(config.avecClimat(index, ClimatMois())) },
+                        label = { Text("Libre") },
+                    )
+                }
+                OutlinedTextField(
+                    value = climat.saison,
+                    onValueChange = { onConfigChanged(config.avecClimat(index, climat.copy(saison = it))) },
+                    label = { Text("Nom de la saison") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                )
+                Text("Météos possibles", style = MaterialTheme.typography.labelMedium)
+                ChoixMeteo(
+                    meteos = climat.meteos.toSet(),
+                    onToggle = { meteo ->
+                        val maj = if (meteo in climat.meteos) climat.meteos - meteo else climat.meteos + meteo
+                        onConfigChanged(config.avecClimat(index, climat.copy(meteos = maj)))
+                    },
+                )
+                Text("Températures possibles", style = MaterialTheme.typography.labelMedium)
+                ChoixTemperatures(
+                    temperatures = climat.temperatures.toSet(),
+                    onToggle = { t ->
+                        val maj = if (t in climat.temperatures) climat.temperatures - t else climat.temperatures + t
+                        onConfigChanged(config.avecClimat(index, climat.copy(temperatures = maj)))
+                    },
+                )
+                if (config.monthNames.size > 1) {
+                    TextButton(onClick = { onConfigChanged(config.avecMoisRetire(index)) }) {
+                        Icon(Icons.Default.Delete, contentDescription = null, tint = Color.White)
+                        Text("  Supprimer ce mois", color = Color.White)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Un jour férié : nom, mois et jour du mois. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun JourFerieEditor(
+    ferie: JourFerie,
+    config: CalendarConfig,
+    onChange: (JourFerie) -> Unit,
+    onDelete: () -> Unit,
+) {
+    var moisMenu by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = ferie.nom,
+                onValueChange = { onChange(ferie.copy(nom = it)) },
+                label = { Text("Nom") },
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+            )
+            IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, contentDescription = "Supprimer ce jour férié") }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ExposedDropdownMenuBox(expanded = moisMenu, onExpandedChange = { moisMenu = !moisMenu }, modifier = Modifier.weight(1f)) {
+                OutlinedTextField(
+                    value = config.monthNames.getOrElse(ferie.mois) { "Mois ${ferie.mois + 1}" },
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Mois") },
+                    modifier = Modifier.menuAnchor().fillMaxWidth(),
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(moisMenu) },
+                )
+                ExposedDropdownMenu(expanded = moisMenu, onDismissRequest = { moisMenu = false }) {
+                    config.monthNames.forEachIndexed { index, name ->
+                        DropdownMenuItem(text = { Text(name) }, onClick = { onChange(ferie.copy(mois = index)); moisMenu = false })
+                    }
+                }
+            }
+            OutlinedTextField(
+                value = ferie.jour.toString(),
+                onValueChange = { text ->
+                    val jour = text.filter(Char::isDigit).toIntOrNull() ?: return@OutlinedTextField
+                    onChange(ferie.copy(jour = jour.coerceIn(1, config.daysPerMonth.getOrElse(ferie.mois) { 99 })))
+                },
+                label = { Text("Jour") },
+                modifier = Modifier.width(80.dp),
                 singleLine = true,
             )
         }

@@ -7,8 +7,6 @@ import com.jc2.jdrcompagnon.feature_environnement.data.EnvironmentImageStore
 import com.jc2.jdrcompagnon.feature_environnement.data.EnvironnementRepository
 import com.jc2.jdrcompagnon.feature_environnement.data.EnvironnementRepositoryImpl
 import com.jc2.jdrcompagnon.feature_environnement.domain.model.Environnement
-import com.jc2.jdrcompagnon.feature_environnement.domain.model.EpreuveEnvironnementale
-import com.jc2.jdrcompagnon.feature_environnement.domain.usecase.catalogueEpreuves
 import com.jc2.jdrcompagnon.feature_environnement.domain.model.LootEntry
 import com.jc2.jdrcompagnon.feature_environnement.presentation.EnvironmentDetailViewModel
 import com.jc2.jdrcompagnon.feature_environnement.presentation.EnvironmentViewModel
@@ -33,24 +31,6 @@ object EnvironmentDependencies {
 
     fun newDetailViewModel(environnementId: String): EnvironmentDetailViewModel =
         EnvironmentDetailViewModel(environnementId, repository)
-
-    private fun epreuvesDuCatalogue(vararg noms: String): List<EpreuveEnvironnementale> =
-        catalogueEpreuves.filter { it.nom in noms }
-
-    /** Épreuves de tous les environnements d'un monde, avec le nom de leur environnement. */
-    suspend fun epreuvesDuMonde(worldId: String?): List<Pair<String, EpreuveEnvironnementale>> {
-        val monde = worldId ?: return emptyList()
-        return repository.observerEnvironnements(monde).first()
-            .flatMap { environnement -> environnement.epreuves.map { environnement.nom to it } }
-    }
-
-    /**
-     * Résout un lien de scénario `#epreuve:[Nom]` : d'abord parmi les épreuves des environnements
-     * du monde (versions éventuellement adaptées par le MJ), sinon dans le catalogue de l'app.
-     */
-    suspend fun trouverEpreuve(worldId: String?, nom: String): EpreuveEnvironnementale? =
-        epreuvesDuMonde(worldId).firstOrNull { it.second.nom.equals(nom, ignoreCase = true) }?.second
-            ?: catalogueEpreuves.firstOrNull { it.nom.equals(nom, ignoreCase = true) }
 
     /**
      * Pré-remplit quelques environnements d'exemple la première fois qu'un monde n'en a aucun,
@@ -85,7 +65,6 @@ object EnvironmentDependencies {
                         "Un arbre creux dissimule un petit campement abandonné."
                     ),
                     tableButin = listOf(LootEntry("Herbes médicinales", 3), LootEntry("Peau de bête", 2), LootEntry("Arc court", 1)),
-                    epreuves = epreuvesDuCatalogue("Forêt labyrinthique")
                 ),
                 Environnement(
                     nom = "Montagnes escarpées",
@@ -102,7 +81,6 @@ object EnvironmentDependencies {
                         "Un marchand nain, bloqué par la neige, propose du troc."
                     ),
                     tableButin = listOf(LootEntry("Minerai de fer", 3), LootEntry("Corde de 15 mètres", 2), LootEntry("Gemme brute", 1)),
-                    epreuves = epreuvesDuCatalogue("Tempête sur le col", "Crue soudaine")
                 ),
                 Environnement(
                     nom = "Marais fétide",
@@ -119,7 +97,6 @@ object EnvironmentDependencies {
                         "Des feux follets égarent le groupe hors du sentier."
                     ),
                     tableButin = listOf(LootEntry("Champignons luminescents", 3), LootEntry("Fiole de poison", 1), LootEntry("Amulette ternie", 1)),
-                    epreuves = epreuvesDuCatalogue("Marais fétide")
                 ),
                 Environnement(
                     nom = "Donjon en ruines",
@@ -136,7 +113,6 @@ object EnvironmentDependencies {
                         "Un passage secret s'ouvre derrière une tapisserie en lambeaux."
                     ),
                     tableButin = listOf(LootEntry("Pièces anciennes", 3), LootEntry("Parchemin illisible", 2), LootEntry("Arme rouillée", 2)),
-                    epreuves = epreuvesDuCatalogue("Galeries effondrées")
                 ),
                 Environnement(
                     nom = "Ville animée",
@@ -153,7 +129,6 @@ object EnvironmentDependencies {
                         "Un héraut annonce une prime pour la capture d'un criminel recherché."
                     ),
                     tableButin = listOf(LootEntry("Bourse de cuir", 2), LootEntry("Carte de la ville", 2), LootEntry("Bijou de pacotille", 1)),
-                    epreuves = epreuvesDuCatalogue("Émeute en ville", "Poursuite dans les ruelles", "Incendie")
                 )
             )
             exemples.forEach { repository.sauvegarder(avecImageParDefaut(context, it)) }

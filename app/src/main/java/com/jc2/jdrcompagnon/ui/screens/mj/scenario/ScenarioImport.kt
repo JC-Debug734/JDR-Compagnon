@@ -23,6 +23,11 @@ import com.jc2.jdrcompagnon.ui.calculateProficiencyBonus
  * - `{mzone: image=carte-ferme; colonnes=30; nom=Étang; rects=690,590,190,150|...}` : zone
  *   d'exploration préparée pour une image (rectangles x,y,largeur,hauteur en pixels de l'image,
  *   séparés par |), prête à être dévoilée d'un clic sur la page table (feature_exploration).
+ *   Une case couverte par plusieurs zones appartient à la plus petite (voir casesExclusives).
+ * - `{mchapitre: numero=3; titre=Quand la maison brûle; scenario=2}` : chapitre et numéro du
+ *   scénario, qui rangent les listes de scénarios dans l'ordre de jeu (voir ChapitresScenarios).
+ * - `{mevenement: titre=...; type=RENCONTRE; ...}`, dans une scène : événement de la
+ *   bibliothèque créé à l'import et rattaché à la scène (voir ScenarioEvenements).
  *
  * Valeurs échappées comme {mdiscussion:} (\; \} \n \\), cf. GameState.metaLineFields.
  */
@@ -89,12 +94,29 @@ object ScenarioImport {
         val colonnes = (zones.firstNotNullOfOrNull { it.colonnes } ?: ExplorationSession.COLONNES_DEFAUT)
             .coerceIn(ExplorationSession.PLAGE_COLONNES)
         val lignes = ExplorationGrille.lignes(colonnes, largeurImage, hauteurImage)
-        return colonnes to zones.map { z ->
+        val brutes = zones.map { z ->
             ZoneExploration(
                 nom = z.nom,
                 cases = ExplorationGrille.casesPourRectangles(z.rectangles, largeurImage, hauteurImage, colonnes, lignes)
             )
         }
+        return colonnes to casesExclusives(brutes)
+    }
+
+    /**
+     * Une case couverte par plusieurs zones n'appartient qu'à la plus petite (la plus précise) :
+     * dévoiler une grande zone (ex. une piste dessinée par grands rectangles) ne dévoile plus les
+     * salles qu'elle recouvre, chacune restant à dévoiler à part.
+     */
+    internal fun casesExclusives(zones: List<ZoneExploration>): List<ZoneExploration> {
+        val proprietaire = mutableMapOf<Int, Int>()
+        zones.forEachIndexed { i, z ->
+            z.cases.forEach { c ->
+                val actuel = proprietaire[c]
+                if (actuel == null || z.cases.size < zones[actuel].cases.size) proprietaire[c] = i
+            }
+        }
+        return zones.mapIndexed { i, z -> z.copy(cases = z.cases.filter { proprietaire[it] == i }.toSet()) }
     }
 
     /** Remplace les `{image:nom}` par le nom du fichier stocké pour cette image (inconnus laissés tels quels). */
@@ -155,8 +177,9 @@ object ScenarioImport {
 
     /**
      * Construit le scénario (images déjà copiées dans le stockage de l'app) et les fiches PNJ à
-     * créer (celles dont le nom n'existe pas encore dans le monde), sans rien enregistrer —
-     * pour GameState.syncScenariosFromDisk, qui enregistre ses scénarios en lot.
+     * créer (celles dont le nom n'existe pas encore dans le monde), sans enregistrer scénario ni
+     * fiches — pour GameState.syncScenariosFromDisk, qui enregistre ses scénarios en lot. Seuls les
+     * événements {mevenement:} sont enregistrés ici (ids stables : sans doublon d'une fois à l'autre).
      */
     fun preparer(
         context: Context,
@@ -187,12 +210,27 @@ object ScenarioImport {
             nom to fichier
         }.toMap()
 
+        // Événements {mevenement:} des scènes : enregistrés dans la bibliothèque d'événements (ids
+        // stables, une resynchronisation met à jour les mêmes) et rattachés à leur scène.
+        val (scenesAvecEvenements, evenements) = ScenarioEvenements.extraire(scenes, scenarioId, worldId)
+        if (evenements.isNotEmpty()) {
+            runCatching {
+                kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+                    com.jc2.jdrcompagnon.di.EvenementDependencies.repository.sauvegarderTous(evenements)
+                }
+            }.onFailure { android.util.Log.e("ScenarioImport", "Événements non enregistrés", it) }
+        }
+
+        val chapitre = ChapitresScenarios.lire(markdown)
         val scenario = GameState.MjScenario(
             id = scenarioId,
             title = titre,
+            chapitreNumero = chapitre?.numero,
+            chapitreTitre = chapitre?.titre.orEmpty(),
+            numero = chapitre?.scenario,
             description = GameState.preambuleScenario(markdown),
             worldId = worldId,
-            scenes = scenes.map { it.copy(markdownContent = remplacerImages(it.markdownContent, fichiers)) },
+            scenes = scenesAvecEvenements.map { it.copy(markdownContent = remplacerImages(it.markdownContent, fichiers)) },
             createdBy = "MJ",
             lieuNom = extras.lieuNom.orEmpty(),
             lieuImageFileName = extras.lieuImage?.let { fichiers[it] },

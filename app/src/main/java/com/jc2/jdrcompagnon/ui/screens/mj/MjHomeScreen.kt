@@ -444,7 +444,7 @@ private fun CampagneEnCoursCard(
                         shape = RoundedCornerShape(50)
                     ) {
                         Text(
-                            "Reprendre : ${scenarioEnCours.title}",
+                            "Reprendre : ${com.jc2.jdrcompagnon.ui.screens.mj.scenario.ChapitresScenarios.titreNumerote(scenarioEnCours)}",
                             color = Color.White,
                             textAlign = TextAlign.Center,
                         )

@@ -4,6 +4,8 @@ import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -126,6 +128,11 @@ fun ScenarioEditorScreen(
     var lieuNom by rememberSaveable { mutableStateOf("") }
     var lieuImageFileName by rememberSaveable { mutableStateOf<String?>(null) }
     var tableEvenementsId by rememberSaveable { mutableStateOf<String?>(null) }
+    // Chapitre et numéro du scénario (ordre de jeu de la campagne, voir ChapitresScenarios),
+    // saisis en texte puis convertis en nombres à l'enregistrement.
+    var chapitreNumero by rememberSaveable { mutableStateOf("") }
+    var chapitreTitre by rememberSaveable { mutableStateOf("") }
+    var numero by rememberSaveable { mutableStateOf("") }
     var scenes by remember { mutableStateOf(listOf(GameState.MjScene(title = "Scène 1"))) }
     var selectedSceneIndex by remember { mutableStateOf(0) }
     var markdownContent by remember { mutableStateOf(TextFieldValue("")) }
@@ -146,6 +153,9 @@ fun ScenarioEditorScreen(
                 lieuNom = scenario.lieuNom
                 lieuImageFileName = scenario.lieuImageFileName
                 tableEvenementsId = scenario.tableEvenementsId
+                chapitreNumero = scenario.chapitreNumero?.toString().orEmpty()
+                chapitreTitre = scenario.chapitreTitre
+                numero = scenario.numero?.toString().orEmpty()
                 scenes = scenario.scenes.ifEmpty {
                     listOf(GameState.MjScene(title = "Scène 1", markdownContent = scenario.markdownContent))
                 }
@@ -312,7 +322,10 @@ fun ScenarioEditorScreen(
                 scenes = finalScenes,
                 lieuNom = lieuNom,
                 lieuImageFileName = lieuImageFileName,
-                tableEvenementsId = tableEvenementsId
+                tableEvenementsId = tableEvenementsId,
+                chapitreNumero = chapitreNumero.trim().toIntOrNull(),
+                chapitreTitre = chapitreTitre.trim(),
+                numero = numero.trim().toIntOrNull(),
             ) ?: GameState.MjScenario(
                 id = effectiveScenarioId,
                 title = title,
@@ -320,7 +333,10 @@ fun ScenarioEditorScreen(
                 worldId = GameState.currentWorldId() ?: "",
                 lieuNom = lieuNom,
                 lieuImageFileName = lieuImageFileName,
-                tableEvenementsId = tableEvenementsId
+                tableEvenementsId = tableEvenementsId,
+                chapitreNumero = chapitreNumero.trim().toIntOrNull(),
+                chapitreTitre = chapitreTitre.trim(),
+                numero = numero.trim().toIntOrNull(),
             )
             if (existingScenario != null) GameState.updateMjScenario(updated, context)
             else GameState.addMjScenario(updated, context)
@@ -377,6 +393,40 @@ fun ScenarioEditorScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
+                singleLine = true,
+            )
+
+            // Chapitre et numéro : rangent la liste des scénarios dans l'ordre de jeu (« 3.2 »).
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedTextField(
+                    value = chapitreNumero,
+                    onValueChange = { v -> chapitreNumero = v.filter { it.isDigit() }.take(3) },
+                    label = { Text("Chapitre") },
+                    placeholder = { Text("3") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    value = numero,
+                    onValueChange = { v -> numero = v.filter { it.isDigit() }.take(3) },
+                    label = { Text("N° scénario") },
+                    placeholder = { Text("2") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                )
+            }
+            OutlinedTextField(
+                value = chapitreTitre,
+                onValueChange = { chapitreTitre = it },
+                label = { Text("Titre du chapitre (ex : Quand la maison brûle)") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
                 singleLine = true,
             )
 

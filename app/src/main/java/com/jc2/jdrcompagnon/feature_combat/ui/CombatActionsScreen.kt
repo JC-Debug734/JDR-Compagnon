@@ -109,7 +109,7 @@ private val IconesActions: Map<String, ImageVector> = mapOf(
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun CombatActionsScreen(
+internal fun CombatActionsScreen(
     onBack: () -> Unit,
     onOpenMenu: () -> Unit = {},
     titre: String = "Actions de Combat",
@@ -132,6 +132,8 @@ fun CombatActionsScreen(
     onSimuler: ((String) -> Unit)? = null,
     // Simulation : emplacements restants de la simulation (carte des ressources).
     emplacementsSimulation: Map<Int, Int>? = null,
+    // Simulation : arsenal avec les munitions / armes lancées restantes de la simulation.
+    arsenalSimulation: ArsenalJoueur? = null,
 ) {
     var actionDetail by remember { mutableStateOf<ActionCombat?>(null) }
     var vueTactique by remember { mutableStateOf(false) }
@@ -150,7 +152,8 @@ fun CombatActionsScreen(
         ?: personnages.firstOrNull { it.id == selectionId }
         ?: candidats.firstOrNull()
     // Armes équipées et capacités d'attaque, présentées en cartes (une par capacité de combat).
-    val arsenal = rememberArsenal(personnage)
+    val arsenalFiche = rememberArsenal(personnage)
+    val arsenal = arsenalSimulation ?: arsenalFiche
     var armeDetailNom by remember { mutableStateOf<String?>(null) }
     var armeDetailDerniere by remember { mutableStateOf<ArmeEnMain?>(null) }
     var consommables by remember { mutableStateOf<List<EquipmentItem>>(emptyList()) }

@@ -119,10 +119,24 @@ class MjWebServer(private val context: Context) : NanoHTTPD(0) {
         val revelees: Set<Int>,
         // Lieux montrés aux joueurs, dessinés par-dessus le brouillard.
         val lieux: List<LieuTable> = emptyList(),
+        // Zone sur laquelle la table zoome (double appui du MJ), null = carte entière.
+        val zoom: ZoomTable? = null,
     )
+
+    /** Cadre de zoom en fractions de l'image (coin haut-gauche, largeur, hauteur). */
+    data class ZoomTable(val x: Float, val y: Float, val largeur: Float, val hauteur: Float)
 
     /** Lieu visible des joueurs : centre de son icône en fractions de l'image ([fx], [fy]). */
     data class LieuTable(val nom: String, val fx: Float, val fy: Float, val emoji: String, val couleurArgb: Int?)
+
+    // Orientation (degrés, par quarts de tour) choisie par le MJ sur l'écran de carte : appliquée
+    // à toutes les images de la table (photo envoyée, carte d'exploration, fond de scène, épreuve).
+    private var rotationTable = 0
+
+    @Synchronized
+    fun updateRotation(degres: Int) {
+        rotationTable = ((degres % 360) + 360) % 360
+    }
 
     private var currentExploration: ExplorationInfo? = null
     // Version de l'image (cache navigateur) et de l'état (redessin du brouillard seulement si changé).
@@ -149,8 +163,9 @@ class MjWebServer(private val context: Context) : NanoHTTPD(0) {
             val couleur = l.couleurArgb?.let { "#%06X".format(it and 0xFFFFFF) } ?: "#8D6E63"
             """{"nom":"${escapeJson(l.nom)}","x":${l.fx},"y":${l.fy},"emoji":"${escapeJson(l.emoji)}","color":"$couleur"}"""
         }
+        val zoom = explo.zoom?.let { z -> """{"x":${z.x},"y":${z.y},"w":${z.largeur},"h":${z.hauteur}}""" } ?: "null"
         return """{"version":$explorationVersion,"image":"/exploration-image?v=$explorationImageVersion",""" +
-            """"cols":${explo.colonnes},"rows":${explo.lignes},"revealed":"$revelees","lieux":$lieux,""" +
+            """"cols":${explo.colonnes},"rows":${explo.lignes},"revealed":"$revelees","lieux":$lieux,"zoom":$zoom,""" +
             """"masquee":${currentMedia != null && mediaSequence > explorationSequence}}"""
     }
 
@@ -165,6 +180,8 @@ class MjWebServer(private val context: Context) : NanoHTTPD(0) {
                 newFixedLengthResponse(Response.Status.OK, "application/json", statusJson())
             uri == "/api/combat" ->
                 newFixedLengthResponse(Response.Status.OK, "application/json", combatJson())
+            uri == "/api/rotation" ->
+                newFixedLengthResponse(Response.Status.OK, "application/json", synchronized(this) { "$rotationTable" })
             uri == "/api/scene" ->
                 newFixedLengthResponse(Response.Status.OK, "application/json", sceneJson())
             uri == "/scene-image" -> serveSceneImage()
@@ -317,17 +334,21 @@ class MjWebServer(private val context: Context) : NanoHTTPD(0) {
           #topbar .icon { font-size: 1.4rem; }
           #sceneLabel { margin-left: auto; font-weight: 700; text-align: right; }
           #sceneLabel .scene { font-weight: 400; color: #c8c8d8; }
-          #sceneBg {
-            position: fixed; inset: 0; z-index: 0;
+          /* Fonds plein écran : centrés pour pouvoir pivoter (dimensions inversées à 90°/270°). */
+          #sceneBg, #epreuveBg {
+            position: fixed; left: 50%; top: 50%; width: 100vw; height: 100vh;
+            transform: translate(-50%, -50%);
             background-size: cover; background-position: center; background-repeat: no-repeat;
-            transition: background-image 0.6s ease-in-out;
           }
+          #sceneBg { z-index: 0; transition: background-image 0.6s ease-in-out; }
           #stage { z-index: 1; }
           #stage {
             position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
           }
+          /* Une photo affichée remplace l'image de scène en fond (sinon visible autour d'elle). */
+          #stage.photo { background: #0c0c14; }
           #stage img {
-            max-width: 100vw; max-height: 100vh; object-fit: contain;
+            max-width: 100vw; max-height: 100vh; object-fit: contain; transition: transform .4s ease;
           }
           #stage a {
             display: inline-block; padding: 16px 24px; background: #2a2a38; border-radius: 8px;
@@ -400,14 +421,14 @@ class MjWebServer(private val context: Context) : NanoHTTPD(0) {
 
           #explo {
             position: fixed; inset: 0; z-index: 3; display: none;
-            align-items: center; justify-content: center; background: #000;
+            align-items: center; justify-content: center; background: #000; overflow: hidden;
           }
-          #exploBox { position: relative; }
+          #exploBox { position: relative; transition: transform .6s ease; }
           #exploBox img { position: absolute; inset: 0; width: 100%; height: 100%; }
           #exploBox canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
           #exploLieux { position: absolute; inset: 0; pointer-events: none; }
           .lieu {
-            position: absolute; transform: translate(-50%, -17px);
+            position: absolute; transform: translate(-50%, -17px); transform-origin: 50% 17px;
             display: flex; flex-direction: column; align-items: center;
           }
           .lieu .pin {
@@ -420,11 +441,9 @@ class MjWebServer(private val context: Context) : NanoHTTPD(0) {
             background: rgba(0,0,0,0.65); white-space: nowrap;
           }
 
-          #epreuve {
-            position: fixed; inset: 0; z-index: 4; display: none;
-            background-size: cover; background-position: center; background-repeat: no-repeat;
-          }
+          #epreuve { position: fixed; inset: 0; z-index: 4; display: none; overflow: hidden; background: #0c0c14; }
           #epreuve.sansImage { background: radial-gradient(circle at 50% 30%, #2b3550, #0c0c14 75%); }
+          #epreuveBg { position: absolute; }
           #epreuveFlash {
             position: absolute; inset: 0; pointer-events: none; opacity: 0;
             background: radial-gradient(circle, rgba(229,57,53,0) 40%, rgba(229,57,53,0.55));
@@ -478,6 +497,7 @@ class MjWebServer(private val context: Context) : NanoHTTPD(0) {
         </div>
         <div id="explo"><div id="exploBox"><img id="exploImg" alt="Carte"><canvas id="exploFog"></canvas><div id="exploLieux"></div></div></div>
         <div id="epreuve">
+          <div id="epreuveBg"></div>
           <div id="epreuveFlash"></div>
           <div id="epreuvePanel">
             <h2 id="epreuveNom"></h2>
@@ -573,7 +593,7 @@ class MjWebServer(private val context: Context) : NanoHTTPD(0) {
           }
         }
 
-        const weatherIcons = { clair: '☀️', nuageux: '☁️', pluie: '🌧️', orage: '⛈️', neige: '❄️', brouillard: '🌫️' };
+        const weatherIcons = { clair: '☀️', nuageux: '☁️', pluie: '🌧️', orage: '⛈️', neige: '❄️', brouillard: '🌫️', forte_neige: '🌨️', vent_fort: '🌬️', sec: '🏜️' };
 
         async function refreshStatus() {
           try {
@@ -592,6 +612,40 @@ class MjWebServer(private val context: Context) : NanoHTTPD(0) {
 
         let hasSceneImage = false;
         let currentSceneImage = null;
+        let currentMediaKey = null;
+
+        // Orientation choisie par le MJ sur l'écran de carte (0, 90, 180, 270) : toutes les images
+        // de la table pivotent ; à 90°/270° leurs dimensions sont inversées pour remplir l'écran.
+        let tableRotation = 0;
+        function quartTourne() { return tableRotation % 180 !== 0; }
+
+        function applyRotation() {
+          const r = tableRotation, q = quartTourne();
+          for (const id of ['sceneBg', 'epreuveBg']) {
+            const el = document.getElementById(id);
+            el.style.width = q ? '100vh' : '100vw';
+            el.style.height = q ? '100vw' : '100vh';
+            el.style.transform = 'translate(-50%, -50%) rotate(' + r + 'deg)';
+          }
+          const img = document.querySelector('#stage img');
+          if (img) {
+            img.style.maxWidth = q ? '100vh' : '100vw';
+            img.style.maxHeight = q ? '100vw' : '100vh';
+            img.style.transform = r ? 'rotate(' + r + 'deg)' : '';
+          }
+          layoutExplo();
+        }
+
+        async function refreshRotation() {
+          try {
+            const res = await fetch('/api/rotation');
+            const r = await res.json();
+            if (typeof r === 'number' && r !== tableRotation) {
+              tableRotation = r;
+              applyRotation();
+            }
+          } catch (e) {}
+        }
 
         async function refreshScene() {
           try {
@@ -622,7 +676,12 @@ class MjWebServer(private val context: Context) : NanoHTTPD(0) {
             const res = await fetch('/api/media');
             const item = await res.json();
             const stage = document.getElementById('stage');
+            const key = item ? item.url : null;
+            // Même photo qu'au dernier passage : rien à refaire (évite de la recharger toutes les 3 s).
+            if (item && key === currentMediaKey && stage.childElementCount) return;
+            currentMediaKey = key;
             stage.innerHTML = '';
+            stage.classList.toggle('photo', !!item && item.type === 'image');
             if (!item) {
               if (hasSceneImage) return;
               const empty = document.createElement('div');
@@ -636,6 +695,7 @@ class MjWebServer(private val context: Context) : NanoHTTPD(0) {
               img.src = item.url;
               img.alt = item.name;
               stage.appendChild(img);
+              applyRotation();
             } else {
               const a = document.createElement('a');
               a.href = item.url;
@@ -656,13 +716,32 @@ class MjWebServer(private val context: Context) : NanoHTTPD(0) {
           if (!explo || !img.naturalWidth) return;
           const ratio = img.naturalWidth / img.naturalHeight;
           const top = document.getElementById('topbar').offsetHeight;
-          const availW = window.innerWidth, availH = window.innerHeight - top;
+          // Carte pivotée d'un quart de tour : elle doit tenir dans l'écran une fois tournée.
+          const availW = quartTourne() ? window.innerHeight - top : window.innerWidth;
+          const availH = quartTourne() ? window.innerWidth : window.innerHeight - top;
           let w = availW, h = w / ratio;
           if (h > availH) { h = availH; w = h * ratio; }
           box.style.width = w + 'px';
           box.style.height = h + 'px';
           box.style.marginTop = top + 'px';
+          applyZoom();
           drawFog(true);
+          drawLieux();
+        }
+
+        // Zoom sur une zone révélée (double appui du MJ) : la zone est centrée et agrandie.
+        function applyZoom() {
+          const box = document.getElementById('exploBox');
+          const z = explo && explo.zoom;
+          const W = box.clientWidth, H = box.clientHeight;
+          const rot = tableRotation ? 'rotate(' + tableRotation + 'deg) ' : '';
+          if (!z || !W || !H) { box.style.transform = rot; return; }
+          const top = document.getElementById('topbar').offsetHeight;
+          const availW = quartTourne() ? window.innerHeight - top : window.innerWidth;
+          const availH = quartTourne() ? window.innerWidth : window.innerHeight - top;
+          const s = Math.max(1, Math.min(6, 0.9 * Math.min(availW / (z.w * W), availH / (z.h * H))));
+          const dx = (z.x + z.w / 2 - 0.5) * W, dy = (z.y + z.h / 2 - 0.5) * H;
+          box.style.transform = rot + 'scale(' + s + ') translate(' + (-dx) + 'px,' + (-dy) + 'px)';
         }
 
         function drawFog(force) {
@@ -682,11 +761,16 @@ class MjWebServer(private val context: Context) : NanoHTTPD(0) {
           ctx.fillStyle = '#000';
           const cw = canvas.width / explo.cols, ch = canvas.height / explo.rows;
           for (let r = 0; r < explo.rows; r++) {
-            for (let c = 0; c < explo.cols; c++) {
-              if (explo.revealed.charAt(r * explo.cols + c) !== '1') {
+            // Cases masquées consécutives d'une ligne remplies d'un seul rectangle (grilles fines).
+            let debut = -1;
+            for (let c = 0; c <= explo.cols; c++) {
+              const masquee = c < explo.cols && explo.revealed.charAt(r * explo.cols + c) !== '1';
+              if (masquee && debut < 0) debut = c;
+              if (!masquee && debut >= 0) {
                 // Bords arrondis vers l'extérieur : pas de liseré entre deux cases masquées.
-                const x0 = Math.floor(c * cw), y0 = Math.floor(r * ch);
-                ctx.fillRect(x0, y0, Math.ceil((c + 1) * cw) - x0, Math.ceil((r + 1) * ch) - y0);
+                const x0 = Math.floor(debut * cw), y0 = Math.floor(r * ch);
+                ctx.fillRect(x0, y0, Math.ceil(c * cw) - x0, Math.ceil((r + 1) * ch) - y0);
+                debut = -1;
               }
             }
           }
@@ -697,8 +781,10 @@ class MjWebServer(private val context: Context) : NanoHTTPD(0) {
           const layer = document.getElementById('exploLieux');
           if (!explo || !explo.lieux) { layer.innerHTML = ''; return; }
           let html = '';
+          // Icônes et noms contre-tournés : ils restent lisibles quand la carte pivote.
+          const contre = tableRotation ? ';transform:translate(-50%,-17px) rotate(' + (-tableRotation) + 'deg)' : '';
           for (const l of explo.lieux) {
-            html += '<div class="lieu" style="left:' + (l.x * 100) + '%;top:' + (l.y * 100) + '%">' +
+            html += '<div class="lieu" style="left:' + (l.x * 100) + '%;top:' + (l.y * 100) + '%' + contre + '">' +
               '<div class="pin" style="background:' + esc(l.color) + '">' + esc(l.emoji) + '</div>' +
               '<div class="nom">' + esc(l.nom) + '</div></div>';
           }
@@ -723,7 +809,7 @@ class MjWebServer(private val context: Context) : NanoHTTPD(0) {
             } else if (stateChanged) {
               drawFog(false);
             }
-            if (stateChanged) drawLieux();
+            if (stateChanged) { drawLieux(); applyZoom(); }
           } catch (e) {}
         }
 
@@ -740,7 +826,7 @@ class MjWebServer(private val context: Context) : NanoHTTPD(0) {
             layer.style.display = 'block';
             if (ep.image !== epreuveImage) {
               epreuveImage = ep.image;
-              layer.style.backgroundImage = ep.image ? "url('" + ep.image + "')" : '';
+              document.getElementById('epreuveBg').style.backgroundImage = ep.image ? "url('" + ep.image + "')" : '';
               layer.classList.toggle('sansImage', !ep.image);
             }
             document.getElementById('epreuveNom').textContent = ep.nom;
@@ -784,8 +870,10 @@ class MjWebServer(private val context: Context) : NanoHTTPD(0) {
         setInterval(refreshEpreuve, 1000);
 
         window.addEventListener('resize', layoutExplo);
+        refreshRotation();
+        setInterval(refreshRotation, 1000);
         refreshExploration();
-        setInterval(refreshExploration, 1000);
+        setInterval(refreshExploration, 3000);
 
         refreshScene();
         setInterval(refreshScene, 3000);

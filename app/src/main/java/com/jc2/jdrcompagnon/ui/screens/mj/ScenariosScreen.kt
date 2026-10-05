@@ -42,6 +42,7 @@ import com.jc2.jdrcompagnon.ui.components.SelectableListCard
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.jc2.jdrcompagnon.ui.screens.mj.scenario.ChapitresScenarios
 import com.jc2.jdrcompagnon.ui.screens.mj.scenario.ScenarioImport
 
 /**
@@ -166,23 +167,40 @@ fun ScenariosScreen(
                     }
                 }
             } else {
+                // Rangés par chapitre puis par numéro (ordre de jeu), avec un en-tête par chapitre
+                // dès qu'un scénario en porte un (voir ChapitresScenarios).
+                val groupes = remember(filtered) { ChapitresScenarios.grouper(filtered) }
+                val avecEnTetes = remember(filtered) { ChapitresScenarios.aDesChapitres(filtered) }
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(filtered, key = { it.id }) { scenario ->
-                        SelectableListCard(
-                            title = scenario.title,
-                            subtitle = if (scenario.scenes.size > 1) "${scenario.scenes.size} scènes" else null,
-                            selected = scenario.id == lastScenarioId,
-                            onToggleSelect = {
-                                GameState.setLastScenarioId(
-                                    if (lastScenarioId == scenario.id) null else scenario.id
+                    groupes.forEach { (chapitre, scenariosDuChapitre) ->
+                        if (avecEnTetes) {
+                            item(key = "chapitre-${chapitre ?: "aucun"}") {
+                                Text(
+                                    text = chapitre ?: "Sans chapitre",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    modifier = Modifier.padding(top = 8.dp, bottom = 2.dp, start = 4.dp),
                                 )
-                            },
-                            onEdit = { onOpenScenarioEditor(scenario.id) },
-                            onDelete = { scenarioToDelete = scenario }
-                        )
+                            }
+                        }
+                        items(scenariosDuChapitre, key = { it.id }) { scenario ->
+                            SelectableListCard(
+                                title = ChapitresScenarios.titreNumerote(scenario),
+                                subtitle = if (scenario.scenes.size > 1) "${scenario.scenes.size} scènes" else null,
+                                selected = scenario.id == lastScenarioId,
+                                onToggleSelect = {
+                                    GameState.setLastScenarioId(
+                                        if (lastScenarioId == scenario.id) null else scenario.id
+                                    )
+                                },
+                                onEdit = { onOpenScenarioEditor(scenario.id) },
+                                onDelete = { scenarioToDelete = scenario }
+                            )
+                        }
                     }
                 }
             }

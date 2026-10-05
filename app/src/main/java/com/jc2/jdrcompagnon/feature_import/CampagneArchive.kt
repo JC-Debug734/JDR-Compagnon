@@ -58,11 +58,35 @@ object CampagneArchive {
         // Image de la page de présentation (fichier voisin de campagne.json).
         val image: String? = null,
         val calendrier: String? = null,
+        // Ancien format : un titre de quête par ligne (ignoré si [quetes] est renseigné).
         val objectifs: List<String> = emptyList(),
+        val quetes: List<QueteDto> = emptyList(),
         val scenarios: List<String> = emptyList(),
         val carte: CarteDto? = null,
         val lieux: List<LieuDto> = emptyList(),
     )
+
+    /**
+     * Quête de la campagne, au format des quêtes de l'app ([com.jc2.jdrcompagnon.feature_quete.domain.model.Quest]) :
+     * [description] est le texte montré aux joueurs, [notesMj] reste réservé au MJ, [donneur] est le
+     * nom d'une fiche PNJ (créée par un scénario de l'archive), [statut] un QuestStatus (EN_ATTENTE
+     * par défaut). Récompenses : type QuestRewardType (XP, OR, EQUIPEMENT, REPUTATION...), voir [RecompenseDto].
+     */
+    @Serializable
+    data class QueteDto(
+        val titre: String,
+        val description: String = "",
+        val notesMj: String = "",
+        val lieu: String = "",
+        val donneur: String? = null,
+        val statut: String = "EN_ATTENTE",
+        val visible: Boolean = false,
+        val recompensesVisibles: Boolean = false,
+        val recompenses: List<RecompenseDto> = emptyList(),
+    )
+
+    @Serializable
+    data class RecompenseDto(val type: String, val montant: Int = 0, val libelle: String = "", val detail: String = "")
 
     @Serializable
     data class CarteDto(
@@ -215,8 +239,16 @@ object CampagneArchive {
                 description = dto.description,
                 worldId = worldId,
                 scenarioIds = scenarioIds,
-                // Objectifs du dossier de campagne : quêtes en cours, cachées aux joueurs.
-                quests = dto.objectifs.filter { it.isNotBlank() }.map { com.jc2.jdrcompagnon.feature_quete.domain.model.Quest(title = it.trim()) },
+                // Objectifs du dossier de campagne, cachés aux joueurs : seul le premier (le point de
+                // départ, ex. lire le panneau de quêtes) est en cours ; les suivants sont en attente
+                // jusqu'à ce que le MJ les reprenne quand les PJ les découvrent.
+                quests = if (dto.quetes.isNotEmpty()) quetes(dto.quetes, worldId, pnjIds) else dto.objectifs.filter { it.isNotBlank() }.mapIndexed { index, titre ->
+                    com.jc2.jdrcompagnon.feature_quete.domain.model.Quest(
+                        title = titre.trim(),
+                        status = if (index == 0) com.jc2.jdrcompagnon.feature_quete.domain.model.QuestStatus.EN_COURS
+                        else com.jc2.jdrcompagnon.feature_quete.domain.model.QuestStatus.EN_ATTENTE,
+                    )
+                },
                 calendarId = calendrierId,
                 pnjIds = pnjIds.distinct(),
                 livreIds = listOfNotNull(livreId),
@@ -229,6 +261,37 @@ object CampagneArchive {
         return "Campagne « ${dto.titre} » (sélectionnée) : ${scenarioIds.size} scénario(s), ${pnjIds.size} fiche(s), " +
             "${monstres.distinctBy { it.lowercase() }.size} monstre(s) au bestiaire, " +
             "$lieux lieu(x) sur la carte, $boutiques boutique(s)."
+    }
+
+    /**
+     * Quêtes du dossier de campagne : le donneur est retrouvé par son nom parmi les fiches créées
+     * par l'archive ([pnjIds]), à défaut parmi les PNJ du monde ; statut ou type de récompense
+     * inconnu → en attente / récompense ignorée.
+     */
+    internal fun quetes(dtos: List<QueteDto>, worldId: String, pnjIds: List<String>): List<com.jc2.jdrcompagnon.feature_quete.domain.model.Quest> {
+        val fiches = GameState.characters.value
+        fun donneur(nom: String?): String? {
+            val n = nom?.trim()?.takeIf { it.isNotBlank() } ?: return null
+            return (fiches.firstOrNull { it.id in pnjIds && it.name.equals(n, ignoreCase = true) }
+                ?: fiches.firstOrNull { it.type == "PNJ" && it.worldId == worldId && it.name.equals(n, ignoreCase = true) })?.id
+        }
+        return dtos.filter { it.titre.isNotBlank() }.map { q ->
+            com.jc2.jdrcompagnon.feature_quete.domain.model.Quest(
+                title = q.titre.trim(),
+                description = q.description.trim(),
+                mjNotes = q.notesMj.trim(),
+                location = q.lieu.trim(),
+                giverCharacterId = donneur(q.donneur),
+                status = enumOu(q.statut, com.jc2.jdrcompagnon.feature_quete.domain.model.QuestStatus.EN_ATTENTE),
+                visibleToPlayers = q.visible,
+                rewardsVisibleToPlayers = q.recompensesVisibles,
+                rewards = q.recompenses.mapNotNull { r ->
+                    val type = runCatching { com.jc2.jdrcompagnon.feature_quete.domain.model.QuestRewardType.valueOf(r.type.trim().uppercase()) }.getOrNull()
+                        ?: return@mapNotNull null
+                    com.jc2.jdrcompagnon.feature_quete.domain.model.QuestReward(type = type, label = r.libelle.trim(), amount = r.montant, detail = r.detail.trim())
+                },
+            )
+        }
     }
 
     /** Supprime la carte, les lieux (et leurs lieux notables) et les boutiques d'une campagne. */

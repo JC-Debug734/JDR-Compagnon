@@ -23,7 +23,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.InputChip
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -104,6 +104,9 @@ fun MjDrawer(
     val selectedGroupId by GameState.currentGroupId.collectAsState()
     var quickEditCharacter by remember { mutableStateOf<Character?>(null) }
     var questToValidate by remember { mutableStateOf<com.jc2.jdrcompagnon.feature_quete.domain.model.Quest?>(null) }
+    // Appui sur l'horloge : réglage de l'heure, de la date et de la météo manuelle.
+    var reglageHorloge by remember { mutableStateOf(false) }
+    if (reglageHorloge) ReglageHorlogeDialog(onDismiss = { reglageHorloge = false })
     val hasPendingGroupProposals by NetworkSessionManager.hasPendingGroupProposals.collectAsState()
 
     val selectedCampaign = selectedCampaignId?.let { id -> mjCampaigns.firstOrNull { it.id == id } }
@@ -182,7 +185,7 @@ fun MjDrawer(
                     color = ForcedDarkPalette.Content,
                 )
             }
-            ScenarioClockRow()
+            ScenarioClockRow(onClick = { reglageHorloge = true })
             HorizontalDivider(color = ForcedDarkPalette.Indicator)
 
         // --- CAMPAGNE (affichage seul : la sélection se fait dans l'outil CAMPAGNES) : section
@@ -443,7 +446,7 @@ private fun conditionsDe(character: Character): List<String> =
     character.condition.split(",").map { it.trim() }.filter { it.isNotEmpty() }
 
 /**
- * Ajustements rapides MJ (inspiration, XP, conditions, or, fatigue) depuis le tiroir, sans passer
+ * Ajustements rapides MJ (inspiration, états, XP, épuisement) depuis le tiroir, sans passer
  * par la fiche complète. Les changements passent par GameState (source unique de vérité,
  * persistée) : si ce personnage est réclamé par un joueur connecté, NetworkSessionManager les
  * relaie automatiquement à ce client dès que GameState.characters change (voir son init).
@@ -452,7 +455,8 @@ private fun conditionsDe(character: Character): List<String> =
 @Composable
 private fun QuickEditCharacterDialog(character: Character, onDismiss: () -> Unit, onOpenEtat: (String) -> Unit) {
     var xpDelta by rememberSaveable(character.id) { mutableStateOf("") }
-    var goldDelta by rememberSaveable(character.id) { mutableStateOf("") }
+    // Liste complète des états repliée tant que le MJ n'a pas appuyé sur « Donner un état ».
+    var choixEtatOuvert by rememberSaveable(character.id) { mutableStateOf(false) }
     var autreCondition by rememberSaveable(character.id) { mutableStateOf("") }
     val claimedCharacters by NetworkSessionManager.claimedCharacters.collectAsState()
     val isConnectedToPlayer = character.id in claimedCharacters
@@ -517,113 +521,144 @@ private fun QuickEditCharacterDialog(character: Character, onDismiss: () -> Unit
                 }
 
                 // --- ÉTATS (catalogue Etats, le même qu'en combat et dans le livre États) ---
-                Text(
-                    "États : " + conditions.joinToString(", ").ifEmpty { "aucun" },
-                    style = MaterialTheme.typography.labelMedium,
-                )
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Etats.choisissables.forEach { etat ->
-                        FilterChip(
-                            selected = etat in etats,
-                            onClick = { basculerEtat(etat) },
-                            label = { Text(etat.label) },
-                        )
-                    }
-                    // Mentions libres (hors catalogue) : affichées aussi, pour pouvoir les retirer.
-                    autres.forEach { libre ->
-                        FilterChip(selected = true, onClick = { retirerAutre(libre) }, label = { Text(libre) })
-                    }
-                }
-                // Ce que les états cochés imposent (en combat : actions bloquées, vitesse 0…).
-                com.jc2.jdrcompagnon.feature_combat.ui.ResumeEffetsEtats(etats)
-                if (etats.isNotEmpty()) {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                // États subis en puces (appui = retirer) ; la liste complète ne s'ouvre qu'avec « Donner un état ».
+                Text("États", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                if (conditions.isEmpty()) {
+                    Text("Aucun état.", style = MaterialTheme.typography.bodySmall)
+                } else {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         etats.sortedBy { it.ordinal }.forEach { etat ->
-                            TextButton(onClick = { onOpenEtat(etat.label) }) {
-                                Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(etat.label)
+                            InputChip(
+                                selected = true,
+                                onClick = { basculerEtat(etat) },
+                                label = { Text(etat.label) },
+                                trailingIcon = { Icon(Icons.Default.Close, contentDescription = "Retirer ${etat.label}", modifier = Modifier.size(16.dp)) },
+                            )
+                        }
+                        autres.forEach { libre ->
+                            InputChip(
+                                selected = true,
+                                onClick = { retirerAutre(libre) },
+                                label = { Text(libre) },
+                                trailingIcon = { Icon(Icons.Default.Close, contentDescription = "Retirer $libre", modifier = Modifier.size(16.dp)) },
+                            )
+                        }
+                    }
+                    // Ce que les états imposent (en combat : actions bloquées, vitesse 0…) et leur règle.
+                    com.jc2.jdrcompagnon.feature_combat.ui.ResumeEffetsEtats(etats)
+                    if (etats.isNotEmpty()) {
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            etats.sortedBy { it.ordinal }.forEach { etat ->
+                                TextButton(onClick = { onOpenEtat(etat.label) }) {
+                                    Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Règle : ${etat.label}")
+                                }
                             }
                         }
                     }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = autreCondition,
-                        onValueChange = { autreCondition = it.replace(",", "") },
-                        label = { Text("Autre état") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                    )
-                    TextButton(
-                        onClick = {
-                            ajouterLibre(autreCondition)
-                            autreCondition = ""
-                        },
-                        enabled = autreCondition.isNotBlank(),
-                    ) { Text("Ajouter") }
-                }
-                if (conditions.isNotEmpty()) {
-                    TextButton(onClick = { GameState.setCondition(character.id, "") }) { Text("Retirer tous les états") }
+                if (choixEtatOuvert) {
+                    Text("Choisir l'état à donner", style = MaterialTheme.typography.bodySmall)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Etats.choisissables.filter { it !in etats }.forEach { etat ->
+                            AssistChip(
+                                onClick = {
+                                    basculerEtat(etat)
+                                    choixEtatOuvert = false
+                                },
+                                label = { Text(etat.label) },
+                            )
+                        }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = autreCondition,
+                            onValueChange = { autreCondition = it.replace(",", "") },
+                            label = { Text("Autre état (texte libre)") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                        )
+                        TextButton(
+                            onClick = {
+                                ajouterLibre(autreCondition)
+                                autreCondition = ""
+                                choixEtatOuvert = false
+                            },
+                            enabled = autreCondition.isNotBlank(),
+                        ) { Text("Ajouter") }
+                    }
+                    TextButton(onClick = { choixEtatOuvert = false }) { Text("Annuler") }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { choixEtatOuvert = true }) {
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Donner un état")
+                        }
+                        if (conditions.isNotEmpty()) {
+                            TextButton(onClick = { GameState.setCondition(character.id, "") }) { Text("Tout retirer") }
+                        }
+                    }
                 }
 
+                HorizontalDivider()
+
                 // --- XP ---
-                Text("Expérience : ${character.experience} (niveau ${character.level})", style = MaterialTheme.typography.labelMedium)
+                Text(
+                    "Expérience : ${character.experience} PX (niveau ${character.level})",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                )
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf(25, 50, 100, 250, 500).forEach { montant ->
-                        AssistChip(onClick = { GameState.addExperience(character.id, montant) }, label = { Text("+$montant") })
+                        AssistChip(onClick = { GameState.addExperience(character.id, montant) }, label = { Text("+$montant PX") })
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
                         value = xpDelta,
                         onValueChange = { xpDelta = it.filter { c -> c.isDigit() } },
-                        label = { Text("Quantité") },
+                        label = { Text("Autre montant (PX)") },
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.weight(1f),
                         singleLine = true,
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    TextButton(onClick = {
-                        xpDelta.toIntOrNull()?.let { GameState.addExperience(character.id, -it) }
-                    }) { Text("−") }
-                    TextButton(onClick = {
-                        xpDelta.toIntOrNull()?.let { GameState.addExperience(character.id, it) }
-                    }) { Text("+") }
+                    Column {
+                        TextButton(
+                            onClick = { xpDelta.toIntOrNull()?.let { GameState.addExperience(character.id, it) }; xpDelta = "" },
+                            enabled = xpDelta.isNotEmpty(),
+                        ) { Text("Ajouter") }
+                        TextButton(
+                            onClick = { xpDelta.toIntOrNull()?.let { GameState.addExperience(character.id, -it) }; xpDelta = "" },
+                            enabled = xpDelta.isNotEmpty(),
+                        ) { Text("Retirer") }
+                    }
                 }
 
-                // --- OR ---
-                Text("Or : ${character.gold} po", style = MaterialTheme.typography.labelMedium)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = goldDelta,
-                        onValueChange = { goldDelta = it.filter { c -> c.isDigit() } },
-                        label = { Text("Quantité") },
-                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    TextButton(onClick = {
-                        goldDelta.toIntOrNull()?.let { GameState.addGold(character.id, -it) }
-                    }) { Text("−") }
-                    TextButton(onClick = {
-                        goldDelta.toIntOrNull()?.let { GameState.addGold(character.id, it) }
-                    }) { Text("+") }
-                }
+                HorizontalDivider()
 
-                // --- FATIGUE (épuisement) ---
-                Text("Fatigue : niveau ${character.exhaustionLevel} / 6", style = MaterialTheme.typography.labelMedium)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(
-                        onClick = { GameState.setExhaustionLevel(character.id, character.exhaustionLevel - 1) },
-                        enabled = character.exhaustionLevel > 0,
-                    ) { Text("−") }
-                    Text("${character.exhaustionLevel}", modifier = Modifier.padding(horizontal = 12.dp))
-                    TextButton(
-                        onClick = { GameState.setExhaustionLevel(character.id, character.exhaustionLevel + 1) },
-                        enabled = character.exhaustionLevel < 6,
-                    ) { Text("+") }
+                // --- ÉPUISEMENT (anciennement « Fatigue ») : niveau de 0 à 6 et son effet réel ---
+                val niveau = character.exhaustionLevel
+                Text("Épuisement : niveau $niveau / 6", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                Text(
+                    when {
+                        niveau == 0 -> "Aucun effet. Chaque niveau donne −2 aux jets de d20 et −1,50 m de vitesse ; au niveau 6, le personnage meurt."
+                        niveau >= 6 -> "Niveau 6 : le personnage meurt."
+                        else -> "Effet actuel : −${niveau * 2} aux jets de d20, vitesse −${"%.2f".format(niveau * 1.5).replace('.', ',')} m. Un repos long retire un niveau."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = { GameState.setExhaustionLevel(character.id, niveau - 1) },
+                        enabled = niveau > 0,
+                    ) { Text("Retirer un niveau") }
+                    OutlinedButton(
+                        onClick = { GameState.setExhaustionLevel(character.id, niveau + 1) },
+                        enabled = niveau < 6,
+                    ) { Text("Ajouter un niveau") }
                 }
             }
         },

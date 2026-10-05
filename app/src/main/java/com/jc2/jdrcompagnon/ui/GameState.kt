@@ -198,7 +198,7 @@ object GameState {
     }
 
     /** Balises de lignes d'en-tête traitées à l'import d'un scénario (voir ScenarioImport). */
-    internal val ScenarioImportBalises = listOf("mimage", "mlieu", "mpnj", "mzone")
+    internal val ScenarioImportBalises = listOf("mimage", "mlieu", "mpnj", "mzone", "mchapitre")
 
     /**
      * Champs `clé=valeur` d'une ligne de métadonnées `{<balise>: clé=valeur; ...}` (valeurs
@@ -254,7 +254,12 @@ object GameState {
         // scénario quand le MJ ne veut pas en configurer une par scène : repli utilisé par une
         // scène dont MjScene.tableAleatoireId est vide. Champ propre à l'app (comme lieuNom) :
         // non écrasé par une synchronisation depuis un fichier .md externe (voir syncScenariosFromDisk).
-        val tableEvenementsId: String? = null
+        val tableEvenementsId: String? = null,
+        // Chapitre (numéro et titre) et numéro du scénario dans ce chapitre : ordre de jeu d'une
+        // campagne, ligne {mchapitre:} du .md (voir ChapitresScenarios).
+        val chapitreNumero: Int? = null,
+        val chapitreTitre: String = "",
+        val numero: Int? = null,
     )
 
     @Serializable
@@ -550,6 +555,7 @@ object GameState {
         val builder = StringBuilder()
         builder.appendLine("<!-- id: ${scenario.id} -->")
         builder.appendLine("# ${scenario.title}")
+        com.jc2.jdrcompagnon.ui.screens.mj.scenario.ChapitresScenarios.ligne(scenario)?.let { builder.appendLine(it) }
         builder.appendLine()
         // Introduction MJ (aperçu du lieu...) avant la première scène, relue par preambuleScenario.
         if (scenario.description.isNotBlank() && scenario.scenes.isNotEmpty()) {
@@ -634,10 +640,15 @@ object GameState {
                 val mergedScenes = parsed.second.mapIndexed { index, scene ->
                     existing.scenes.getOrNull(index)?.let { scene.copy(id = it.id) } ?: scene
                 }
+                // Chapitre : celui du fichier s'il en porte un, sinon celui déjà enregistré.
+                val chapitre = com.jc2.jdrcompagnon.ui.screens.mj.scenario.ChapitresScenarios.lire(markdown)
                 val updated = existing.copy(
                     title = parsed.first,
                     scenes = mergedScenes,
                     description = preambuleScenario(markdown).ifBlank { existing.description },
+                    chapitreNumero = if (chapitre != null) chapitre.numero else existing.chapitreNumero,
+                    chapitreTitre = chapitre?.titre ?: existing.chapitreTitre,
+                    numero = if (chapitre != null) chapitre.scenario else existing.numero,
                 )
                 idsFoundOnDisk += existing.id
                 if (updated != existing) {

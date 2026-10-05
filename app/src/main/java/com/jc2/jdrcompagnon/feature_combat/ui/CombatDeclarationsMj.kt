@@ -40,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jc2.jdrcompagnon.feature_combat.domain.model.ActionsCombat
 import com.jc2.jdrcompagnon.feature_combat.domain.model.Distance
+import com.jc2.jdrcompagnon.feature_combat.domain.model.formatMetres
 import com.jc2.jdrcompagnon.feature_combat.domain.model.Etats
 import com.jc2.jdrcompagnon.feature_combat.domain.model.ModeJet
 import com.jc2.jdrcompagnon.feature_combat.domain.model.AttaqueMonstre
@@ -446,7 +447,7 @@ internal fun DeclarationMjDialog(combattant: Combattant, etat: CombatEnCours, on
                 }
                 cibleAdverse?.let { c ->
                     val actuelle = etat.distance(combattant.id, c.id)
-                    Text("Déplacement : finir à… (actuellement ${actuelle.court.lowercase()})", style = MaterialTheme.typography.labelMedium)
+                    Text("Déplacement : finir à… (actuellement ${actuelle.court.lowercase()}, vitesse ${formatMetres(combattant.vitesse)}, double en se précipitant)", style = MaterialTheme.typography.labelMedium)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         FilterChip(selected = distanceVisee == null, onClick = { distanceVisee = null }, label = { Text("Ne bouge pas") })
                         Distance.entries.filter { it != actuelle }.forEach { d ->
@@ -471,7 +472,7 @@ internal fun DeclarationMjDialog(combattant: Combattant, etat: CombatEnCours, on
                     val desengage = action?.id == "disengage"
                     val deplacements = when {
                         cibleAdverse != null && distanceVisee != null -> mapOf(cibleAdverse.id to distanceVisee!!)
-                        desengage -> etat.distancesDe(combattant.id).filterValues { it == Distance.CONTACT }.mapValues { Distance.COURTE }
+                        desengage -> etat.distancesDe(combattant.id).filterValues { it == Distance.CONTACT }.mapValues { it.value.eloigne(combattant.vitesse) }
                         else -> emptyMap()
                     }
                     val declaration = DeclarationAction(
@@ -524,6 +525,14 @@ internal fun ResolutionMonstreDialog(monstre: Combattant, declaration: Declarati
                 declaration.detail?.takeIf { !declaration.parIa }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 if (cibles.isEmpty()) {
                     Text("Plus aucune cible debout.", color = MaterialTheme.colorScheme.error)
+                } else if (attaque.zone && attaque.zoneEffet?.forme?.depuisLanceur == false) {
+                    // Sphère, cube… lancés sur un point : la créature visée est le centre de la zone.
+                    Text("Centre de la zone (${attaque.zoneEffet.libelle})", style = MaterialTheme.typography.labelMedium)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        cibles.forEach { c ->
+                            FilterChip(selected = c.id == cibleId, onClick = { cibleId = c.id }, label = { Text(c.nom) })
+                        }
+                    }
                 } else if (!attaque.zone) {
                     Text("Cible (changez-la si la situation a évolué)", style = MaterialTheme.typography.labelMedium)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -588,7 +597,22 @@ internal fun ResolutionMonstreDialog(monstre: Combattant, declaration: Declarati
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }
-                        cibles.filter { attaque.zone || it.id == cibleId }.forEach { c ->
+                        // Zone connue (« cône de 9 m ») : créatures prises d'après les distances, alliés
+                        // du monstre compris pour une sphère ; sinon tous les adversaires debout.
+                        val zone = attaque.zoneEffet?.takeIf { attaque.zone }
+                        val touchees = when {
+                            zone != null -> etat.dansLaZone(zone, monstre.id, cibleId)
+                            attaque.zone -> cibles
+                            else -> cibles.filter { it.id == cibleId }
+                        }
+                        zone?.let {
+                            Text(
+                                "${it.libelle} : ${touchees.size} créature(s) dans la zone d'après les distances.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFFFFD778),
+                            )
+                        }
+                        touchees.forEach { c ->
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(c.nom)
@@ -643,7 +667,10 @@ internal fun ResolutionMonstreDialog(monstre: Combattant, declaration: Declarati
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun PositionsDialog(monstre: Combattant, etat: CombatEnCours, onDismiss: () -> Unit) {
-    val personnages = etat.combattants.filter { it.estMonstre != monstre.estMonstre }
+    // Adversaires d'abord, puis alliés (utiles aux zones d'effet : une boule de feu sur un
+    // gobelin touche aussi ses voisins).
+    val personnages = etat.combattants.filter { it.estMonstre != monstre.estMonstre } +
+        etat.combattants.filter { it.estMonstre == monstre.estMonstre && it.id != monstre.id }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Position — ${monstre.nom}") },
@@ -655,7 +682,7 @@ internal fun PositionsDialog(monstre: Combattant, etat: CombatEnCours, onDismiss
                 if (personnages.isEmpty()) {
                     Text("Aucun adversaire dans le combat.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
-                    Text("Tout le monde", style = MaterialTheme.typography.labelMedium)
+                    Text("Tous les adversaires", style = MaterialTheme.typography.labelMedium)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Distance.entries.forEach { d ->
                             OutlinedButton(onClick = { CombatSession.definirDistancesMonstre(monstre.id, d) }) { Text(d.court) }
@@ -664,7 +691,10 @@ internal fun PositionsDialog(monstre: Combattant, etat: CombatEnCours, onDismiss
                     HorizontalDivider()
                     personnages.forEach { p ->
                         val actuelle = etat.distance(monstre.id, p.id)
-                        Text(p.nom + if (p.horsCombat) " (à terre)" else "", fontWeight = FontWeight.Bold)
+                        Text(
+                            p.nom + (if (p.estMonstre == monstre.estMonstre) " (allié)" else "") + if (p.horsCombat) " (à terre)" else "",
+                            fontWeight = FontWeight.Bold
+                        )
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             Distance.entries.forEach { d ->
                                 FilterChip(
@@ -676,8 +706,10 @@ internal fun PositionsDialog(monstre: Combattant, etat: CombatEnCours, onDismiss
                         }
                     }
                     Text(
-                        "Contact ≈ 1,50 m · Courte ≈ un déplacement (≤ 9 m) · Longue = au-delà. " +
-                            "Pendant la déclaration, l'IA revoit la décision du monstre à chaque changement.",
+                        "Contact = 1,50 m (allonge d'une attaque au corps à corps, grille de 1,50 m). " +
+                            "Vitesse de ${monstre.nom} : ${formatMetres(monstre.vitesse)} par tour, le double en se précipitant. " +
+                            "Non placés : 9 m entre adversaires, 3 m entre alliés. Les zones d'effet (sphère, cône…) " +
+                            "touchent les créatures selon ces distances. Pendant la déclaration, l'IA revoit sa décision à chaque changement.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

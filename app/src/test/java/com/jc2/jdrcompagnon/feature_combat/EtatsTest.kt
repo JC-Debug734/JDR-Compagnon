@@ -9,6 +9,7 @@ import com.jc2.jdrcompagnon.feature_combat.domain.model.EffetEtat
 import com.jc2.jdrcompagnon.feature_combat.domain.model.Etats
 import com.jc2.jdrcompagnon.feature_combat.domain.model.IaMonstre
 import com.jc2.jdrcompagnon.feature_combat.domain.model.ModeJet
+import com.jc2.jdrcompagnon.feature_combat.domain.model.ProfilCombatMonstre
 import com.jc2.jdrcompagnon.feature_combat.domain.model.ProfilIA
 import com.jc2.jdrcompagnon.feature_combat.domain.model.TypeAttaqueMonstre
 import com.jc2.jdrcompagnon.feature_combat.domain.model.lancerAttaqueMonstre
@@ -121,16 +122,49 @@ class EtatsTest {
     }
 
     @Test
-    fun `le bestiaire embarque est analyse pour le livre des etats`() {
-        val monstres = MonsterParser.parse(File("src/main/assets/dnd/monster_srd521.md").readText())
-        val sources = LivreEtats.sourcesParEtat(monstres)
-        assertTrue(sources[ConditionCombat.AGRIPPE].orEmpty().any { it.monstre == "Aboleth" && it.action == "Tentacule" })
-        assertTrue(sources[ConditionCombat.PARALYSE].orEmpty().isNotEmpty())
-        assertTrue(sources[ConditionCombat.A_TERRE].orEmpty().size >= 20)
-        val livre = LivreEtats.construire(monstres)
+    fun `le livre des etats ne liste plus les monstres`() {
+        val livre = LivreEtats.construire()
         assertEquals("Les états", livre.first().name)
-        assertTrue(livre.any { it.name == "Paralysé" && it.rawMarkdown.contains("Monstres qui l'infligent") })
+        assertTrue(livre.any { it.name == "Paralysé" })
+        assertTrue(livre.none { it.rawMarkdown.contains("Monstres qui l'infligent") })
         assertTrue(livre.any { it.name == Etats.NOM_EPUISEMENT })
+    }
+
+    @Test
+    fun `tournures du bestiaire reconnues et negations ignorees`() {
+        assertEquals(
+            listOf(ConditionCombat.AGRIPPE, ConditionCombat.ENTRAVE),
+            Etats.infligesPar("La cible subit l’état Agrippé (évasion DD 16), ainsi que l’état Entravé tant qu’elle est Agrippée.").map { it.condition }
+        )
+        assertEquals(
+            listOf(ConditionCombat.EMPOISONNE, ConditionCombat.PARALYSE),
+            Etats.infligesPar("Échec : la cible subit l’état Empoisonné pendant 1 heure. Tant qu’elle est ainsi Empoisonnée, la cible subit en outre l’état Paralysé.").map { it.condition }
+        )
+        assertEquals(ConditionCombat.AGRIPPE, Etats.infligesPar("le tapis peut lui imposer l’état Agrippé (évasion DD 13)").single().condition)
+        assertTrue(Etats.infligesPar("les créatures englouties ne subissent plus l’état Entravé").isEmpty())
+        assertTrue(Etats.infligesPar("La cible ne subit pas l’état Charmé.").isEmpty())
+        assertTrue(Etats.infligesPar("Échec : la cible est engloutie, et l’état Agrippé prend fin.").isEmpty())
+    }
+
+    @Test
+    fun `les attaques du bestiaire embarque portent leurs etats en combat`() {
+        val monstres = MonsterParser.parse(File("src/main/assets/dnd/monster_srd521.md").readText())
+        fun attaque(monstre: String, nom: String) =
+            ProfilCombatMonstre.depuisFiche(monstres.first { it.name == monstre }.rawMarkdown).actions.attaques.first { it.nom == nom }
+        val tentacule = attaque("Aboleth", "Tentacule").conditions.single()
+        assertEquals(ConditionCombat.AGRIPPE, tentacule.condition)
+        assertEquals(14, tentacule.evasionDd)
+        assertFalse(tentacule.surEchecJs)
+        // Toute mention « subit l’état X » du bestiaire est reconnue (aucune tournure oubliée).
+        val labels = Etats.fiches.filter { it.officiel }.joinToString("|") { Regex.escape(it.condition.label) }
+        val simple = Regex("""subit\s+(?:aussi\s+|en outre\s+)?l[’']état\s+($labels)""")
+        val nonReconnues = monstres.flatMap { m -> m.rawMarkdown.lines().map { m.name to it } }
+            .flatMap { (nom, ligne) -> simple.findAll(ligne).map { Triple(nom, it.groupValues[1], ligne) } }
+            .filter { (_, label, ligne) -> Etats.infligesPar(ligne).none { it.condition.label == label } }
+            .map { (nom, label, _) -> "$nom : $label" }
+        assertTrue("non reconnues : $nonReconnues", nonReconnues.isEmpty())
+        val avecEtats = monstres.sumOf { m -> ProfilCombatMonstre.depuisFiche(m.rawMarkdown).actions.attaques.count { it.conditions.isNotEmpty() } }
+        assertTrue("actions avec état : $avecEtats", avecEtats >= 100)
     }
 
     @Test

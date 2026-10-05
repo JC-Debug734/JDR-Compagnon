@@ -15,9 +15,66 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-/** Condition météo courante du scénario. */
+/**
+ * Condition météo courante du scénario. Nouvelles valeurs ajoutées en fin d'énumération (le nom
+ * est sérialisé, l'ordre n'a pas d'importance pour les données existantes).
+ */
 @Serializable
-enum class ScenarioWeather { CLAIR, NUAGEUX, PLUIE, ORAGE, NEIGE, BROUILLARD }
+enum class ScenarioWeather { CLAIR, NUAGEUX, PLUIE, ORAGE, NEIGE, BROUILLARD, FORTE_NEIGE, VENT_FORT, SEC }
+
+/**
+ * Température ressentie, indépendante du ciel (une journée claire peut être glaciale). Les deux
+ * extrêmes reprennent les règles de froid/chaleur extrêmes du SRD (voir [regle]).
+ */
+@Serializable
+enum class ScenarioTemperature(val label: String, val regle: String? = null) {
+    FROID_INTENSE("Froid intense", "Froid extrême : sans protection, JS de Constitution DD 10 à chaque heure ou 1 niveau d'épuisement."),
+    FROID("Froid"),
+    FRAIS("Frais"),
+    DOUX("Doux"),
+    CHAUD("Chaud"),
+    FORTE_CHALEUR("Forte chaleur", "Chaleur extrême : sans eau, JS de Constitution à chaque heure (DD 5, +1 par heure) ou 1 niveau d'épuisement."),
+}
+
+/** Fête ou jour férié du calendrier : [mois] 0-indexé, [jour] 1-indexé. */
+@Serializable
+data class JourFerie(val nom: String, val mois: Int, val jour: Int)
+
+/**
+ * Climat d'un mois du calendrier : saison affichée et météos/températures possibles pour la météo
+ * automatique. Listes vides = aucune contrainte (toutes les météos, température inchangée).
+ */
+@Serializable
+data class ClimatMois(
+    val saison: String = "",
+    val meteos: List<ScenarioWeather> = emptyList(),
+    val temperatures: List<ScenarioTemperature> = emptyList(),
+) {
+    companion object {
+        /** Préréglages de saison proposés dans l'éditeur du calendrier. */
+        val hiver = ClimatMois(
+            "Hiver",
+            listOf(ScenarioWeather.CLAIR, ScenarioWeather.NUAGEUX, ScenarioWeather.NEIGE, ScenarioWeather.FORTE_NEIGE, ScenarioWeather.BROUILLARD, ScenarioWeather.VENT_FORT),
+            listOf(ScenarioTemperature.FROID_INTENSE, ScenarioTemperature.FROID),
+        )
+        val printemps = ClimatMois(
+            "Printemps",
+            listOf(ScenarioWeather.CLAIR, ScenarioWeather.NUAGEUX, ScenarioWeather.PLUIE, ScenarioWeather.ORAGE, ScenarioWeather.BROUILLARD),
+            listOf(ScenarioTemperature.FRAIS, ScenarioTemperature.DOUX),
+        )
+        val ete = ClimatMois(
+            "Été",
+            listOf(ScenarioWeather.CLAIR, ScenarioWeather.SEC, ScenarioWeather.NUAGEUX, ScenarioWeather.ORAGE),
+            listOf(ScenarioTemperature.DOUX, ScenarioTemperature.CHAUD, ScenarioTemperature.FORTE_CHALEUR),
+        )
+        val automne = ClimatMois(
+            "Automne",
+            listOf(ScenarioWeather.NUAGEUX, ScenarioWeather.PLUIE, ScenarioWeather.BROUILLARD, ScenarioWeather.VENT_FORT, ScenarioWeather.CLAIR),
+            listOf(ScenarioTemperature.FROID, ScenarioTemperature.FRAIS, ScenarioTemperature.DOUX),
+        )
+        val saisons: List<ClimatMois> = listOf(hiver, printemps, ete, automne)
+    }
+}
 
 /** Période du jour déduite de l'heure de scénario, pour choisir l'icône soleil/lune/crépuscule. */
 enum class DayPeriod { NUIT, AUBE, JOUR, CREPUSCULE }
@@ -28,6 +85,7 @@ data class ScenarioClockData(
     val autoAdvanceEnabled: Boolean = true,
     val autoWeatherEnabled: Boolean = true,
     val weather: ScenarioWeather = ScenarioWeather.CLAIR,
+    val temperature: ScenarioTemperature = ScenarioTemperature.DOUX,
     // Minutes écoulées depuis un jour fictif 0, 08:00 par défaut. Un simple compteur (plutôt que
     // java.time, absent du reste du projet) suffit pour dérouler heure/jour/nuit et météo.
     val scenarioMinutes: Long = 8 * 60,
@@ -50,7 +108,37 @@ data class CalendarConfig(
     val daysPerMonth: List<Int> = List(12) { 30 },
     val dayNames: List<String> = defaultDayNames,
     val startYear: Int = 1,
+    val joursFeries: List<JourFerie> = emptyList(),
+    // Un climat par mois (même index que [monthNames]) ; un mois sans entrée n'a pas de contrainte.
+    val climatParMois: List<ClimatMois> = emptyList(),
 ) {
+    /** Ajoute un mois en fin d'année (30 jours, sans climat). */
+    fun avecMoisAjoute(): CalendarConfig = copy(
+        monthNames = monthNames + "Mois ${monthNames.size + 1}",
+        daysPerMonth = daysPerMonth + 30,
+    )
+
+    /** Retire le mois [index] (au moins un mois reste) et décale les jours fériés suivants. */
+    fun avecMoisRetire(index: Int): CalendarConfig {
+        if (monthNames.size <= 1 || index !in monthNames.indices) return this
+        return copy(
+            monthNames = monthNames.filterIndexed { i, _ -> i != index },
+            daysPerMonth = daysPerMonth.filterIndexed { i, _ -> i != index },
+            climatParMois = climatParMois.filterIndexed { i, _ -> i != index },
+            joursFeries = joursFeries.filter { it.mois != index }.map { if (it.mois > index) it.copy(mois = it.mois - 1) else it },
+        )
+    }
+
+    fun climat(monthIndex: Int): ClimatMois? = climatParMois.getOrNull(monthIndex)
+
+    /** Remplace le climat du mois [index], en complétant la liste si besoin. */
+    fun avecClimat(index: Int, climat: ClimatMois): CalendarConfig {
+        val liste = climatParMois.toMutableList()
+        while (liste.size <= index) liste += ClimatMois()
+        liste[index] = climat
+        return copy(climatParMois = liste)
+    }
+
     companion object {
         val defaultMonthNames: List<String> = (1..12).map { "Mois $it" }
         val defaultDayNames: List<String> = (1..7).map { "Jour $it" }
@@ -75,6 +163,19 @@ data class CalendarConfig(
             daysPerMonth = listOf(30, 1, 30, 30, 30, 1, 30, 30, 30, 1, 30, 30, 1, 30, 30, 1, 30),
             dayNames = (1..10).map { "Jour $it" },
             startYear = 1492,
+            climatParMois = listOf(
+                ClimatMois.hiver, ClimatMois.hiver, ClimatMois.hiver, ClimatMois.printemps, ClimatMois.printemps,
+                ClimatMois.printemps, ClimatMois.printemps, ClimatMois.ete, ClimatMois.ete, ClimatMois.ete,
+                ClimatMois.ete, ClimatMois.automne, ClimatMois.automne, ClimatMois.automne, ClimatMois.hiver,
+                ClimatMois.hiver, ClimatMois.hiver,
+            ),
+            joursFeries = listOf(
+                JourFerie("Solstice d'hiver", 1, 1),
+                JourFerie("Verdeprêt", 5, 1),
+                JourFerie("Solstice d'été", 9, 1),
+                JourFerie("Grandmoisson", 12, 1),
+                JourFerie("Fête de la Lune", 15, 1),
+            ),
         )
     }
 }
@@ -333,17 +434,43 @@ object ScenarioClockState {
         val current = _state.value
         val total = current.scenarioSeconds + seconds
         val newMinutes = current.scenarioMinutes + total / 60
-        val weather = if (current.autoWeatherEnabled && newMinutes != current.scenarioMinutes) {
-            rollWeatherIfDue(current, newMinutes)
-        } else current.weather
-        applyLocal(current.copy(scenarioMinutes = newMinutes, scenarioSeconds = total % 60, weather = weather))
+        val moved = current.copy(scenarioMinutes = newMinutes, scenarioSeconds = total % 60)
+        applyLocal(if (current.autoWeatherEnabled && newMinutes != current.scenarioMinutes) rollWeatherIfDue(current, moved) else moved)
     }
 
-    // Tire une nouvelle météo aléatoire (33% de chance) à chaque tranche de 3h de fiction franchie.
-    private fun rollWeatherIfDue(current: ScenarioClockData, newMinutes: Long): ScenarioWeather {
-        val boundaryCrossed = newMinutes / 180 != current.scenarioMinutes / 180
-        return if (boundaryCrossed && (0 until 100).random() < 33) ScenarioWeather.entries.random() else current.weather
+    /** Météos tirées au hasard quand le mois n'a pas de climat défini (comportement historique). */
+    private val meteosParDefaut = listOf(
+        ScenarioWeather.CLAIR, ScenarioWeather.NUAGEUX, ScenarioWeather.PLUIE,
+        ScenarioWeather.ORAGE, ScenarioWeather.NEIGE, ScenarioWeather.BROUILLARD,
+    )
+
+    /** Climat du mois en cours à [minutes] selon [config] (null = aucune contrainte). */
+    fun climatCourant(minutes: Long, config: CalendarConfig = activeCalendar()): ClimatMois? {
+        val (_, monthIndex, _) = dateForTotalDays(config, dayIndex(minutes) - 1)
+        return config.climat(monthIndex)
     }
+
+    /**
+     * Tire une nouvelle météo (33% de chance) à chaque tranche de 3h de fiction franchie, parmi
+     * celles permises par le climat du mois. Retirée d'office si la météo/température courante
+     * n'est plus permise (changement de mois ou de saison).
+     */
+    private fun rollWeatherIfDue(previous: ScenarioClockData, next: ScenarioClockData): ScenarioClockData {
+        val climat = climatCourant(next.scenarioMinutes)
+        val meteos = climat?.meteos.orEmpty().ifEmpty { meteosParDefaut }
+        val temperatures = climat?.temperatures.orEmpty()
+        val horsClimat = next.weather !in meteos || (temperatures.isNotEmpty() && next.temperature !in temperatures)
+        val boundaryCrossed = next.scenarioMinutes / 180 != previous.scenarioMinutes / 180
+        if (!horsClimat && !(boundaryCrossed && (0 until 100).random() < 33)) return next
+        return next.copy(
+            weather = meteos.random(),
+            temperature = if (temperatures.isNotEmpty()) temperatures.random() else next.temperature,
+        )
+    }
+
+    /** Après un saut dans le temps (heure, date) : météo remise en accord avec la saison si automatique. */
+    private fun withClimate(previous: ScenarioClockData, next: ScenarioClockData): ScenarioClockData =
+        if (next.autoWeatherEnabled) rollWeatherIfDue(previous, next) else next
 
     private fun applyLocal(newState: ScenarioClockData) {
         _state.value = newState
@@ -358,15 +485,18 @@ object ScenarioClockState {
     fun setAutoAdvanceEnabled(enabled: Boolean) = applyLocal(_state.value.copy(autoAdvanceEnabled = enabled))
     fun setAutoWeatherEnabled(enabled: Boolean) = applyLocal(_state.value.copy(autoWeatherEnabled = enabled))
     fun setWeather(weather: ScenarioWeather) = applyLocal(_state.value.copy(weather = weather))
+    fun setTemperature(temperature: ScenarioTemperature) = applyLocal(_state.value.copy(temperature = temperature))
 
     /** Avance/recule manuellement l'heure (ex. +1h, +10min), utilisé quand le défilement auto est coupé. */
     fun advanceManually(minutes: Long) {
-        applyLocal(_state.value.copy(scenarioMinutes = (_state.value.scenarioMinutes + minutes).coerceAtLeast(0)))
+        val current = _state.value
+        applyLocal(withClimate(current, current.copy(scenarioMinutes = (current.scenarioMinutes + minutes).coerceAtLeast(0))))
     }
 
     /** Avance/recule manuellement le jour (ex. +1 jour), heure du jour conservée. */
     fun advanceDays(days: Long) {
-        applyLocal(_state.value.copy(scenarioMinutes = (_state.value.scenarioMinutes + days * 1440).coerceAtLeast(0)))
+        val current = _state.value
+        applyLocal(withClimate(current, current.copy(scenarioMinutes = (current.scenarioMinutes + days * 1440).coerceAtLeast(0))))
     }
 
     /** Fixe l'heure du jour courant (jour de fiction conservé), pour un réglage initial précis. */
@@ -387,7 +517,7 @@ object ScenarioClockState {
         val current = _state.value
         val timeOfDay = ((current.scenarioMinutes % 1440) + 1440) % 1440
         val totalDays = totalDaysForDate(config, year, month, dayOfMonth)
-        applyLocal(current.copy(scenarioMinutes = totalDays * 1440 + timeOfDay))
+        applyLocal(withClimate(current, current.copy(scenarioMinutes = totalDays * 1440 + timeOfDay)))
     }
 
     // === Lecture ===
@@ -469,6 +599,12 @@ object ScenarioClockState {
         // il n'est affiché que s'il a été réellement renommé (ex. "Lundi").
         val weekday = weekdayName(config, totalDays).takeUnless { it.isBlank() || GENERIC_DAY_NAME.matches(it.trim()) }
         return listOfNotNull(weekday, "$dayOfMonth $monthName, an $year").joinToString(" ")
+    }
+
+    /** Jour férié tombant à [minutes] dans [config], null s'il n'y en a pas. */
+    fun jourFerie(minutes: Long, config: CalendarConfig = activeCalendar()): JourFerie? {
+        val (_, monthIndex, dayOfMonth) = dateForTotalDays(config, dayIndex(minutes) - 1)
+        return config.joursFeries.firstOrNull { it.mois == monthIndex && it.jour == dayOfMonth }
     }
 
     /** (année, mois 1-indexé, jour du mois 1-indexé) courants, pour préremplir un sélecteur de date. */

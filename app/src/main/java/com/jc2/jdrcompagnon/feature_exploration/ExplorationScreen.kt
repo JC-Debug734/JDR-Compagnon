@@ -165,6 +165,20 @@ private fun ExplorationContent(onClose: () -> Unit) {
         }
 
         val edition = zoneEdition
+        e.zones.firstOrNull { it.id == e.zoomZoneId }?.let { zoomee ->
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "🔍 Table zoomée sur « ${zoomee.nom} » (double appui sur une zone révélée pour zoomer)",
+                    color = ForcedDarkPalette.AccentGold,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = { ExplorationSession.zoomerSurZone(context, null) }) { Text("Dézoomer", color = Color.White) }
+            }
+        }
         if (edition != null) {
             // Bandeau de préparation d'une zone.
             Surface(color = CouleurZoneEdition.copy(alpha = 0.2f), modifier = Modifier.fillMaxWidth()) {
@@ -213,9 +227,20 @@ private fun ExplorationContent(onClose: () -> Unit) {
                 val zoneDeLaCase = if (parZone) ExplorationGrille.zonePourCase(e.zones, index) else null
                 when {
                     z != null -> zoneEdition = z.copy(cases = if (index in z.cases) z.cases - index else z.cases + index)
-                    // Mode « par zone » : toucher n'importe quelle case d'une zone la dévoile entière.
-                    zoneDeLaCase != null -> ExplorationSession.basculerZone(context, zoneDeLaCase.id)
-                    else -> ExplorationSession.basculer(context, index % e.colonnes, index / e.colonnes)
+                    // Mode « par zone » : toucher n'importe quelle case d'une zone la dévoile entière
+                    // (un toucher ne remasque jamais : menu de la zone ou appui long + glisser).
+                    zoneDeLaCase != null -> ExplorationSession.revelerZone(context, zoneDeLaCase.id)
+                    else -> ExplorationSession.revelerCase(context, index)
+                }
+            },
+            onDoubleToucherCase = { index ->
+                // Double appui sur une zone révélée : la page table zoome dessus (nouveau double
+                // appui : retour à la carte entière).
+                val zone = ExplorationGrille.zonePourCase(e.zones, index)
+                when {
+                    zoneEdition != null -> Unit
+                    zone != null && e.estRevelee(zone) -> ExplorationSession.zoomerSurZone(context, zone.id)
+                    e.zoomZoneId != null -> ExplorationSession.zoomerSurZone(context, null)
                 }
             },
             onPeindre = { index, ajouter ->
@@ -242,7 +267,9 @@ private fun ExplorationContent(onClose: () -> Unit) {
             enEdition = edition != null,
             parZone = parZone,
             onParZone = { parZone = it },
-            onBasculer = { ExplorationSession.basculerZone(context, it.id) },
+            onBasculer = { ExplorationSession.revelerZone(context, it.id) },
+            onRemasquer = { ExplorationSession.remasquerZone(context, it.id) },
+            onZoomer = { ExplorationSession.zoomerSurZone(context, it.id) },
             onNouvelle = { nomNouvelleZone = "Zone ${e.zones.size + 1}" },
             onModifierCases = { zoneEdition = it },
             onRenommer = { zoneRenommee = it },
@@ -275,18 +302,43 @@ private fun ExplorationContent(onClose: () -> Unit) {
     }
 
     if (reglageGrille) {
-        var colonnes by remember { mutableFloatStateOf(e.colonnes.toFloat()) }
+        val plage = ExplorationSession.PLAGE_COLONNES
+        // Saisie libre du nombre de cases en largeur, avec boutons −/+ pour ajuster d'une unité.
+        var saisie by remember { mutableStateOf(e.colonnes.toString()) }
+        val colonnes = saisie.toIntOrNull()
+        val valide = colonnes != null && colonnes in plage
         AlertDialog(
             onDismissRequest = { reglageGrille = false },
             title = { Text("Taille des cases") },
             text = {
                 Column {
-                    Text("${colonnes.roundToInt()} cases en largeur")
-                    Slider(
-                        value = colonnes,
-                        onValueChange = { colonnes = it },
-                        valueRange = ExplorationSession.PLAGE_COLONNES.first.toFloat()..ExplorationSession.PLAGE_COLONNES.last.toFloat()
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = { saisie = ((colonnes ?: e.colonnes) - 1).coerceIn(plage).toString() },
+                            enabled = (colonnes ?: e.colonnes) > plage.first
+                        ) { Text("−") }
+                        OutlinedTextField(
+                            value = saisie,
+                            onValueChange = { v -> saisie = v.filter { it.isDigit() }.take(3) },
+                            label = { Text("Cases en largeur") },
+                            singleLine = true,
+                            isError = !valide,
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                            ),
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedButton(
+                            onClick = { saisie = ((colonnes ?: e.colonnes) + 1).coerceIn(plage).toString() },
+                            enabled = (colonnes ?: e.colonnes) < plage.last
+                        ) { Text("+") }
+                    }
+                    Text(
+                        "Entre ${plage.first} et ${plage.last} cases.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (valide) Color.Unspecified else MaterialTheme.colorScheme.error
                     )
+                    Spacer(Modifier.size(8.dp))
                     Text(
                         "Les cases révélées et les zones sont adaptées à la nouvelle grille.",
                         style = MaterialTheme.typography.bodySmall
@@ -294,10 +346,13 @@ private fun ExplorationContent(onClose: () -> Unit) {
                 }
             },
             confirmButton = {
-                TextButton(onClick = {
-                    ExplorationSession.changerColonnes(context, colonnes.roundToInt())
-                    reglageGrille = false
-                }) { Text("Appliquer") }
+                TextButton(
+                    onClick = {
+                        colonnes?.let { ExplorationSession.changerColonnes(context, it) }
+                        reglageGrille = false
+                    },
+                    enabled = valide
+                ) { Text("Appliquer") }
             },
             dismissButton = { TextButton(onClick = { reglageGrille = false }) { Text("Annuler") } }
         )
@@ -316,6 +371,8 @@ private fun BarreZones(
     parZone: Boolean,
     onParZone: (Boolean) -> Unit,
     onBasculer: (ZoneExploration) -> Unit,
+    onRemasquer: (ZoneExploration) -> Unit,
+    onZoomer: (ZoneExploration) -> Unit,
     onNouvelle: () -> Unit,
     onModifierCases: (ZoneExploration) -> Unit,
     onRenommer: (ZoneExploration) -> Unit,
@@ -379,6 +436,13 @@ private fun BarreZones(
                     }
                 }
                 DropdownMenu(expanded = menuZone == zone.id, onDismissRequest = { menuZone = null }) {
+                    if (revelee) {
+                        DropdownMenuItem(
+                            text = { Text(if (e.zoomZoneId == zone.id) "Dézoomer la table" else "Zoomer la table dessus") },
+                            onClick = { menuZone = null; onZoomer(zone) }
+                        )
+                        DropdownMenuItem(text = { Text("Remettre le brouillard") }, onClick = { menuZone = null; onRemasquer(zone) })
+                    }
                     DropdownMenuItem(text = { Text("Modifier les cases") }, onClick = { menuZone = null; onModifierCases(zone) })
                     DropdownMenuItem(text = { Text("Renommer") }, onClick = { menuZone = null; onRenommer(zone) })
                     DropdownMenuItem(
@@ -470,6 +534,7 @@ private fun CarteBrouillard(
     casesZoneEdition: Set<Int>?,
     casesAutresZones: Set<Int>,
     onToucherCase: (Int) -> Unit,
+    onDoubleToucherCase: (Int) -> Unit,
     onPeindre: (index: Int, ajouter: Boolean) -> Unit,
     estActive: (Int) -> Boolean,
     modifier: Modifier,
@@ -487,6 +552,7 @@ private fun CarteBrouillard(
     // Les gestes restent installés d'un changement d'état à l'autre : ils lisent toujours la
     // dernière version des callbacks (mode jeu / préparation de zone).
     val toucher by rememberUpdatedState(onToucherCase)
+    val doubleToucher by rememberUpdatedState(onDoubleToucherCase)
     val peindre by rememberUpdatedState(onPeindre)
     val active by rememberUpdatedState(estActive)
 
@@ -518,7 +584,10 @@ private fun CarteBrouillard(
                 .size(taille)
                 .graphicsLayer(scaleX = zoom, scaleY = zoom, translationX = decalage.x, translationY = decalage.y)
                 .pointerInput(e.cle, e.colonnes, e.lignes) {
-                    detectTapGestures { pos -> toucher(caseSous(pos)) }
+                    detectTapGestures(
+                        onDoubleTap = { pos -> doubleToucher(caseSous(pos)) },
+                        onTap = { pos -> toucher(caseSous(pos)) },
+                    )
                 }
                 .pointerInput(e.cle, e.colonnes, e.lignes) {
                     // Glissé après appui long : même action (ajouter ou retirer) que sur la
@@ -543,22 +612,32 @@ private fun CarteBrouillard(
                 val ch = size.height / e.lignes
                 val voile = Color.Black.copy(alpha = 0.6f)
                 for (l in 0 until e.lignes) {
+                    // Cases masquées consécutives d'une ligne dessinées d'un seul rectangle : la
+                    // grille peut compter des centaines de colonnes.
+                    var debutVoile = -1
+                    for (c in 0..e.colonnes) {
+                        val masquee = c < e.colonnes && e.index(c, l) !in e.revelees
+                        if (masquee && debutVoile < 0) debutVoile = c
+                        if (!masquee && debutVoile >= 0) {
+                            drawRect(voile, topLeft = Offset(debutVoile * cw, l * ch), size = Size((c - debutVoile) * cw, ch))
+                            debutVoile = -1
+                        }
+                    }
+                    if (casesZoneEdition == null) continue
                     for (c in 0 until e.colonnes) {
                         val i = e.index(c, l)
                         val coin = Offset(c * cw, l * ch)
                         val taillecase = Size(cw, ch)
-                        if (i !in e.revelees) drawRect(voile, topLeft = coin, size = taillecase)
-                        if (casesZoneEdition != null) {
-                            when {
-                                i in casesZoneEdition -> drawRect(CouleurZoneEdition.copy(alpha = 0.45f), topLeft = coin, size = taillecase)
-                                i in casesAutresZones -> drawRect(CouleurAutresZones.copy(alpha = 0.25f), topLeft = coin, size = taillecase)
-                            }
+                        when {
+                            i in casesZoneEdition -> drawRect(CouleurZoneEdition.copy(alpha = 0.45f), topLeft = coin, size = taillecase)
+                            i in casesAutresZones -> drawRect(CouleurAutresZones.copy(alpha = 0.25f), topLeft = coin, size = taillecase)
                         }
                     }
                 }
                 val trait = Color.White.copy(alpha = 0.2f)
-                for (c in 1 until e.colonnes) drawLine(trait, Offset(c * cw, 0f), Offset(c * cw, size.height), strokeWidth = 1f)
-                for (l in 1 until e.lignes) drawLine(trait, Offset(0f, l * ch), Offset(size.width, l * ch), strokeWidth = 1f)
+                // Cases minuscules (grille très fine) : les traits cacheraient toute la carte.
+                if (cw >= 6f) for (c in 1 until e.colonnes) drawLine(trait, Offset(c * cw, 0f), Offset(c * cw, size.height), strokeWidth = 1f)
+                if (ch >= 6f) for (l in 1 until e.lignes) drawLine(trait, Offset(0f, l * ch), Offset(size.width, l * ch), strokeWidth = 1f)
             }
             // Lieux de la carte : bien visibles quand les joueurs les voient, estompés sinon.
             val diametre = 28.dp

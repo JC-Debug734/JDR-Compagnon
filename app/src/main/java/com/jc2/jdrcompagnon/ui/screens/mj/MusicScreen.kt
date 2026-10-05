@@ -202,11 +202,6 @@ fun MusicScreen(
                     }
                 }
             }
-            Text(
-                "Les musiques importées sont copiées dans l'application et utilisables dans les scènes et les environnements.",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.8f)
-            )
         }
     }
 

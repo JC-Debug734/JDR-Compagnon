@@ -20,6 +20,8 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -83,9 +85,13 @@ fun PlainScenarioRenderer(
     onLinkClick: (type: String, name: String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
     collapseKey: String? = null,
+    // Zones de carte (exploration) dont la description apparaît dans le texte : œil pour les révéler.
+    zonesCarte: List<ExplorationSession.ZoneDeCarte> = emptyList(),
+    onRevelerZone: (ExplorationSession.ZoneDeCarte) -> Unit = {},
 ) {
     val context = LocalContext.current
     val segments = remember(content) { parseSegments(content) }
+    fun zonePour(texte: String) = zonePourTexte(texte, zonesCarte)
     val prefs = remember { context.getSharedPreferences("scenario_reader", Context.MODE_PRIVATE) }
     val prefKey = collapseKey?.let { "collapsed_$it" }
     var collapsed by remember(prefKey) {
@@ -110,11 +116,23 @@ fun PlainScenarioRenderer(
                 if (hiddenLevel != null && segment.level <= hiddenLevel) hiddenUnderLevel = null
                 if (hiddenUnderLevel == null) {
                     val isCollapsed = index in collapsed
-                    CollapsibleHeader(segment, isCollapsed, onToggle = { toggleCollapsed(index) }, onLinkClick = onLinkClick)
+                    CollapsibleHeader(
+                        segment, isCollapsed, onToggle = { toggleCollapsed(index) }, onLinkClick = onLinkClick,
+                        zone = zonePour(segment.text.text), onRevelerZone = onRevelerZone,
+                    )
                     if (isCollapsed) hiddenUnderLevel = segment.level
                 }
             } else if (hiddenUnderLevel == null) {
-                RenderSegment(segment, onLinkClick, tts)
+                // Paragraphe qui commence par le nom d'une zone (« **Étang.** … ») : œil à droite.
+                val zone = (segment as? Segment.Paragraph)?.let { p -> zonePour(p.text.text.substringBefore('.').take(60)) }
+                if (zone != null) {
+                    Row(verticalAlignment = Alignment.Top) {
+                        Box(modifier = Modifier.weight(1f)) { RenderSegment(segment, onLinkClick, tts) }
+                        BoutonRevelerZone(zone, onRevelerZone)
+                    }
+                } else {
+                    RenderSegment(segment, onLinkClick, tts)
+                }
             }
         }
     }
@@ -222,6 +240,8 @@ private fun CollapsibleHeader(
     isCollapsed: Boolean,
     onToggle: () -> Unit,
     onLinkClick: (String, String) -> Unit,
+    zone: ExplorationSession.ZoneDeCarte? = null,
+    onRevelerZone: (ExplorationSession.ZoneDeCarte) -> Unit = {},
 ) {
     Row(
         modifier = Modifier
@@ -233,12 +253,49 @@ private fun CollapsibleHeader(
         Box(modifier = Modifier.weight(1f)) {
             LinkedText(segment.text, headerStyle(segment.level).copy(fontWeight = FontWeight.Bold), onLinkClick)
         }
+        zone?.let { BoutonRevelerZone(it, onRevelerZone) }
         Icon(
             if (isCollapsed) Icons.Default.KeyboardArrowRight else Icons.Default.ExpandMore,
             contentDescription = if (isCollapsed) "Déplier" else "Replier",
             tint = Color.White
         )
     }
+}
+
+/**
+ * Œil d'une zone de carte décrite dans le texte : barré tant qu'elle est cachée aux joueurs, un
+ * appui la révèle sur la page table ; doré une fois révélée (plus d'action : pas de re-brouillard).
+ */
+@Composable
+private fun BoutonRevelerZone(zone: ExplorationSession.ZoneDeCarte, onRevelerZone: (ExplorationSession.ZoneDeCarte) -> Unit) {
+    IconButton(onClick = { if (!zone.revelee) onRevelerZone(zone) }) {
+        Icon(
+            if (zone.revelee) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+            contentDescription = if (zone.revelee) "Zone « ${zone.zone.nom} » révélée" else "Révéler la zone « ${zone.zone.nom} » sur la carte",
+            tint = if (zone.revelee) Color(0xFFFFD778) else Color.White,
+        )
+    }
+}
+
+private val NumerotationTitreRegex = Regex("""^[\s#*_]*([A-Z]?\d+[a-z]?[.)\-–:]?\s+)""")
+
+private fun normaliserNomZone(texte: String): String =
+    texte.replace(NumerotationTitreRegex, "").lowercase()
+        .replace(Regex("""[*_#«»"'’:.\-–()\[\]]"""), " ")
+        .replace(Regex("""\s+"""), " ").trim()
+
+/**
+ * Zone dont [texte] (titre, début de paragraphe) est la description : même nom, ou nom contenu
+ * dans le texte (« 3. La cuisine du manoir » ↔ zone « Cuisine »). Le nom le plus long l'emporte.
+ */
+internal fun zonePourTexte(texte: String, zones: List<ExplorationSession.ZoneDeCarte>): ExplorationSession.ZoneDeCarte? {
+    if (zones.isEmpty()) return null
+    val t = normaliserNomZone(texte)
+    if (t.length < 3) return null
+    return zones.filter { z ->
+        val n = normaliserNomZone(z.zone.nom)
+        n.length >= 3 && (t == n || Regex("""(^|\s)${Regex.escape(n)}(\s|$)""").containsMatchIn(t))
+    }.maxByOrNull { it.zone.nom.length }
 }
 
 @Composable

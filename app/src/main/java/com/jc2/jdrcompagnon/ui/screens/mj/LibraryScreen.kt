@@ -41,6 +41,7 @@ import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -135,6 +136,7 @@ import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdRepository
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.CustomContentParser
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.CustomContentSummary
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.CustomBookImages
+import com.jc2.jdrcompagnon.ui.screens.mj.library.aUnBlocDeStats
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.PnjImport
 import com.jc2.jdrcompagnon.ui.screens.mj.scenario.ScenarioImport
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.ReferenceEntryParser
@@ -1396,8 +1398,43 @@ fun LibraryScreen(
                 }
                 // Même présentation que les livres intégrés : une liste d'entrées cliquables
                 // groupées par type, chacune ouvrant sa fiche (plutôt qu'un long texte brut).
-                val rows = remember(content) { content?.let { customBookRows(it) }.orEmpty() }
+                // PNJ de la campagne qui a apporté ce livre (fiches créées par ses scénarios) : listés
+                // avec ceux du livre, pour que chaque PNJ ait sa fiche ici comme les monstres.
+                val campagnes by com.jc2.jdrcompagnon.ui.GameState.mjCampaigns.collectAsState()
+                val personnages by com.jc2.jdrcompagnon.ui.GameState.characters.collectAsState()
+                val fichesCampagne = remember(campagnes, personnages, selectedCustomBookId) {
+                    val ids = campagnes.filter { selectedCustomBookId in it.livreIds }.flatMap { it.pnjIds }.toSet()
+                    personnages.filter { it.id in ids && it.type == "PNJ" }
+                }
+                val rows = remember(content, fichesCampagne) {
+                    val duLivre = content?.let { customBookRows(it) }.orEmpty()
+                    val nomsDuLivre = duLivre.filter { it.kind == CustomBookRowKind.PNJ }.map { it.entry.name.lowercase() }.toSet()
+                    val lignes = duLivre + fichesCampagne
+                        .filter { it.name.lowercase() !in nomsDuLivre }
+                        .distinctBy { it.name.lowercase() }
+                        .map { c ->
+                            CustomBookRow(
+                                SrdSectionEntry(name = c.name, category = "PNJ", rawMarkdown = ""),
+                                CustomBookRowKind.PNJ,
+                                listOf(c.race, c.characterClass).filter { it.isNotBlank() }.joinToString(" · "),
+                                fiche = c,
+                            )
+                        }
+                    // Images des PNJ (dossier images/ de l'archive), comme pour les monstres.
+                    val fichier = book?.fileName
+                    val dossier = fichier?.substringBefore('/', "")?.ifBlank { null }
+                    if (fichier == null || dossier == null) lignes else {
+                        val booksDir = customBooksDir(context)
+                        val profils = lignes.mapNotNull { it.profil }
+                        val resolus = CustomBookImages.resolve(profils, File(booksDir, fichier), File(booksDir, dossier))
+                            .associateBy { it.name }
+                        lignes.map { l -> l.profil?.let { p -> l.copy(profil = resolus[p.name] ?: p) } ?: l }
+                    }
+                }
                 val rowsByEntry = remember(rows) { rows.associateBy { it.entry } }
+                // Hors de la liste : la liste quitte la composition pendant qu'une fiche PNJ est
+                // affichée, et sa position de défilement doit être retrouvée au retour.
+                val bookListState = rememberSaveable(selectedCustomBookId, saver = LazyListState.Saver) { LazyListState() }
                 val openedEntry = openedCustomEntry
                 Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
                     if (openedEntry == null && rows.isNotEmpty()) {
@@ -1418,7 +1455,14 @@ fun LibraryScreen(
                     when {
                         book == null -> CustomBookMessage("Ce livre n'existe plus.")
                         content == null -> CustomBookMessage("Impossible de lire le contenu de ce fichier.")
-                        openedEntry != null -> CustomBookEntryCard(openedEntry.category, openedEntry.rawMarkdown)
+                        openedEntry != null -> {
+                            val ligne = rowsByEntry[openedEntry]
+                            when {
+                                ligne?.profil != null -> CustomBookProfilCard(ligne.profil)
+                                ligne?.fiche != null -> CustomBookFicheCard(ligne.fiche)
+                                else -> CustomBookEntryCard(openedEntry.category, openedEntry.rawMarkdown)
+                            }
+                        }
                         // Aucun titre exploitable : le texte entier dans une seule fiche.
                         rows.isEmpty() -> CustomBookEntryCard("", content)
                         else -> SectionEntryByCategoryList(
@@ -1435,11 +1479,12 @@ fun LibraryScreen(
                                     CustomBookRowKind.HISTORIQUE -> onHistoriqueClick(entry.name)
                                     CustomBookRowKind.DON -> onDonClick(entry.name)
                                     CustomBookRowKind.REGLE -> onRuleClick(entry.name)
-                                    CustomBookRowKind.LIBRE, null -> openedCustomEntry = entry
+                                    CustomBookRowKind.PNJ, CustomBookRowKind.LIBRE, null -> openedCustomEntry = entry
                                 }
                             },
                             subtitle = { rowsByEntry[it]?.subtitle.orEmpty() },
                             keepFileOrder = rows.all { it.kind == CustomBookRowKind.LIBRE },
+                            listState = bookListState,
                         )
                     }
                 }
@@ -2209,7 +2254,7 @@ private fun LoadingBox() {
 }
 
 /** Type d'une entrée listée dans un livre personnalisé : détermine l'écran de fiche ouvert. */
-private enum class CustomBookRowKind { MONSTRE, SORT, OBJET, CLASSE, ESPECE, HISTORIQUE, DON, REGLE, LIBRE }
+private enum class CustomBookRowKind { MONSTRE, PNJ, SORT, OBJET, CLASSE, ESPECE, HISTORIQUE, DON, REGLE, LIBRE }
 
 /**
  * Une entrée d'un livre personnalisé telle qu'affichée dans sa liste : [entry] porte le nom
@@ -2220,6 +2265,10 @@ private data class CustomBookRow(
     val kind: CustomBookRowKind,
     val subtitle: String = "",
     val equipment: EquipmentItem? = null,
+    // PNJ : profil au format monstre, affiché en bloc de stats comme une fiche du bestiaire.
+    val profil: SrdEntry? = null,
+    // PNJ de la campagne du livre sans profil dans le livre (créé par un scénario) : sa fiche.
+    val fiche: com.jc2.jdrcompagnon.ui.Character? = null,
 )
 
 /**
@@ -2234,10 +2283,20 @@ private fun customBookRows(content: String): List<CustomBookRow> {
         CustomBookRow(SrdSectionEntry(name = name, category = category, rawMarkdown = ""), kind, subtitle, equipment)
 
     val typed = buildList {
-        parsed.monsters.forEach { add(row(it.name, "Monstres", CustomBookRowKind.MONSTRE, monsterChallengeLabel(it).orEmpty())) }
-        // PNJ : devenus des fiches à l'import ; leur profil reste consultable ici en texte.
+        // Animaux (catégorie « Animaux », « Animaux domestiques »...) rangés à part des monstres.
+        parsed.monsters.forEach {
+            val groupe = if (it.category.contains("animau", ignoreCase = true)) "Animaux" else "Monstres"
+            add(row(it.name, groupe, CustomBookRowKind.MONSTRE, monsterChallengeLabel(it).orEmpty()))
+        }
+        // PNJ : devenus des fiches à l'import ; leur profil s'affiche ici en bloc de stats,
+        // comme un monstre.
         parsed.pnjs.forEach {
-            add(CustomBookRow(SrdSectionEntry(name = it.name, category = "PNJ", rawMarkdown = it.rawMarkdown), CustomBookRowKind.LIBRE))
+            add(
+                CustomBookRow(
+                    SrdSectionEntry(name = it.name, category = "PNJ", rawMarkdown = it.rawMarkdown),
+                    CustomBookRowKind.PNJ, monsterChallengeLabel(it).orEmpty(), profil = it,
+                )
+            )
         }
         parsed.spellsIndex.forEach { add(row(it.name, "Sorts", CustomBookRowKind.SORT, it.rawMarkdown)) }
         parsed.equipment.forEach { add(row(it.name, "Objets", CustomBookRowKind.OBJET, it.category, equipment = it)) }
@@ -2269,6 +2328,70 @@ private fun CustomBookMessage(text: String) {
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(24.dp),
         )
+    }
+}
+
+/**
+ * Fiche d'un PNJ d'un livre personnalisé : image puis bloc de stats façon manuel, comme une
+ * fiche du bestiaire (BestiaryDetailScreen), avec son comportement IA pour le MJ.
+ */
+@Composable
+private fun CustomBookProfilCard(profil: SrdEntry) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp)
+    ) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
+            contentColor = Color.White,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                com.jc2.jdrcompagnon.ui.screens.mj.library.srd.MonsterImage(profil, modifier = Modifier.padding(bottom = 8.dp))
+                val role by com.jc2.jdrcompagnon.ui.GameState.appRole.collectAsState()
+                if (role == com.jc2.jdrcompagnon.ui.AppRole.MJ) {
+                    Box(modifier = Modifier.padding(bottom = 12.dp)) {
+                        com.jc2.jdrcompagnon.feature_combat.ui.ComportementIaMonstreCard(profil.rawMarkdown)
+                    }
+                }
+                if (profil.aUnBlocDeStats()) {
+                    com.jc2.jdrcompagnon.ui.screens.mj.library.MonsterStatBlock(profil, modifier = Modifier.clip(RoundedCornerShape(4.dp)))
+                } else {
+                    SrdMarkdownAvecTables(markdown = profil.rawMarkdown)
+                }
+            }
+        }
+    }
+}
+
+/** Fiche PNJ (personnage de la campagne) en bloc de stats, même carte que [CustomBookProfilCard]. */
+@Composable
+private fun CustomBookFicheCard(fiche: com.jc2.jdrcompagnon.ui.Character) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp)
+    ) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
+            contentColor = Color.White,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                val role by com.jc2.jdrcompagnon.ui.GameState.appRole.collectAsState()
+                if (role == com.jc2.jdrcompagnon.ui.AppRole.MJ) {
+                    Box(modifier = Modifier.padding(bottom = 12.dp)) {
+                        com.jc2.jdrcompagnon.feature_combat.ui.ComportementIaPnjCard(fiche)
+                    }
+                }
+                com.jc2.jdrcompagnon.ui.screens.mj.library.PnjStatBlock(fiche, modifier = Modifier.clip(RoundedCornerShape(4.dp)))
+            }
+        }
     }
 }
 
@@ -2494,6 +2617,9 @@ private fun SectionEntryByCategoryList(
     // true : entrées dans l'ordre du fichier (règles, glossaire, qui se lisent dans l'ordre)
     // plutôt que triées alphabétiquement dans chaque catégorie.
     keepFileOrder: Boolean = false,
+    // Fourni par l'appelant quand la liste quitte la composition le temps d'afficher une fiche
+    // (PNJ d'un livre personnalisé) : la position de défilement est retrouvée au retour.
+    listState: LazyListState = rememberLazyListState(),
 ) {
     if (entries.isEmpty()) {
         Box(
@@ -2517,6 +2643,7 @@ private fun SectionEntryByCategoryList(
         .toSortedMap(compareBy { categoryOrder.indexOf(it) })
 
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),

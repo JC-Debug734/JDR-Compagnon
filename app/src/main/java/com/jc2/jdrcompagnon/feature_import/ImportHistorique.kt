@@ -16,6 +16,7 @@ enum class ImportGenre(val libelle: String) {
     DOSSIER("Dossier de scénarios"),
     PERSONNAGE("Fiche de personnage"),
     MUSIQUE("Musique"),
+    EPREUVE("Épreuve"),
     INCONNU("Import"),
 }
 
@@ -44,7 +45,7 @@ object ImportHistorique {
      */
     data class ElementImporte(val type: String, val id: String, val libelle: String, val worldId: String? = null)
 
-    val TYPES = listOf("scenario", "campagne", "personnage", "livre", "univers", "musique")
+    val TYPES = listOf("scenario", "campagne", "personnage", "livre", "univers", "musique", "epreuve")
 
     private const val PREFS_NAME = "import_historique"
     private const val KEY_ENTREES = "entrees_json"
@@ -81,11 +82,9 @@ object ImportHistorique {
         return entree
     }
 
-    /** Marque l'import [entree] comme supprimé, avec le compte rendu de la suppression. */
-    fun marquerSupprime(context: Context, entree: Entree, compteRendu: String) {
-        enregistrer(context, charger(context).map {
-            if (it.date == entree.date && it.fichier == entree.fichier) it.copy(supprime = true, message = compteRendu) else it
-        })
+    /** L'import [entree] a été supprimé : il disparaît de la liste des imports présents. */
+    fun retirer(context: Context, entree: Entree) {
+        enregistrer(context, charger(context).filterNot { it.date == entree.date && it.fichier == entree.fichier })
     }
 
     fun vider(context: Context) {

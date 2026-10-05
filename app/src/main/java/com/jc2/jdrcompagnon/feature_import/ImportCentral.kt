@@ -4,6 +4,9 @@ import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.documentfile.provider.DocumentFile
+import com.jc2.jdrcompagnon.di.EpreuveDependencies
+import com.jc2.jdrcompagnon.feature_epreuve.data.EpreuveImageStore
+import com.jc2.jdrcompagnon.feature_epreuve.data.EpreuveImport
 import com.jc2.jdrcompagnon.ui.CampagneFileStore
 import com.jc2.jdrcompagnon.ui.CampagneImageStore
 import com.jc2.jdrcompagnon.ui.GameState
@@ -31,6 +34,7 @@ import java.util.zip.ZipInputStream
  * - `.zip` contenant un `reference.md` (à la racine ou dans un unique dossier) → univers
  *   ([CustomWorldsRepository.importWorldFromZip]) ;
  * - autre `.zip` → livre avec ses images (bestiaire illustré, objets, PNJ...) ;
+ * - `.md` avec des lignes `{mepreuve: ...}` → épreuves de l'outil ÉPREUVES ([EpreuveImport]) ;
  * - `.md` avec des entrées `<!-- type: ... -->` → livre de bibliothèque ; sinon → scénario
  *   ([ScenarioImport]) ;
  * - `.json` → fiche de personnage (export JDRCompagnon) ;
@@ -103,7 +107,7 @@ object ImportCentral {
      */
     private class Photo(val parType: Map<String, Map<String, String>>)
 
-    private fun photographier(context: Context, worldId: String?): Photo = Photo(
+    private suspend fun photographier(context: Context, worldId: String?): Photo = Photo(
         mapOf(
             "scenario" to GameState.mjScenarios.value.associate { it.id to it.title },
             "campagne" to GameState.mjCampaigns.value.associate { it.id to it.title },
@@ -111,10 +115,11 @@ object ImportCentral {
             "livre" to CustomBooksStore.list(context, worldId).associate { it.id to it.name },
             "univers" to CustomWorldsRepository.listCustomWorlds(context).associate { it.id to it.name },
             "musique" to ImportedMusicStore.tracks.value.associate { it.id to it.displayName },
+            "epreuve" to EpreuveDependencies.epreuvesDuMonde(worldId).associate { it.id to it.nom },
         )
     )
 
-    private fun nouveautes(context: Context, worldId: String?, avant: Photo): List<ImportHistorique.ElementImporte> {
+    private suspend fun nouveautes(context: Context, worldId: String?, avant: Photo): List<ImportHistorique.ElementImporte> {
         val apres = photographier(context, worldId)
         return ImportHistorique.TYPES.flatMap { type ->
             val anciens = avant.parType[type].orEmpty()
@@ -158,6 +163,11 @@ object ImportCentral {
                 }
                 "univers" -> CustomWorldsRepository.deleteCustomWorld(context, e.id)
                 "musique" -> ImportedMusicStore.tracks.value.any { it.id == e.id }.also { if (it) ImportedMusicStore.remove(context, e.id) }
+                "epreuve" -> EpreuveDependencies.repository.getEpreuveParId(e.id)?.let { epreuve ->
+                    EpreuveImageStore.supprimer(context, epreuve.imageFileName)
+                    EpreuveDependencies.repository.supprimer(epreuve.id)
+                    true
+                } ?: false
                 else -> false
             }
             if (ok) retires += e.libelle
@@ -165,9 +175,30 @@ object ImportCentral {
         mondesModifies.forEach { SrdRepository.invalidateWorld(it) }
         val compteRendu = if (retires.isEmpty()) "Import supprimé (plus rien à retirer)."
         else "Import supprimé : " + retires.joinToString(", ") + "."
-        ImportHistorique.marquerSupprime(context, entree, compteRendu)
+        ImportHistorique.retirer(context, entree)
         compteRendu
     }
+
+    /**
+     * Éléments d'un import encore présents dans l'app : un élément supprimé ailleurs (scénario
+     * effacé, livre retiré de la bibliothèque...) ne compte plus, et un import dont plus rien ne
+     * reste n'est plus affiché.
+     */
+    suspend fun elementsPresents(context: Context, entree: ImportHistorique.Entree): List<ImportHistorique.ElementImporte> =
+        withContext(Dispatchers.IO) {
+            entree.elements.filter { e ->
+                when (e.type) {
+                    "scenario" -> GameState.mjScenarios.value.any { it.id == e.id }
+                    "campagne" -> GameState.mjCampaigns.value.any { it.id == e.id }
+                    "personnage" -> GameState.characters.value.any { it.id == e.id }
+                    "livre" -> CustomBooksStore.list(context, e.worldId).any { it.id == e.id }
+                    "univers" -> CustomWorldsRepository.listCustomWorlds(context).any { it.id == e.id }
+                    "musique" -> ImportedMusicStore.tracks.value.any { it.id == e.id }
+                    "epreuve" -> EpreuveDependencies.repository.getEpreuveParId(e.id) != null
+                    else -> false
+                }
+            }
+        }
 
     private suspend fun importerLivre(context: Context, uri: Uri, worldId: String?, nom: String): Result<String> {
         val livre = ajouterLivrePersonnalise(context, uri, worldId, nom)
@@ -209,6 +240,11 @@ object ImportCentral {
     private suspend fun importerMarkdown(context: Context, uri: Uri, worldId: String?, nom: String): Pair<ImportGenre, Result<String>> {
         val texte = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
             ?: return ImportGenre.INCONNU to Result.failure(IllegalArgumentException("Fichier illisible."))
+        if (EpreuveImport.contientEpreuves(texte)) {
+            val noms = EpreuveImport.importer(context, texte, worldId ?: "donjon_et_dragon")
+            return ImportGenre.EPREUVE to if (noms.isEmpty()) Result.failure(IllegalArgumentException("Aucune épreuve nommée dans le fichier."))
+            else Result.success("Épreuve(s) " + noms.joinToString(", ") { "« $it »" } + " : à lancer depuis l'outil ÉPREUVES.")
+        }
         if (CustomContentParser.parse(texte).summary.total > 0) {
             return ImportGenre.LIVRE to importerLivre(context, uri, worldId, nom)
         }

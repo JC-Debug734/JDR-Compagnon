@@ -39,8 +39,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.jc2.jdrcompagnon.di.EnvironmentDependencies
-import com.jc2.jdrcompagnon.feature_environnement.domain.model.EpreuveEnvironnementale
-import com.jc2.jdrcompagnon.feature_environnement.ui.LancerEpreuveDialog
 import com.jc2.jdrcompagnon.feature_combat.ui.LancerCombatDialog
 import com.jc2.jdrcompagnon.di.TableAleatoireDependencies
 import com.jc2.jdrcompagnon.feature_environnement.data.EnvironmentImageStore
@@ -154,6 +152,26 @@ fun ScenarioReaderContent(
     }
     val currentScene = scenes.getOrNull(currentIndex)
 
+    // Zones préparées des cartes du scénario (images {image:...} de toutes ses scènes) : une
+    // icône œil à côté de leur description les révèle sur la page table.
+    val versionExploration by com.jc2.jdrcompagnon.feature_exploration.ExplorationSession.version.collectAsState()
+    val cartesScenario = remember(scenario?.id, scenes) {
+        val imageRegex = Regex("""\{image:\s*([^}\n]+?)\s*\}""")
+        (scenes.flatMap { s -> imageRegex.findAll(s.markdownContent).map { it.groupValues[1] }.toList() } +
+            listOfNotNull(scenario?.lieuImageFileName))
+            .distinct()
+            .map { "scenario-image:$it" to ScenarioImageStore.fichier(context, it) }
+    }
+    val zonesCarte = remember(cartesScenario, versionExploration) {
+        com.jc2.jdrcompagnon.feature_exploration.ExplorationSession.zonesDesCartes(context, cartesScenario)
+    }
+    fun revelerZone(z: com.jc2.jdrcompagnon.feature_exploration.ExplorationSession.ZoneDeCarte) {
+        com.jc2.jdrcompagnon.feature_exploration.ExplorationSession.revelerZoneDeCarte(
+            context, z.cle, scenario?.title?.let { "Carte — $it" } ?: "Carte du scénario", z.imageFile, z.zone.id
+        )
+        Toast.makeText(context, "« ${z.zone.nom} » révélée sur la table", Toast.LENGTH_SHORT).show()
+    }
+
     // Mode lecture (LectureScenarioState) : seul moment où le temps des tables aléatoires est
     // compté. L'ouverture du scénario remet le compteur à zéro ; un retour sur ce même lecteur
     // après un passage par un autre écran (état sauvegardé) reprend simplement le comptage.
@@ -188,6 +206,10 @@ fun ScenarioReaderContent(
     var linkDetailItem by remember { mutableStateOf<Pair<String, String>?>(null) }
     var lootCharacterPickerItem by remember { mutableStateOf<String?>(null) }
     var lootGroupPickerItem by remember { mutableStateOf<String?>(null) }
+    // Butin d'un monstre / possessions d'un PNJ cité dans la scène (type, nom).
+    var butinLien by remember { mutableStateOf<Pair<String, String>?>(null) }
+    // Trésor écrit dans la scène (#butin:[450 pc; Longue-vue (100 po)]) : à donner aux joueurs.
+    var tresorLien by remember { mutableStateOf<String?>(null) }
     // « Ajouter au groupe » d'un lien (type, nom) : voir AjouterAuGroupeDialog.
     var ajoutGroupeItem by remember { mutableStateOf<Pair<String, String>?>(null) }
 
@@ -195,8 +217,7 @@ fun ScenarioReaderContent(
     var resultatEvenement by remember { mutableStateOf<Evenement?>(null) }
     var afficherResultatEvenement by remember { mutableStateOf(false) }
 
-    // Lien #epreuve:[Nom] : dialogue de dosage (niveau/joueurs) puis écran de résolution.
-    var epreuveALancer by remember { mutableStateOf<EpreuveEnvironnementale?>(null) }
+    // Lien #epreuve:[Nom] : épreuve de l'outil ÉPREUVES démarrée puis écran de résolution.
     val epreuveScope = rememberCoroutineScope()
 
     // Lien #combat:[Gobelin x3, Loup x2] : dialogue de préparation puis écran de suivi du combat.
@@ -210,11 +231,16 @@ fun ScenarioReaderContent(
                 }
             }
             "epreuve" -> epreuveScope.launch {
-                val epreuve = EnvironmentDependencies.trouverEpreuve(scenario?.worldId ?: GameState.currentWorldId(), name)
+                val epreuve = com.jc2.jdrcompagnon.di.EpreuveDependencies.trouverEpreuve(scenario?.worldId ?: GameState.currentWorldId(), name)
                 if (epreuve != null) {
-                    epreuveALancer = epreuve
+                    // Une autre épreuve en cours est remplacée ; la même reprend où elle en était.
+                    val active = com.jc2.jdrcompagnon.feature_epreuve.presentation.EpreuveOutilSession.etat.value
+                    if (active?.epreuve?.id != epreuve.id) {
+                        com.jc2.jdrcompagnon.feature_epreuve.presentation.EpreuveOutilSession.demarrer(epreuve)
+                    }
+                    onOpenInternalLink("epreuve", epreuve.nom)
                 } else {
-                    Toast.makeText(context, "Épreuve \"$name\" introuvable dans les environnements", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Épreuve \"$name\" introuvable dans l'outil ÉPREUVES", Toast.LENGTH_SHORT).show()
                 }
             }
             // Lien #evenement:[Titre] : événement de la bibliothèque, affiché avec ses effets.
@@ -229,6 +255,7 @@ fun ScenarioReaderContent(
                 }
             }
             "combat" -> combatALancer = name
+            "butin" -> tresorLien = name
             // Règle : aucune autre action possible, on ouvre directement sa fiche (petite
             // fenêtre de détail) sans passer par le menu "Que faire ?".
             "rule" -> linkDetailItem = type to name
@@ -516,7 +543,9 @@ fun ScenarioReaderContent(
                                     content = scenario.description,
                                     onLinkClick = ::handleLinkClick,
                                     modifier = Modifier.fillMaxWidth().padding(12.dp),
-                                    collapseKey = "${scenario.id}_apercu"
+                                    collapseKey = "${scenario.id}_apercu",
+                                    zonesCarte = zonesCarte,
+                                    onRevelerZone = ::revelerZone,
                                 )
                             }
                             Spacer(modifier = Modifier.height(16.dp))
@@ -529,7 +558,9 @@ fun ScenarioReaderContent(
                             content = scene.markdownContent,
                             onLinkClick = ::handleLinkClick,
                             modifier = Modifier.fillMaxWidth(),
-                            collapseKey = "${scenario.id}_${scene.id}"
+                            collapseKey = "${scenario.id}_${scene.id}",
+                            zonesCarte = zonesCarte,
+                            onRevelerZone = ::revelerZone,
                         )
                     }
                 }
@@ -642,6 +673,7 @@ fun ScenarioReaderContent(
                                         "epreuve" -> "Épreuve environnementale"
                                         "evenement" -> "Événement"
                                         "combat" -> "Combat"
+                                        "butin" -> "Trésor à donner"
                                         else -> type
                                     }
                                 )
@@ -658,6 +690,7 @@ fun ScenarioReaderContent(
                                         "epreuve" -> "⛰️"
                                         "evenement" -> "🎲"
                                         "combat" -> "⚔️"
+                                        "butin" -> "💰"
                                         else -> "🔗"
                                     },
                                     style = MaterialTheme.typography.titleLarge
@@ -748,16 +781,6 @@ fun ScenarioReaderContent(
         )
     }
 
-    epreuveALancer?.let { epreuve ->
-        LancerEpreuveDialog(
-            epreuve = epreuve,
-            onDismiss = { epreuveALancer = null },
-            onLancee = {
-                epreuveALancer = null
-                onOpenInternalLink("epreuve", epreuve.nom)
-            }
-        )
-    }
 
     combatALancer?.let { composition ->
         LancerCombatDialog(
@@ -787,6 +810,20 @@ fun ScenarioReaderContent(
             confirmButton = {},
             dismissButton = {
                 Column(horizontalAlignment = Alignment.End) {
+                    if (type == "pnj" || type == "npc") {
+                        // Conversation improvisée : briefing plein écran (comportement, personnalité,
+                        // aide de jeu sociale), même si le PNJ n'a pas de fiche.
+                        TextButton(onClick = {
+                            linkMenuItem = null
+                            briefingCharacter = pnjPourConversation(name, scenario.worldId)
+                        }) { Text("💬 Lancer une conversation") }
+                    }
+                    if (type in setOf("monster", "pnj", "npc")) {
+                        TextButton(onClick = {
+                            linkMenuItem = null
+                            butinLien = type to name
+                        }) { Text(if (type == "monster") "💰 Butin" else "💰 Possessions / échange") }
+                    }
                     TextButton(onClick = {
                         linkMenuItem = null
                         if (type == "pnj" || type == "npc") {
@@ -835,6 +872,33 @@ fun ScenarioReaderContent(
 
     lootGroupPickerItem?.let { itemName ->
         SendItemToGroupDialog(itemName = itemName, worldId = scenario.worldId, onDismiss = { lootGroupPickerItem = null })
+    }
+
+    butinLien?.let { (type, name) ->
+        if (type == "monster") {
+            com.jc2.jdrcompagnon.feature_butin.ui.ButinMonstreDialog(
+                nom = name,
+                cle = "scenario:${scenario.id}:${currentScene?.title}:$name",
+                worldId = scenario.worldId,
+                onDismiss = { butinLien = null },
+            )
+        } else {
+            // Mémorisé : un PNJ sans fiche est recréé à chaque appel (nouvel id, nouveau butin).
+            val pnj = remember(name) { pnjPourConversation(name, scenario.worldId) }
+            com.jc2.jdrcompagnon.feature_butin.ui.ButinPersonnageDialog(
+                character = pnj,
+                onDismiss = { butinLien = null },
+            )
+        }
+    }
+
+    tresorLien?.let { contenu ->
+        com.jc2.jdrcompagnon.feature_butin.ui.ButinScenarioDialog(
+            contenu = contenu,
+            cle = "tresor:${scenario.id}:${currentScene?.id}:$contenu",
+            worldId = scenario.worldId,
+            onDismiss = { tresorLien = null },
+        )
     }
 
     ajoutGroupeItem?.let { (type, name) ->

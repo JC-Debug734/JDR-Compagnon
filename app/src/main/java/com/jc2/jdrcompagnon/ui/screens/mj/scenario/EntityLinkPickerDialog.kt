@@ -9,10 +9,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.jc2.jdrcompagnon.di.EnvironmentDependencies
 import com.jc2.jdrcompagnon.di.EvenementDependencies
 import kotlinx.coroutines.flow.first
-import com.jc2.jdrcompagnon.feature_environnement.domain.usecase.catalogueEpreuves
 import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdRepository
 import kotlinx.coroutines.Dispatchers
@@ -81,8 +79,7 @@ fun EntityLinkPickerDialog(
                     EvenementDependencies.seedSiNecessaire(context.applicationContext, monde)
                     EvenementDependencies.repository.observerEvenements(monde).first().map { it.titre }.distinct()
                 }.orEmpty()
-                "epreuve" -> (EnvironmentDependencies.epreuvesDuMonde(currentWorldId).map { it.second.nom } +
-                    catalogueEpreuves.map { it.nom }).distinct()
+                "epreuve" -> com.jc2.jdrcompagnon.di.EpreuveDependencies.epreuvesDuMonde(currentWorldId).map { it.nom }.distinct()
                 else -> emptyList()
             }
             val q = query.trim()

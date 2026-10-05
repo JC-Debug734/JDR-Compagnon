@@ -48,6 +48,47 @@ class SimulationCombatTest {
     }
 
     @Test
+    fun `les javelines lancees et les fleches sont decomptees`() {
+        val javeline = AttaqueHeros("Javeline", 5, "1d6 + 3", aDistance = false, lancer = true, stock = 2)
+        val arcStock = arc.copy(stock = 1)
+        val cible = gobelin(1, pv = 500).copy(attaques = emptyList())
+        val simulateur = SimulateurCombat(heros(attaques = listOf(javeline, arcStock)), Random(4))
+        var etat = auTourDuHeros(simulateur, listOf(cible), Distance.LONGUE)
+        assertTrue(etat.distance(cible.id) != Distance.CONTACT)
+        fun tirer(a: AttaqueHeros) = DeclarationHeros("Attaquer", "attaquer", cible.id, frappes = listOf(FrappeHeros.Arme(a)))
+        etat = simulateur.jouerHeros(etat, tirer(javeline))
+        assertEquals(1, etat.stocks["Javeline"])
+        // Lancée à distance : il ne s'est pas approché.
+        assertTrue(etat.journal.none { it.texte.contains("s'approche de") })
+        etat = simulateur.jouerHeros(etat, tirer(arcStock))
+        assertEquals(0, etat.stocks["Arc court"])
+        etat = simulateur.jouerHeros(etat, tirer(arcStock))
+        assertEquals(0, etat.stocks["Arc court"])
+        assertTrue(etat.journal.last { it.texte.startsWith("Arc court") }.texte.contains("plus de munition"))
+    }
+
+    @Test
+    fun `le souffle de zone touche le personnage puis doit se recharger`() {
+        val souffle = AttaqueMonstre(
+            "Souffle glacial", TypeAttaqueMonstre.SAUVEGARDE, formuleDegats = "9d8", degatsMoyens = 40,
+            sauvegarde = "Constitution", dd = 15, recharge = 5, zone = true,
+        )
+        val saignee = AttaqueMonstre("Saignée", TypeAttaqueMonstre.CORPS_A_CORPS, bonusToucher = 7, formuleDegats = "2d4 + 4", degatsMoyens = 9)
+        val dragon = gobelin(1, pv = 500).copy(
+            nom = "Jeune dragon blanc",
+            attaques = listOf(saignee, souffle),
+            nbAttaquesMultiples = 3,
+            profilIA = com.jc2.jdrcompagnon.feature_combat.domain.model.ProfilIA.ARTILLEUR,
+        )
+        val simulateur = SimulateurCombat(heros(pv = 500), Random(2))
+        val etat = auTourDuHeros(simulateur, listOf(dragon), Distance.COURTE)
+        val apres = simulateur.jouerHeros(etat, DeclarationHeros("Esquiver", "dodge"))
+        val ligne = apres.journal.first { it.texte.startsWith("Jeune dragon blanc") }
+        assertTrue(ligne.texte, ligne.texte.contains("Souffle glacial") && ligne.texte.contains("JS Constitution"))
+        assertTrue(apres.heros.pv < 500)
+    }
+
+    @Test
     fun `les monstres jouent seuls jusqu'au tour du personnage`() {
         val etat = SimulateurCombat(heros(), Random(1)).demarrer(listOf(gobelin(1), gobelin(2)))
         assertTrue(etat.issue != null || etat.tourDuHeros)
@@ -84,7 +125,9 @@ class SimulationCombatTest {
             etat,
             DeclarationHeros("Esquiver", "dodge", deplacementCibleId = "gob1", distanceVisee = Distance.CONTACT)
         )
-        assertTrue(apres.journal.any { it.texte.contains("le contact demande de se précipiter") })
+        // 9 m de déplacement depuis 30 m : arrêt à 24 m (le contact demande de se précipiter).
+        assertTrue(apres.journal.any { it.texte.contains("déplacement limité à 9 m") })
+        assertTrue(apres.journal.any { it.texte.contains("→ à 24 m de") })
     }
 
     @Test

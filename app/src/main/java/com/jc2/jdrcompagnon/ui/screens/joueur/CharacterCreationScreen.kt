@@ -174,12 +174,15 @@ private fun CharacterCreationScreenContent(
         classes = ClasseParser.parse(
             SrdRepository.loadClasses(context, worldId).joinToString("\n\n") { it.rawMarkdown }
         )
+        // Ordre alphabétique : les espèces et historiques d'un livre importé (ex. le kender de
+        // Dragonlance) prennent leur place parmi ceux du SRD au lieu d'arriver en fin de liste.
+        val ordreAlphabetique = java.text.Collator.getInstance(java.util.Locale.FRENCH)
         historiques = HistoriqueParser.parse(
             SrdRepository.loadHistoriques(context, worldId).joinToString("\n\n") { it.rawMarkdown }
-        )
+        ).sortedWith(compareBy(ordreAlphabetique) { it.nom })
         especes = EspeceParser.parse(
             SrdRepository.loadEspeces(context, worldId).joinToString("\n\n") { it.rawMarkdown }
-        )
+        ).sortedWith(compareBy(ordreAlphabetique) { it.nom })
         langues = LangueParser.parse(SrdRepository.loadLangues(context, worldId))
         // Sorts mineurs + niveau 1 seulement : rien d'autre n'est castable au niveau 1.
         // loadSpells (pas loadSpellsIndex) : seules les entrées détaillées contiennent

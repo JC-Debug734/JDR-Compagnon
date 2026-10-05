@@ -94,6 +94,7 @@ fun SceneProfileActionsHost(onOpenInternalLink: (type: String, name: String) -> 
     var combatWorldId by remember { mutableStateOf<String?>(null) }
     var briefing by remember { mutableStateOf<Pair<Character, GameState.PnjDiscussion?>?>(null) }
     var ajoutGroupe by remember { mutableStateOf<Pair<SceneProfile, String?>?>(null) }
+    var butin by remember { mutableStateOf<Pair<SceneProfile, String?>?>(null) }
     val groupeId by GameState.currentGroupId.collectAsState()
 
     request?.let { req ->
@@ -113,12 +114,16 @@ fun SceneProfileActionsHost(onOpenInternalLink: (type: String, name: String) -> 
                         combatWorldId = req.worldId
                         combatComposition = profile.name
                     }) { Text("⚔ Lancer un combat") }
-                    if (pnj != null) {
+                    if (profile.isPnj) {
                         TextButton(onClick = {
                             SceneProfileRequests.clear()
-                            briefing = pnj to req.discussion
-                        }) { Text("💬 Dialogue") }
+                            briefing = (pnj ?: pnjPourConversation(profile.name, req.worldId)) to req.discussion
+                        }) { Text("💬 Conversation") }
                     }
+                    TextButton(onClick = {
+                        SceneProfileRequests.clear()
+                        butin = profile to req.worldId
+                    }) { Text(if (profile.isPnj) "💰 Possessions / échange" else "💰 Butin") }
                     TextButton(onClick = {
                         SceneProfileRequests.clear()
                         ajoutGroupe = profile to req.worldId
@@ -142,6 +147,23 @@ fun SceneProfileActionsHost(onOpenInternalLink: (type: String, name: String) -> 
                 onOpenInternalLink("combat", composition)
             }
         )
+    }
+
+    butin?.let { (profile, worldId) ->
+        if (profile.isPnj) {
+            val pnj = remember(profile.name) { pnjPourConversation(profile.name, worldId) }
+            com.jc2.jdrcompagnon.feature_butin.ui.ButinPersonnageDialog(
+                character = pnj,
+                onDismiss = { butin = null },
+            )
+        } else {
+            com.jc2.jdrcompagnon.feature_butin.ui.ButinMonstreDialog(
+                nom = profile.name,
+                cle = "profil:$worldId:${profile.name}",
+                worldId = worldId,
+                onDismiss = { butin = null },
+            )
+        }
     }
 
     ajoutGroupe?.let { (profile, worldId) ->

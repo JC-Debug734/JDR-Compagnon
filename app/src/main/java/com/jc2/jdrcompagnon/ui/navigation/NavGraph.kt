@@ -85,7 +85,6 @@ import com.jc2.jdrcompagnon.feature_combat.ui.CombatEnCoursScreen
 import com.jc2.jdrcompagnon.feature_combat.ui.CombatJoueurScreen
 import com.jc2.jdrcompagnon.feature_combat.presentation.PhaseCombat
 import com.jc2.jdrcompagnon.feature_carte.ui.CarteCampagneScreen
-import com.jc2.jdrcompagnon.feature_environnement.ui.EpreuveEnCoursScreen
 import com.jc2.jdrcompagnon.feature_carte.ui.EvenementsAleatoiresScreen
 import com.jc2.jdrcompagnon.feature_carte.ui.VilleDetailScreen
 import com.jc2.jdrcompagnon.feature_carte.ui.VillesListScreen
@@ -919,7 +918,6 @@ fun JdrNavGraph() {
                     onOpenEquipmentDetail = { equipmentName ->
                         navController.navigate(Route.EquipmentDetail.path.replace("{equipmentName}", equipmentName))
                     },
-                    onOuvrirEpreuve = { navController.navigate(Route.EpreuveEnCours.path) },
                     onOpenTableAleatoire = { tableId ->
                         navController.navigate(Route.TableAleatoireDetail.path.replace("{tableId}", tableId))
                     },
@@ -1084,13 +1082,6 @@ fun JdrNavGraph() {
                 val campagneId = backStackEntry.arguments?.getString("campagneId") ?: return@composable
                 EvenementsAleatoiresScreen(
                     campagneId = campagneId,
-                    onBack = { navController.popBackStack() },
-                    onOpenMenu = { drawerScope.launch { drawerState.open() } },
-                )
-            }
-
-            composable(Route.EpreuveEnCours.path) {
-                EpreuveEnCoursScreen(
                     onBack = { navController.popBackStack() },
                     onOpenMenu = { drawerScope.launch { drawerState.open() } },
                 )
@@ -1283,9 +1274,9 @@ private fun navigateToInternalLink(navController: androidx.navigation.NavControl
         // Lien #rule: → directement la fiche de la règle (repli sur les grandes sections pour
         // les anciens liens, voir SrdRepository.getRuleEntryByName).
         "rule" -> Route.SrdSectionDetail.path.replace("{kind}", "regle").replace("{entryName}", android.net.Uri.encode(name))
-        // Lien de scénario #epreuve: → l'épreuve a déjà été démarrée par le lecteur (dialogue de
-        // dosage), il ne reste qu'à ouvrir l'écran de résolution.
-        "epreuve" -> Route.EpreuveEnCours.path
+        // Lien de scénario #epreuve: → l'épreuve a déjà été démarrée par le lecteur (session de
+        // l'outil ÉPREUVES), il ne reste qu'à ouvrir l'écran de résolution.
+        "epreuve" -> Route.EpreuveResolution.path
         // Lien #combat: → même principe : le combat a été préparé par LancerCombatDialog.
         "combat" -> Route.CombatEnCours.path
         else -> null

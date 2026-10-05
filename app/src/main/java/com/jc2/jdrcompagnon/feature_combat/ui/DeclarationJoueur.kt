@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import com.jc2.jdrcompagnon.feature_combat.domain.model.ActionCombat
 import com.jc2.jdrcompagnon.feature_combat.domain.model.ArmeEnMain
 import com.jc2.jdrcompagnon.feature_combat.domain.model.ArsenalPersonnage
+import com.jc2.jdrcompagnon.feature_combat.domain.model.formatMetres
 import com.jc2.jdrcompagnon.feature_combat.domain.model.CapaciteAttaque
 import com.jc2.jdrcompagnon.feature_combat.domain.model.Distance
 import com.jc2.jdrcompagnon.network.CombatJoueurData
@@ -73,6 +74,8 @@ internal data class DeclarationChoisie(
     val attaques: List<String> = emptyList(),
     // Sort de zone : toutes les créatures visées ([cible] est la première).
     val ciblesZone: List<CombattantJoueurData> = emptyList(),
+    // Zone du sort (ZoneEffet.versTexte) : le MJ y ajoute les créatures proches de la cible.
+    val zone: String? = null,
 )
 
 /** Précision d'une déclaration « Utiliser » portant sur un objet équipé (« Utiliser : Potion de guérison »). */
@@ -123,6 +126,38 @@ internal fun TableauTactique(
     val (ennemis, allies) = combat.ordre.filter { it.id != moiId }.partition { moi != null && it.estMonstre != moi.estMonstre }
     val ordreDistance = { c: CombattantJoueurData -> c.distance?.let { d -> runCatching { Distance.valueOf(d).ordinal }.getOrNull() } ?: 9 }
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        // Ordre d'initiative de tous les participants (ordre de jeu du round).
+        if (combat.ordre.any { it.initiative != null }) {
+            Surface(
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
+                contentColor = Color.White,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("Initiative", fontWeight = FontWeight.Bold, color = ForcedDarkPalette.AccentGold)
+                    combat.ordre.forEachIndexed { i, c ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "${i + 1}. " + c.nom + if (c.id == moiId) " (vous)" else "",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = when {
+                                    c.horsCombat -> Color.White.copy(alpha = 0.5f)
+                                    c.estMonstre -> RougeEnnemi
+                                    else -> BleuAllie
+                                },
+                                fontWeight = if (c.id == combat.actifId) FontWeight.Bold else FontWeight.Normal,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(c.initiative?.toString() ?: "—", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+        }
         Text("Ennemis", fontWeight = FontWeight.Bold, color = RougeEnnemi)
         if (ennemis.isEmpty()) Text("Aucun ennemi.", style = MaterialTheme.typography.bodySmall, color = Color.White)
         ennemis.sortedWith(compareBy<CombattantJoueurData> { it.horsCombat }.thenBy(ordreDistance)).forEach { c ->
@@ -154,7 +189,7 @@ private fun LigneTactique(c: CombattantJoueurData, estMoi: Boolean, selectionnee
                 )
                 val sante = if (c.pv != null && c.pvMax != null) "PV ${c.pv}/${c.pvMax}" else c.etat
                 Text(
-                    (listOf(sante) + c.conditions).joinToString(" · "),
+                    (listOfNotNull(sante, c.initiative?.let { "Init $it" }) + c.conditions).joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White,
                 )
@@ -235,7 +270,7 @@ internal fun CarteDeplacement(
                         FilterChip(
                             selected = deplacement?.cibleId == adversaire.id && deplacement.visee == d,
                             onClick = { onChange(DeplacementJoueur(adversaire.id, d)) },
-                            label = { Text(d.label) },
+                            label = { Text(d.court) },
                         )
                     }
                 }
@@ -247,9 +282,11 @@ internal fun CarteDeplacement(
                         color = ForcedDarkPalette.AccentGold,
                     )
                 }
-                if (actuelle == Distance.LONGUE && visee == Distance.CONTACT) {
+                val trajet = visee?.let { kotlin.math.abs(actuelle.metres - it.metres) }
+                if (trajet != null && trajet > Distance.VITESSE_STANDARD) {
                     Text(
-                        "Depuis la longue distance, atteindre le contact demande en général de Se précipiter.",
+                        "${formatMetres(trajet)} à parcourir : au-delà de votre vitesse (9 m en général), il faut Se précipiter " +
+                            "(double déplacement), sinon vous vous arrêtez en chemin.",
                         style = MaterialTheme.typography.bodySmall,
                         color = ForcedDarkPalette.AccentGold,
                     )
@@ -344,7 +381,7 @@ internal fun AssistantDeclaration(
             else -> null
         }
         val detail = listOfNotNull(auto, precision.takeIf { it.isNotBlank() && it != auto }).joinToString(" — ")
-        onValider(DeclarationChoisie(libelle, action.id, cible, detail, if (action.id == "attaquer") attaques else emptyList(), ciblesChoisies))
+        onValider(DeclarationChoisie(libelle, action.id, cible, detail, if (action.id == "attaquer") attaques else emptyList(), ciblesChoisies, if (zone) sort?.zoneEffet?.versTexte() else null))
     }
 
     // Affiché dans l'écran (pas en fenêtre plein écran) : la barre du bas de l'appli reste visible,
@@ -386,7 +423,11 @@ internal fun AssistantDeclaration(
                     }
                     if (zone) {
                         Text(
-                            "Sort de zone : touchez chaque créature prise dans la zone (${ciblesZone.size} choisie(s)). Chacune fera son jet de sauvegarde.",
+                            (sort?.zoneEffet?.let { z ->
+                                if (z.forme.depuisLanceur) "${z.libelle} depuis vous : les créatures à ${formatMetres(z.portee)} ou moins devant vous seront ajoutées par le MJ. "
+                                else "${z.libelle} : touchez la créature visée, celles à ${formatMetres(z.portee)} ou moins d'elle seront ajoutées par le MJ. "
+                            } ?: "") +
+                                "Sort de zone : touchez chaque créature prise dans la zone (${ciblesZone.size} choisie(s)). Chacune fera son jet de sauvegarde.",
                             style = MaterialTheme.typography.bodySmall,
                             color = ForcedDarkPalette.AccentGold,
                         )

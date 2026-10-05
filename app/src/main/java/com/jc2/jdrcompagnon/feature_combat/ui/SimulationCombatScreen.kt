@@ -67,6 +67,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jc2.jdrcompagnon.feature_combat.domain.model.ActionsCombat
+import com.jc2.jdrcompagnon.feature_combat.domain.model.ArmeEnMain
 import com.jc2.jdrcompagnon.feature_combat.domain.model.ArsenalPersonnage
 import com.jc2.jdrcompagnon.feature_combat.domain.model.AttaqueHeros
 import com.jc2.jdrcompagnon.feature_combat.domain.model.CampLigne
@@ -279,6 +280,25 @@ private fun EnTeteSimulation(nom: String, onDismiss: () -> Unit) {
     }
 }
 
+/** Case translucide titrée, pour séparer lisiblement chaque partie de la simulation. */
+@Composable
+private fun CaseSimulation(
+    titre: String?,
+    modifier: Modifier = Modifier,
+    contenu: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f), contentColor = Color.White)
+    ) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            titre?.let { Text(it, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = ForcedDarkPalette.AccentGold) }
+            contenu()
+        }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Configuration(
@@ -299,55 +319,50 @@ private fun Configuration(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(
-            "CA ${heros.ca} · ${heros.attaques.size} attaque(s) · ${heros.nbAttaques} attaque(s) par action Attaquer",
-            style = MaterialTheme.typography.bodySmall
-        )
-        heros.attaques.forEach { a ->
-            Text("• ${a.nom} ${signe(a.bonusToucher)} · ${a.formuleDegats}" + if (a.aDistance) " (distance)" else "", style = MaterialTheme.typography.bodySmall)
-        }
-        Text("PV de départ", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = pvPleins, onClick = { onPvPleins(true) }, label = { Text("Pleins (${heros.pvMax})") })
-            FilterChip(selected = !pvPleins, onClick = { onPvPleins(false) }, label = { Text("Actuels ($pvActuels)") })
-        }
-        Text("Distance de départ des monstres", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Distance.entries.forEach { d ->
-                FilterChip(selected = distanceDepart == d, onClick = { onDistance(d) }, label = { Text(d.court) })
+        CaseSimulation("PV de départ") {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = pvPleins, onClick = { onPvPleins(true) }, label = { Text("Pleins (${heros.pvMax})") })
+                FilterChip(selected = !pvPleins, onClick = { onPvPleins(false) }, label = { Text("Actuels ($pvActuels)") })
             }
         }
-        HorizontalDivider()
-        Text("Monstres", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-        if (choisis.isEmpty()) {
-            Text("Ajoutez un ou plusieurs monstres du bestiaire.", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.7f))
-        }
-        choisis.toList().forEachIndexed { index, m ->
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Text(m.nom, modifier = Modifier.weight(1f))
-                IconButton(onClick = {
-                    if (m.quantite > 1) choisis[index] = m.copy(quantite = m.quantite - 1) else choisis.removeAt(index)
-                }) { Icon(Icons.Default.Remove, contentDescription = "Un de moins") }
-                Text("×${m.quantite}")
-                IconButton(onClick = { choisis[index] = m.copy(quantite = (m.quantite + 1).coerceAtMost(20)) }) {
-                    Icon(Icons.Default.Add, contentDescription = "Un de plus")
+        CaseSimulation("Distance de départ des monstres") {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Distance.entries.forEach { d ->
+                    FilterChip(selected = distanceDepart == d, onClick = { onDistance(d) }, label = { Text(d.court) })
                 }
             }
         }
-        // Adversaire tiré au hasard dans le bestiaire, à la mesure du personnage (un nouvel appui en propose un autre).
-        Button(onClick = onAuto, enabled = !rechercheAuto, modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Default.Casino, contentDescription = null, modifier = Modifier.size(18.dp))
-            Text(
-                if (rechercheAuto) "Recherche…" else "Adversaire auto — niveau $niveau, difficulté moyenne",
-                modifier = Modifier.padding(start = 6.dp)
-            )
-        }
-        explicationAuto?.let {
-            Text(it, style = MaterialTheme.typography.bodySmall, color = ForcedDarkPalette.AccentGold)
-        }
-        OutlinedButton(onClick = onAjouter, modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-            Text("Ajouter un monstre", modifier = Modifier.padding(start = 6.dp))
+        CaseSimulation("Monstres") {
+            if (choisis.isEmpty()) {
+                Text("Ajoutez un ou plusieurs monstres du bestiaire.", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.7f))
+            }
+            choisis.toList().forEachIndexed { index, m ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Text(m.nom, modifier = Modifier.weight(1f))
+                    IconButton(onClick = {
+                        if (m.quantite > 1) choisis[index] = m.copy(quantite = m.quantite - 1) else choisis.removeAt(index)
+                    }) { Icon(Icons.Default.Remove, contentDescription = "Un de moins") }
+                    Text("×${m.quantite}")
+                    IconButton(onClick = { choisis[index] = m.copy(quantite = (m.quantite + 1).coerceAtMost(20)) }) {
+                        Icon(Icons.Default.Add, contentDescription = "Un de plus")
+                    }
+                }
+            }
+            // Adversaire tiré au hasard dans le bestiaire, à la mesure du personnage (un nouvel appui en propose un autre).
+            Button(onClick = onAuto, enabled = !rechercheAuto, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.Casino, contentDescription = null, modifier = Modifier.size(18.dp))
+                Text(
+                    if (rechercheAuto) "Recherche…" else "Adversaire auto — niveau $niveau, difficulté moyenne",
+                    modifier = Modifier.padding(start = 6.dp)
+                )
+            }
+            explicationAuto?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = ForcedDarkPalette.AccentGold)
+            }
+            OutlinedButton(onClick = onAjouter, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Text("Ajouter un monstre", modifier = Modifier.padding(start = 6.dp))
+            }
         }
         Button(
             onClick = onLancer,
@@ -384,6 +399,8 @@ private fun TourDuPersonnage(
 ) {
     val combat = remember(etat) { etat.versJoueur() }
     val moi = combat.ordre.first { it.id == etat.heros.id }
+    // Munitions et armes lancées restantes dans la simulation (la fiche n'est pas touchée).
+    val arsenalSim = remember(arsenal, etat.stocks) { arsenal.avecStocks(etat.stocks) }
     var actionChoisie by remember(etat.round, etat.journal.size) { mutableStateOf<String?>(null) }
     var armePreselectionnee by remember(etat.round, etat.journal.size) { mutableStateOf<String?>(null) }
     var deplacement by remember(etat.round, etat.journal.size) { mutableStateOf<DeplacementJoueur?>(null) }
@@ -396,14 +413,14 @@ private fun TourDuPersonnage(
             combat = combat,
             moi = moi,
             action = actionEnCours,
-            arsenal = arsenal,
+            arsenal = arsenalSim,
             personnage = personnage,
             consommables = consommables,
             initiale = null,
             armeInitiale = armePreselectionnee,
             onValider = { d ->
                 actionChoisie = null
-                onDeclarer(versDeclarationHeros(d, deplacement, arsenal, consommables))
+                onDeclarer(versDeclarationHeros(d, deplacement, arsenalSim, consommables))
             },
             onFermer = { actionChoisie = null },
             emplacementsRestants = etat.emplacements,
@@ -486,6 +503,7 @@ private fun TourDuPersonnage(
             )
         },
         emplacementsSimulation = etat.emplacements,
+        arsenalSimulation = arsenalSim,
     )
 
     if (journalComplet) {
@@ -512,16 +530,18 @@ private fun Resultat(
 ) {
     val issue = etat.issue ?: return
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            issue.label,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color = if (issue == IssueSimulation.VICTOIRE) Color(0xFF81C784) else CouleurMonstre
-        )
-        Text("${etat.round} round(s) · ${etat.heros.nom} ${etat.heros.pv}/${etat.heros.pvMax} PV", style = MaterialTheme.typography.bodyMedium)
+        CaseSimulation(null) {
+            Text(
+                issue.label,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = if (issue == IssueSimulation.VICTOIRE) Color(0xFF81C784) else CouleurMonstre
+            )
+            Text("${etat.round} round(s) · ${etat.heros.nom} ${etat.heros.pv}/${etat.heros.pvMax} PV", style = MaterialTheme.typography.bodyMedium)
+        }
         val etatListe = rememberLazyListState(initialFirstVisibleItemIndex = (etat.journal.size - 1).coerceAtLeast(0))
-        Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.surface.copy(alpha = 0.4f), modifier = Modifier.weight(1f).fillMaxWidth()) {
-            LazyColumn(state = etatListe, modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        CaseSimulation("Journal", modifier = Modifier.weight(1f)) {
+            LazyColumn(state = etatListe, verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 items(etat.journal) { LigneJournal(it) }
             }
         }
@@ -590,7 +610,7 @@ private fun versDeclarationHeros(
         when (nom) {
             ArsenalPersonnage.EMPOIGNADE -> FrappeHeros.Empoignade(arsenal.ddMainsNues)
             ArsenalPersonnage.BOUSCULADE -> FrappeHeros.Bousculade(arsenal.ddMainsNues)
-            else -> armes.firstOrNull { it.nom == nom }?.let { FrappeHeros.Arme(AttaqueHeros(it.nom, it.bonusToucher, it.formuleDegats, it.aDistance)) }
+            else -> armes.firstOrNull { it.nom == nom }?.let { FrappeHeros.Arme(it.versAttaqueHeros()) }
         }
     }
     val sortTrouve = sortRegex.find(d.libelle)
@@ -653,6 +673,40 @@ private fun SelecteurMonstre(monde: String, onDismiss: () -> Unit, onChoisir: (S
     )
 }
 
+/**
+ * Arme de la fiche telle que la simulation la joue : une arme à munitions dépense ses munitions
+ * (carquois, sac), une arme de lancer équipée ses exemplaires (pile de javelines).
+ */
+private fun ArmeEnMain.versAttaqueHeros(): AttaqueHeros {
+    val lancee = lancer && slot != null
+    return AttaqueHeros(
+        nom = nom,
+        bonusToucher = bonusToucher,
+        formuleDegats = formuleDegats,
+        aDistance = aDistance,
+        lancer = lancee,
+        stock = when {
+            munition != null -> munitionsRestantes
+            lancee -> quantite
+            else -> null
+        },
+    )
+}
+
+/** Arsenal affiché pendant la simulation : munitions et exemplaires restants de la simulation. */
+private fun ArsenalJoueur.avecStocks(stocks: Map<String, Int>): ArsenalJoueur =
+    if (stocks.isEmpty()) this else copy(
+        armes = armes.mapNotNull { a ->
+            val reste = stocks[a.nom] ?: return@mapNotNull a
+            when {
+                a.munition != null -> a.copy(munitionsRestantes = reste)
+                // Dernier exemplaire lancé : l'arme n'est plus en main.
+                reste <= 0 -> null
+                else -> a.copy(quantite = reste)
+            }
+        }
+    )
+
 /** Le personnage tel que la simulation le voit : armes de l'arsenal, mains nues, sauvegardes. */
 private fun herosDepuisPersonnage(personnage: Character, arsenal: ArsenalJoueur, pvPleins: Boolean): HerosSimule {
     val armes = arsenal.armes.filter { !it.sansMunition } + listOfNotNull(arsenal.mainsNues)
@@ -667,9 +721,10 @@ private fun herosDepuisPersonnage(personnage: Character, arsenal: ArsenalJoueur,
         pvMax = personnage.maxHitPoints.coerceAtLeast(1),
         pvDepart = if (pvPleins) personnage.maxHitPoints else personnage.currentHitPoints,
         bonusInitiative = personnage.initiativeBonus,
-        attaques = armes.distinctBy { it.nom }.map { AttaqueHeros(it.nom, it.bonusToucher, it.formuleDegats, it.aDistance) },
+        attaques = armes.distinctBy { it.nom }.map { it.versAttaqueHeros() },
         nbAttaques = arsenal.nbAttaques,
         emplacements = arsenal.restants(personnage),
+        vitesse = com.jc2.jdrcompagnon.feature_combat.domain.model.vitesseEnMetres(personnage.speed),
         bonusSauvegardes = mapOf(
             sauvegarde("Force", personnage.strength),
             sauvegarde("Dextérité", personnage.dexterity),
@@ -737,6 +792,7 @@ private suspend fun creerMonstres(context: android.content.Context, monde: Strin
                 nbAttaquesMultiples = profil.actions.nbAttaquesMultiples,
                 profilIA = profil.comportement.profil,
                 raisonProfil = profil.comportement.raison,
+                vitesse = profil.vitesse,
             )
         }
     }

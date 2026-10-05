@@ -27,19 +27,28 @@ data class AttaqueMonstre(
     val porteeLongue: Double? = null,
     // États infligés (« subit l’état Agrippé ») : d'office si l'attaque touche, ou sur un JS raté.
     val conditions: List<ConditionInfligee> = emptyList(),
+    // Allonge au corps à corps en mètres (« allonge 3 m ») ; 1,50 m par défaut.
+    val allonge: Double = Distance.CONTACT.metres,
+    // Forme et taille de la zone (« cône de 9 m ») pour proposer les créatures touchées.
+    val zoneEffet: ZoneEffet? = null,
+    // Portée d'une capacité à jet de sauvegarde sans zone (« portée 18 m »), sinon 18 m supposés.
+    val porteeSauvegarde: Double? = null,
 ) {
     val corpsACorps: Boolean get() = type == TypeAttaqueMonstre.CORPS_A_CORPS || type == TypeAttaqueMonstre.POLYVALENTE
 
     /**
-     * L'action atteint-elle une cible à [distance] sans se déplacer ? Corps à corps : au contact.
-     * À distance : partout, sauf à longue distance pour les armes de lancer (portée < 30 m).
-     * Jet de sauvegarde (souffle, cône…) : jusqu'à courte distance.
+     * L'action atteint-elle une cible à [distance] sans se déplacer ? Corps à corps : dans son
+     * allonge (1,50 m, parfois 3 m). À distance : jusqu'à sa portée longue (30 m si inconnue),
+     * une arme polyvalente frappant aussi au contact. Jet de sauvegarde : la longueur de sa zone
+     * (cône, ligne…) ou sa portée.
      */
     fun atteint(distance: Distance): Boolean = when (type) {
-        TypeAttaqueMonstre.CORPS_A_CORPS -> distance == Distance.CONTACT
-        TypeAttaqueMonstre.DISTANCE, TypeAttaqueMonstre.POLYVALENTE ->
-            distance != Distance.LONGUE || (porteeLongue ?: 30.0) >= 30.0
-        TypeAttaqueMonstre.SAUVEGARDE -> distance != Distance.LONGUE
+        TypeAttaqueMonstre.CORPS_A_CORPS -> distance.metres <= allonge + 0.01
+        TypeAttaqueMonstre.DISTANCE -> distance.metres <= (porteeLongue ?: Distance.LONGUE.metres) + 0.01
+        TypeAttaqueMonstre.POLYVALENTE ->
+            distance.metres <= allonge + 0.01 || distance.metres <= (porteeLongue ?: Distance.LONGUE.metres) + 0.01
+        TypeAttaqueMonstre.SAUVEGARDE -> distance.metres <= (zoneEffet?.takeIf { it.forme.depuisLanceur }?.metres
+            ?: porteeSauvegarde ?: Distance.M18.metres) + 0.01
         TypeAttaqueMonstre.AUTRE -> false
     }
 
@@ -74,6 +83,8 @@ object ActionsMonstreParser {
     private val bonusRegex = Regex("""(?:Corps à corps|distance)\s*:\s*([+\-−–])\s*(\d+)""")
     private val degatsRegex = Regex("""(\d+)\s*\((\d+d\d+(?:\s*[+\-−–]\s*\d+)?)\)\s*dégâts?\s+(?:d[’']\s*|de\s+)?(\p{L}+)""")
     private val porteeRegex = Regex("""portée\s*([\d,]+)\s*/\s*([\d,]+)\s*m""")
+    private val allongeRegex = Regex("""allonge\s*(\d+(?:[,.]\d+)?)\s*m""")
+    private val porteeSimpleRegex = Regex("""portée\s*(?:de\s*)?(\d+(?:[,.]\d+)?)\s*m\b""")
     private val sauvegardeRegex =Regex("""(?:JS|[Jj]et de sauvegarde de)\s+(\p{L}+)\s*:\s*DD\s*(\d+)""")
     private val nombreAttaquesRegex = Regex("""effectue\s+(deux|trois|quatre|cinq|six|\d+)\s+attaques""")
     private val nombres = mapOf("deux" to 2, "trois" to 3, "quatre" to 4, "cinq" to 5, "six" to 6)
@@ -135,6 +146,9 @@ object ActionsMonstreParser {
             zone = corps.contains("chaque créature"),
             porteeLongue = porteeRegex.find(corps)?.groupValues?.get(2)?.replace(',', '.')?.toDoubleOrNull(),
             conditions = Etats.infligesPar(corps),
+            allonge = allongeRegex.find(corps)?.groupValues?.get(1)?.replace(',', '.')?.toDoubleOrNull() ?: Distance.CONTACT.metres,
+            zoneEffet = ZoneEffet.depuisTexte(corps),
+            porteeSauvegarde = porteeSimpleRegex.find(corps)?.groupValues?.get(1)?.replace(',', '.')?.toDoubleOrNull(),
         )
     }
 }
@@ -411,7 +425,7 @@ object IaMonstre {
 
         profil.seuilFuite?.let { seuil ->
             if (monstre.pvMax > 0 && monstre.pv.toFloat() / monstre.pvMax <= seuil) {
-                return fuir(cibles, dist, "${profil.label} à ${monstre.pv}/${monstre.pvMax} PV (≤ ${(seuil * 100).toInt()} %)")
+                return fuir(monstre, cibles, dist, "${profil.label} à ${monstre.pv}/${monstre.pvMax} PV (≤ ${(seuil * 100).toInt()} %)")
             }
         }
 
@@ -429,7 +443,7 @@ object IaMonstre {
                 return DecisionMonstre(
                     "Se désengager et reculer",
                     raison = "Effrayé au contact : s'écarte",
-                    deplacements = auContact.associate { it.id to Distance.COURTE },
+                    deplacements = auContact.associate { it.id to Distance.CONTACT.eloigne(monstre.vitesse) },
                     desengage = true,
                 )
             }
@@ -443,10 +457,11 @@ object IaMonstre {
         }
 
         // Capacité spéciale à portée, si le profil la privilégie ou si elle rapporte plus.
-        val enZone = cibles.count { dist(it) != Distance.LONGUE }
-        val speciale = offensives.filter { it.estSpeciale }
-            .filter { s -> if (s.zone) enZone > 0 else cibles.any { s.atteint(dist(it)) } }
-            .maxByOrNull { valeur(it, enZone) }
+        // Adversaires à portée de chaque capacité (longueur du cône, de la ligne, portée…).
+        fun aPortee(s: AttaqueMonstre) = cibles.count { s.atteint(dist(it)) }
+        val speciales = offensives.filter { it.estSpeciale && aPortee(it) > 0 }
+        val speciale = speciales.maxByOrNull { valeur(it, aPortee(it)) }
+        val enZone = speciale?.let(::aPortee) ?: 0
         val meilleure = normales.maxByOrNull { it.degatsMoyens }
         val valeurNormale = (meilleure?.degatsMoyens ?: 0) * if (meilleure?.bonusToucher != null) monstre.nbAttaquesMultiples else 1
         if (speciale != null && (profil.speciauxEnPremier || valeur(speciale, enZone) > valeurNormale)) {
@@ -463,14 +478,15 @@ object IaMonstre {
                 libelle = "Recule puis tire : ${base.libelle}",
                 raison = "${profil.label} au contact de ${auContact.joinToString { it.nom }} : recule à courte distance " +
                     "(attaque d'opportunité possible) puis tire sur ${cible.nom}",
-                deplacements = auContact.associate { it.id to Distance.COURTE },
+                deplacements = auContact.associate { it.id to Distance.CONTACT.eloigne(monstre.vitesse) },
             )
         }
-        if (auContact.isNotEmpty() && style == StyleCombat.ARTILLERIE) {
+        // Sans attaque à distance (dragon dont le souffle se recharge), il reste se battre au contact.
+        if (auContact.isNotEmpty() && style == StyleCombat.ARTILLERIE && tirs.isNotEmpty()) {
             return DecisionMonstre(
                 "Se désengager et prendre de la distance",
                 raison = "${profil.label} au contact de ${auContact.joinToString { it.nom }} : se dégage pour garder ses distances",
-                deplacements = auContact.associate { it.id to Distance.COURTE },
+                deplacements = auContact.associate { it.id to Distance.CONTACT.eloigne(monstre.vitesse) },
                 desengage = true,
             )
         }
@@ -479,7 +495,8 @@ object IaMonstre {
         val armes = if (style == StyleCombat.MELEE && melees.isNotEmpty()) melees else normales
         val seDeplace = style != StyleCombat.STATIQUE
         fun directe(c: Combattant) = armes.any { it.atteint(dist(c)) }
-        fun approchable(c: Combattant) = seDeplace && armes.any { it.corpsACorps } && dist(c) == Distance.COURTE
+        fun approchable(c: Combattant) = seDeplace && armes.any { it.corpsACorps } &&
+            dist(c) != Distance.CONTACT && dist(c).metresJusquAuContact <= monstre.vitesse + 0.01
         val garderContact = style == StyleCombat.STATIQUE ||
             (style == StyleCombat.MELEE && profil.cible in setOf(StrategieCible.HASARD, StrategieCible.PLUS_PROCHE))
         val pool = when {
@@ -514,7 +531,7 @@ object IaMonstre {
                     )
                     approche -> base.copy(
                         libelle = "Se rapproche de ${cible.nom} et attaque : ${base.libelle}",
-                        raison = base.raison + " — à courte distance, fonce au contact",
+                        raison = base.raison + " — à ${d.texteMetres}, fonce au contact",
                         deplacements = mapOf(cible.id to Distance.CONTACT),
                     )
                     else -> base.copy(raison = base.raison + " — ${d.label.lowercase()}")
@@ -535,19 +552,22 @@ object IaMonstre {
             cibleId = cible.id,
             cibleNom = cible.nom,
             raison = if (normales.isEmpty()) "Aucune attaque lisible sur la fiche" else "Aucun adversaire à portée : se rapproche",
-            deplacements = mapOf(cible.id to Distance.COURTE),
+            deplacements = mapOf(cible.id to dist(cible).rapproche(monstre.vitesse * 2)),
         )
     }
 
     /** Fuite : se désengage du contact, sinon s'élance plus loin, sinon quitte le combat. */
-    private fun fuir(cibles: List<Combattant>, dist: (Combattant) -> Distance, pourquoi: String): DecisionMonstre {
-        val plusLoin = cibles.associate { it.id to dist(it).plusLoin }
+    private fun fuir(monstre: Combattant, cibles: List<Combattant>, dist: (Combattant) -> Distance, pourquoi: String): DecisionMonstre {
         return when {
+            // Désengagement (action) : il ne lui reste que son déplacement normal.
             cibles.any { dist(it) == Distance.CONTACT } -> DecisionMonstre(
-                "Fuir : se désengager et s'éloigner", raison = "$pourquoi : se replie", deplacements = plusLoin, desengage = true
+                "Fuir : se désengager et s'éloigner", raison = "$pourquoi : se replie",
+                deplacements = cibles.associate { it.id to dist(it).eloigne(monstre.vitesse) }, desengage = true
             )
-            cibles.any { dist(it) == Distance.COURTE } -> DecisionMonstre(
-                "Fuir : se précipiter loin du combat", raison = "$pourquoi : s'enfuit", deplacements = plusLoin
+            // Pas encore hors de portée (≤ 30 m) : se précipite, double déplacement.
+            cibles.any { dist(it).metres <= Distance.LONGUE.metres } -> DecisionMonstre(
+                "Fuir : se précipiter loin du combat", raison = "$pourquoi : s'enfuit",
+                deplacements = cibles.associate { it.id to dist(it).eloigne(monstre.vitesse * 2) }
             )
             else -> DecisionMonstre("S'enfuit hors de vue", raison = "$pourquoi : déjà loin, quitte le combat")
         }

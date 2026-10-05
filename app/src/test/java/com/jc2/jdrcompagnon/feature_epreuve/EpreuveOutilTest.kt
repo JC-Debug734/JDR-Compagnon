@@ -1,7 +1,9 @@
 package com.jc2.jdrcompagnon.feature_epreuve
 
 import com.jc2.jdrcompagnon.feature_epreuve.domain.model.ComplicationEpreuve
+import com.jc2.jdrcompagnon.feature_epreuve.domain.model.DifficulteEpreuve
 import com.jc2.jdrcompagnon.feature_epreuve.domain.model.Epreuve
+import com.jc2.jdrcompagnon.feature_epreuve.domain.model.GroupeEpreuve
 import com.jc2.jdrcompagnon.feature_epreuve.domain.model.ReglesEpreuve
 import com.jc2.jdrcompagnon.feature_epreuve.presentation.EpreuveOutilSession
 import kotlin.random.Random
@@ -91,5 +93,33 @@ class EpreuveOutilTest {
         assertEquals(1, etat.echecs)
         assertNotEquals(premiere, etat.derniereComplication)
         assertEquals(2, etat.numeroComplication)
+    }
+
+    @Test
+    fun `les reussites suivent le nombre de joueurs et la difficulte`() {
+        assertEquals(4, ReglesEpreuve.reussitesPour(DifficulteEpreuve.MOYENNE, 4))
+        assertEquals(6, ReglesEpreuve.reussitesPour(DifficulteEpreuve.DIFFICILE, 4))
+        assertEquals(8, ReglesEpreuve.reussitesPour(DifficulteEpreuve.DIFFICILE, 5))
+        assertEquals(2, ReglesEpreuve.reussitesPour(DifficulteEpreuve.FACILE, 1))
+    }
+
+    @Test
+    fun `les variables sont remplacees selon le niveau du groupe`() {
+        val col = Epreuve(
+            nom = "Col",
+            difficulte = DifficulteEpreuve.DIFFICILE,
+            complications = listOf(ComplicationEpreuve("Froid", "JS DD {DD} ou {degats}, attaque {attaque}, DD {DD+2}, {po} po")),
+        )
+        val niv1 = ReglesEpreuve.adapter(col, GroupeEpreuve(joueurs = 3, niveau = 1))
+        assertEquals(5, niv1.reussitesRequises)
+        assertEquals("JS DD 14 ou 2d10, attaque +6, DD 16, 75 po", niv1.complications.single().description)
+        val niv9 = ReglesEpreuve.adapter(col, GroupeEpreuve(joueurs = 4, niveau = 9))
+        assertEquals(6, niv9.reussitesRequises)
+        assertEquals("JS DD 16 ou 4d10, attaque +8, DD 18, 675 po", niv9.complications.single().description)
+    }
+
+    @Test
+    fun `une epreuve sans difficulte garde ses reussites fixes`() {
+        assertEquals(2, ReglesEpreuve.adapter(marais, GroupeEpreuve(joueurs = 6, niveau = 12)).reussitesRequises)
     }
 }

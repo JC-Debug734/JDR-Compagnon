@@ -391,8 +391,12 @@ object Etats {
     private val libellesBestiaire: List<Pair<String, ConditionCombat>> =
         fiches.filter { it.officiel }.map { it.condition.label to it.condition }.sortedByDescending { it.first.length }
     private val alternance = libellesBestiaire.joinToString("|") { Regex.escape(it.first) }
-    // « subit l’état Agrippé (évasion DD 13) », « se retrouve avec l’état À terre », « subit les états Aveuglé et Entravé ».
-    private val mentionRegex = Regex("""(?:subit|subissent|avec|reçoit|soumise? à)\s+l(?:[’']état|es états)\s+($alternance)(?:\s*,\s*($alternance))?(?:\s+et\s+($alternance))?""")
+    // « subit l’état Agrippé (évasion DD 13) », « se retrouve avec l’état À terre », « subit les états Aveuglé et Entravé »,
+    // « ainsi que l’état Entravé », « subit en outre l’état Paralysé », « peut lui imposer l’état Agrippé ».
+    // Les négations (« ne subit pas », « ne subissent plus ») et les prérequis (« créature subissant l’état ») sont ignorés.
+    private val mentionRegex = Regex(
+        """(?:subit|subissent|avec|reçoit|imposer|soumise? à|ainsi que)(?:\s+(?:aussi|en outre|également))?\s+l(?:[’']état|es états)\s+($alternance)(?:\s*,\s*($alternance))?(?:\s+et\s+($alternance))?"""
+    )
     private val evasionRegex = Regex("""^\s*\(évasion DD\s*(\d+)""")
     private val sauvegardeRegex = Regex("""(?:JS|[Jj]et de sauvegarde de)\s+(\p{L}+)\s*(?::\s*DD|DD)\s*(\d+)""")
 

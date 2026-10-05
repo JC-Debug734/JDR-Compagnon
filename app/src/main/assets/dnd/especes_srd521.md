@@ -16,6 +16,13 @@ Sur un trait (ligne juste sous "#### Nom du trait") ou sous la ligne "Catégorie
                          plusieurs sources séparées par "|" ;
                          absent avec effet: option -> les lignes "option:" du trait.
   recommande: X       -> option mise en avant lors du choix.
+  liste: X            -> avec options: sorts-mineurs / sorts-niveau-1 : liste de sorts d'une classe,
+                         soit imposée ("liste: Magicien"), soit choisie par un autre choix
+                         ("liste: <id du choix>", ex. initie-liste).
+  selon: <id>         -> options qui dépendent d'un autre choix de la même source : elles sont
+                         lues dans "options-<valeur>" (valeur en minuscules sans accents), ex.
+                         "selon: lune; options-nuitari: Maléfice, ...; options-solinari: Bouclier, ...".
+  Description d'une option : puce "- **Option** texte" dans le texte du trait ou du don.
   libelle: X          -> texte affiché sur la fiche devant la valeur choisie.
   remplace: X         -> le texte X de l'équipement de départ est remplacé par la valeur choisie.
   choix-en-jeu: X     -> choix fait pendant la partie (jamais demandé à la création),

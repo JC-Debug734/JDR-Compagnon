@@ -46,7 +46,7 @@ import com.jc2.jdrcompagnon.feature_table_aleatoire.data.local.TableAleatoireEnt
         EvenementEntity::class,
         EpreuveEntity::class
     ],
-    version = 21,
+    version = 23,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -230,6 +230,20 @@ abstract class AppDatabase : RoomDatabase() {
                     """.trimIndent()
                 )
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_epreuves_worldId` ON `epreuves` (`worldId`)")
+            }
+        }
+
+        /** Outil ÉPREUVES : musique d'ambiance jouée au lancement de l'épreuve. */
+        val MIGRATION_21_22 = object : Migration(21, 22) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `epreuves` ADD COLUMN `musicTrackId` TEXT")
+            }
+        }
+
+        /** Outil ÉPREUVES : difficulté (réussites et DD adaptés au groupe au lancement). */
+        val MIGRATION_22_23 = object : Migration(22, 23) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `epreuves` ADD COLUMN `difficulte` TEXT")
             }
         }
     }

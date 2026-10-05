@@ -3,6 +3,7 @@ package com.jc2.jdrcompagnon.feature_epreuve.data
 import com.jc2.jdrcompagnon.feature_epreuve.data.local.EpreuveDao
 import com.jc2.jdrcompagnon.feature_epreuve.data.local.EpreuveEntity
 import com.jc2.jdrcompagnon.feature_epreuve.domain.model.ComplicationEpreuve
+import com.jc2.jdrcompagnon.feature_epreuve.domain.model.DifficulteEpreuve
 import com.jc2.jdrcompagnon.feature_epreuve.domain.model.Epreuve
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -38,6 +39,8 @@ private fun EpreuveEntity.toDomain(): Epreuve = Epreuve(
     reussitesRequises = reussitesRequises,
     imageFileName = imageFileName,
     complications = runCatching { json.decodeFromString<List<ComplicationEpreuve>>(complicationsJson) }.getOrDefault(emptyList()),
+    musicTrackId = musicTrackId,
+    difficulte = difficulte?.let { nom -> DifficulteEpreuve.entries.firstOrNull { it.name == nom } },
 )
 
 private fun Epreuve.toEntity(): EpreuveEntity = EpreuveEntity(
@@ -48,4 +51,6 @@ private fun Epreuve.toEntity(): EpreuveEntity = EpreuveEntity(
     reussitesRequises = reussitesRequises,
     imageFileName = imageFileName,
     complicationsJson = json.encodeToString(complications.filter { it.titre.isNotBlank() }),
+    musicTrackId = musicTrackId,
+    difficulte = difficulte?.name,
 )

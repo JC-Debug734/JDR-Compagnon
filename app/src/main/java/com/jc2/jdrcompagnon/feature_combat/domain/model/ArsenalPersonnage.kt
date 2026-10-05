@@ -94,6 +94,8 @@ data class SortPret(
     val gratuitDisponible: Boolean = false,
     // Sort de zone (sphère, cône, ligne…) à dégâts : touche plusieurs cibles, chacune fait son JS.
     val zone: Boolean = false,
+    // Forme et taille de la zone (« sphère de 6 m ») : le MJ ajoute d'office les créatures touchées.
+    val zoneEffet: ZoneEffet? = null,
 )
 
 /**
@@ -549,6 +551,7 @@ object ArsenalPersonnage {
             demiDegatsSiEchec = demiDegatsSiEchec,
             notesClasse = notesClasse,
             zone = degats != null && jet != JetSort.ATTAQUE && zoneRegex.containsMatchIn(description),
+            zoneEffet = if (degats != null && jet != JetSort.ATTAQUE) ZoneEffet.depuisTexte(description) else null,
         )
     }
 

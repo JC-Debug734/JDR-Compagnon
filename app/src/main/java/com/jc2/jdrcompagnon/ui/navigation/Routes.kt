@@ -24,8 +24,7 @@ sealed class Route(val path: String) {
             "carte_campagne/$campagneId" + (carteId?.let { "?carteId=$it" } ?: "")
     }
     data object Evenements : Route("evenements/{campagneId}")
-    data object EpreuveEnCours : Route("epreuve_en_cours")
-    // Outil ÉPREUVES (feature_epreuve), distinct des épreuves Progrès/Menace des environnements.
+    // Outil ÉPREUVES (feature_epreuve) : épreuves environnementales, lancées aussi par #epreuve:.
     data object Epreuves : Route("epreuves")
     data object EpreuveResolution : Route("epreuve_resolution")
     data object Villes : Route("villes/{campagneId}")

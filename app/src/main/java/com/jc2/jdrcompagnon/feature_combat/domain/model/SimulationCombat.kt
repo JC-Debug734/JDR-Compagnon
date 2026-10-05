@@ -10,12 +10,18 @@ import kotlin.random.Random
  * — jets lancés, dégâts et soins appliqués — et les monstres jouent seuls (IaMonstre).
  */
 
-/** Une attaque d'arme du personnage (arme équipée ou mains nues). */
+/**
+ * Une attaque d'arme du personnage (arme équipée ou mains nues). [lancer] : arme de lancer
+ * (javeline, dague), lancée quand la cible n'est pas au contact. [stock] : munitions (arc,
+ * arbalète) ou exemplaires (javelines) disponibles, null = illimité ; décompté dans la simulation.
+ */
 data class AttaqueHeros(
     val nom: String,
     val bonusToucher: Int,
     val formuleDegats: String,
     val aDistance: Boolean,
+    val lancer: Boolean = false,
+    val stock: Int? = null,
 )
 
 /** Une frappe de l'action Attaquer : arme, ou manœuvre à mains nues (JS For/Dex du monstre contre [dd]). */
@@ -76,6 +82,8 @@ data class HerosSimule(
     val nbAttaques: Int = 1,
     val bonusSauvegardes: Map<String, Int> = emptyMap(),
     val emplacements: Map<Int, Int> = emptyMap(),
+    // Vitesse en mètres par tour (9 m par défaut).
+    val vitesse: Double = Distance.VITESSE_STANDARD,
 )
 
 enum class CampLigne { HEROS, MONSTRE, INFO }
@@ -105,8 +113,12 @@ data class EtatSimulation(
     // Réaction du personnage (attaque d'opportunité), rendue à chacun de ses tours.
     val reactionDisponible: Boolean = true,
     val emplacements: Map<Int, Int> = emptyMap(),
+    // Munitions / exemplaires restants des armes à stock (clé = nom de l'arme).
+    val stocks: Map<String, Int> = emptyMap(),
     val issue: IssueSimulation? = null,
 ) {
+    /** L'arme peut-elle encore servir (stock non épuisé) ? */
+    fun disponible(attaque: AttaqueHeros): Boolean = (stocks[attaque.nom] ?: 1) > 0
     val monstresDebout: List<Combattant> get() = monstres.filter { !it.horsCombat }
     val tourDuHeros: Boolean get() = issue == null && ordre.getOrNull(tourIndex) == heros.id
     fun distance(monstreId: String): Distance = distances[monstreId] ?: Distance.COURTE
@@ -130,6 +142,7 @@ class SimulateurCombat(
             pv = heros.pvDepart.coerceIn(1, heros.pvMax),
             bonusInitiative = heros.bonusInitiative,
             initiative = d20() + heros.bonusInitiative,
+            vitesse = heros.vitesse,
         )
         val avecInit = monstres.map { it.copy(initiative = d20() + it.bonusInitiative) }
         val ordre = (avecInit + combattantHeros)
@@ -145,6 +158,7 @@ class SimulateurCombat(
                 LigneSimulation("Round 1 — initiative : ${ordre.joinToString { "${it.nom} (${it.initiative})" }}", CampLigne.INFO)
             ),
             emplacements = heros.emplacements,
+            stocks = heros.attaques.mapNotNull { a -> a.stock?.let { a.nom to it } }.toMap(),
         )
         return avancer(etat)
     }
@@ -195,15 +209,17 @@ class SimulateurCombat(
      */
     fun actionAutomatique(etat: EtatSimulation): DeclarationHeros? {
         val debout = etat.monstresDebout.ifEmpty { return null }
-        if (heros.attaques.isEmpty()) return null
+        val utilisables = heros.attaques.filter { etat.disponible(it) }
+        if (utilisables.isEmpty()) return null
         val auContact = debout.filter { etat.distance(it.id) == Distance.CONTACT }
-        val melee = heros.attaques.filter { !it.aDistance }.maxByOrNull { degatsMoyens(it) }
-        val distance = heros.attaques.filter { it.aDistance }.maxByOrNull { degatsMoyens(it) }
+        val melee = utilisables.filter { !it.aDistance }.maxByOrNull { degatsMoyens(it) }
+        val distance = utilisables.filter { it.aDistance || it.lancer }.maxByOrNull { degatsMoyens(it) }
         val attaque = (if (auContact.isNotEmpty()) melee ?: distance else distance ?: melee) ?: return null
-        val candidates = if (!attaque.aDistance && auContact.isNotEmpty()) auContact else debout
+        val portee = attaque.aDistance || (attaque.lancer && auContact.isEmpty())
+        val candidates = if (!portee && auContact.isNotEmpty()) auContact else debout
         val cible = candidates.minWith(compareBy<Combattant> { etat.distance(it.id).ordinal }.thenBy { it.pv })
         // Trop loin pour une arme de corps à corps : il se précipite d'abord vers la cible.
-        val tropLoin = !attaque.aDistance && etat.distance(cible.id) == Distance.LONGUE
+        val tropLoin = !portee && etat.distance(cible.id).metresJusquAuContact > heros.vitesse + 0.01
         return if (tropLoin) {
             DeclarationHeros("Se précipiter", "dash", cible.id, deplacementCibleId = cible.id, distanceVisee = Distance.CONTACT)
         } else {
@@ -228,11 +244,11 @@ class SimulateurCombat(
         val monstre = trouverMonstre(etat, monstreId) ?: return etat
         val actuelle = etat.distance(monstreId)
         if (actuelle == visee) return etat
-        val atteinte = if (actuelle == Distance.LONGUE && visee == Distance.CONTACT && !precipite) Distance.COURTE else visee
+        val atteinte = actuelle.versAvecDeplacement(visee, heros.vitesse * if (precipite) 2 else 1)
         var maj = etat.copy(distances = etat.distances + (monstreId to atteinte))
             .noter(
                 "${heros.nom} → ${atteinte.label.lowercase()} de ${monstre.nom}" +
-                    if (atteinte != visee) " (le contact demande de se précipiter)" else "",
+                    if (atteinte != visee) " (déplacement limité à ${formatMetres(heros.vitesse * if (precipite) 2 else 1)})" else "",
                 CampLigne.HEROS
             )
         if (actuelle == Distance.CONTACT && !desengage && !monstre.horsCombat) {
@@ -249,12 +265,14 @@ class SimulateurCombat(
         declaration.frappes.forEach { frappe ->
             if (cible.horsCombat) {
                 // Cible tombée : les frappes restantes passent à un autre monstre au contact.
-                cible = courant.monstresDebout.firstOrNull { courant.distance(it.id) == Distance.CONTACT || frappe.aDistance() }
+                cible = courant.monstresDebout.firstOrNull { courant.distance(it.id) == Distance.CONTACT || frappe.aDistance() || frappe.lancable() }
                     ?: return courant
             }
-            if (!frappe.aDistance() && courant.distance(cible.id) != Distance.CONTACT) {
+            // Arme de lancer (javeline) : lancée si la cible n'est pas au contact.
+            val lancee = frappe.lancable() && courant.distance(cible.id) != Distance.CONTACT
+            if (!frappe.aDistance() && !lancee && courant.distance(cible.id) != Distance.CONTACT) {
                 // Corps à corps : il s'approche (courte distance), ou se précipite depuis la longue.
-                if (courant.distance(cible.id) == Distance.LONGUE && !precipite) {
+                if (courant.distance(cible.id).metresJusquAuContact > heros.vitesse * (if (precipite) 2 else 1) + 0.01) {
                     return courant.noter("${cible.nom} est trop loin pour frapper au corps à corps.", CampLigne.HEROS)
                 }
                 courant = courant.copy(distances = courant.distances + (cible.id to Distance.CONTACT))
@@ -263,7 +281,19 @@ class SimulateurCombat(
             when (frappe) {
                 is FrappeHeros.Arme -> {
                     val attaque = frappe.attaque
-                    val desavantage = attaque.aDistance && courant.monstresDebout.any { courant.distance(it.id) == Distance.CONTACT }
+                    // Tir (munition) ou lancer (un exemplaire) : décompté, impossible sans stock.
+                    val depense = attaque.stock != null && (attaque.aDistance || lancee)
+                    if (depense) {
+                        val reste = courant.stocks[attaque.nom] ?: 0
+                        if (reste <= 0) {
+                            courant = courant.noter("${attaque.nom} : plus de munition, attaque impossible", CampLigne.HEROS)
+                            return@forEach
+                        }
+                        courant = courant.copy(stocks = courant.stocks + (attaque.nom to reste - 1))
+                    }
+                    val suffixeStock = if (depense) " (${courant.stocks[attaque.nom]} restant(s))" else ""
+                    val nomFrappe = attaque.nom + if (lancee) " lancée" else ""
+                    val desavantage = (attaque.aDistance || lancee) && courant.monstresDebout.any { courant.distance(it.id) == Distance.CONTACT }
                     val avantage = courant.cache || (!attaque.aDistance && ConditionCombat.A_TERRE in cible.conditions)
                     val (d20, detailD20) = jetD20Detail(avantage, desavantage)
                     courant = courant.copy(cache = false)
@@ -274,12 +304,12 @@ class SimulateurCombat(
                         val (degats, detailDegats) = lancerDegats(attaque.formuleDegats, critique)
                         cible = cible.copy(pv = (cible.pv - degats).coerceAtLeast(0))
                         courant = courant.remplacerMonstre(cible).noter(
-                            "${attaque.nom} sur ${cible.nom} : $toucher, ${if (critique) "CRITIQUE" else "touché"} — dégâts $detailDegats → ${cible.pv}/${cible.pvMax}" +
-                                if (cible.horsCombat) " — ${cible.nom} tombe" else "",
+                            "$nomFrappe sur ${cible.nom} : $toucher, ${if (critique) "CRITIQUE" else "touché"} — dégâts $detailDegats → ${cible.pv}/${cible.pvMax}" +
+                                (if (cible.horsCombat) " — ${cible.nom} tombe" else "") + suffixeStock,
                             CampLigne.HEROS
                         )
                     } else {
-                        courant = courant.noter("${attaque.nom} sur ${cible.nom} : $toucher, raté", CampLigne.HEROS)
+                        courant = courant.noter("$nomFrappe sur ${cible.nom} : $toucher, raté$suffixeStock", CampLigne.HEROS)
                     }
                 }
                 is FrappeHeros.Empoignade, is FrappeHeros.Bousculade -> {
@@ -390,7 +420,7 @@ class SimulateurCombat(
     /** Attaque d'opportunité du personnage contre un monstre qui quitte son contact sans se désengager. */
     private fun attaqueOpportuniteHeros(etat: EtatSimulation, monstre: Combattant): EtatSimulation {
         if (!etat.reactionDisponible || etat.heros.horsCombat) return etat
-        val arme = heros.attaques.filter { !it.aDistance }.maxByOrNull { degatsMoyens(it) } ?: return etat
+        val arme = heros.attaques.filter { !it.aDistance && etat.disponible(it) }.maxByOrNull { degatsMoyens(it) } ?: return etat
         var cible = monstre
         val d20 = d20()
         val total = d20 + arme.bonusToucher
@@ -490,7 +520,10 @@ class SimulateurCombat(
             }
         }
         val attaque = decision.attaque
-        if (attaque == null || decision.cibleId != courant.heros.id) {
+        // Capacité de zone (souffle) : pas de cible désignée, le personnage est pris s'il est à portée.
+        val visee = decision.cibleId == courant.heros.id ||
+            (attaque != null && attaque.zone && decision.cibleId == null && attaque.atteint(courant.distance(monstre.id)))
+        if (attaque == null || !visee) {
             return courant.noter("${monstre.nom} — ${decision.libelle}", CampLigne.MONSTRE)
         }
         // Capacité à usage limité : consommée (recharge en début de round).
@@ -581,6 +614,8 @@ class SimulateurCombat(
     private fun signeBonus(v: Int) = if (v >= 0) "+$v" else "$v"
 
     private fun FrappeHeros.aDistance() = this is FrappeHeros.Arme && attaque.aDistance
+
+    private fun FrappeHeros.lancable() = this is FrappeHeros.Arme && attaque.lancer && !attaque.aDistance
 
     private fun EtatSimulation.noter(texte: String, camp: CampLigne) = copy(journal = journal + LigneSimulation(texte, camp))
 

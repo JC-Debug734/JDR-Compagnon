@@ -1,13 +1,12 @@
 package com.jc2.jdrcompagnon.ui.screens.mj.library.srd
 
-import com.jc2.jdrcompagnon.feature_combat.domain.model.ConditionCombat
 import com.jc2.jdrcompagnon.feature_combat.domain.model.Etats
 
 /**
  * Livre « États » de la bibliothèque, généré depuis le catalogue [Etats] (même source que le
- * combat et le menu latéral MJ) : une fiche par état — règles, effets gérés par l'application —
- * et la liste des monstres du bestiaire qui l'infligent, retrouvés dans le texte de leurs actions,
- * traits et réactions.
+ * combat et le menu latéral MJ) : une fiche par état — règles, effets cumulés et ce que
+ * l'application en fait. Les états infligés par un monstre sont signalés sur sa fiche
+ * (MonsterStatBlock), pas listés ici.
  */
 object LivreEtats {
 
@@ -15,39 +14,7 @@ object LivreEtats {
     const val CATEGORIE_ETATS = "États"
     const val CATEGORIE_AUTRES = "Suivi en combat"
 
-    /** Une action de monstre qui inflige un état : « Goule — Griffe (JS Constitution DD 10) ». */
-    data class Source(val monstre: String, val action: String, val section: String, val sauvegarde: String?)
-
-    private val ligneActionRegex = Regex("""^(.+?)\.\s+(.*)$""")
-    private val sectionRegex = Regex("""^##\s+(.+?)\s*$""")
-    private val parenthesesRegex = Regex("""\s*\([^)]*\)""")
-
-    /** Pour chaque état, les actions de monstres qui l'infligent (bestiaire du monde). */
-    fun sourcesParEtat(monstres: List<SrdEntry>): Map<ConditionCombat, List<Source>> {
-        val resultat = mutableMapOf<ConditionCombat, MutableList<Source>>()
-        monstres.forEach { monstre ->
-            var section = ""
-            monstre.rawMarkdown.lines().forEach { brute ->
-                val ligne = brute.trim()
-                sectionRegex.find(ligne)?.let { section = it.groupValues[1]; return@forEach }
-                if (!ligne.contains("état")) return@forEach
-                val match = ligneActionRegex.find(ligne) ?: return@forEach
-                val action = match.groupValues[1].replace(parenthesesRegex, "").trim().take(60)
-                Etats.infligesPar(match.groupValues[2]).forEach { inflige ->
-                    val sauvegarde = inflige.dd?.let { "JS ${inflige.sauvegarde ?: ""} DD $it".replace("  ", " ") }
-                        ?: inflige.evasionDd?.let { "évasion DD $it" }
-                    val liste = resultat.getOrPut(inflige.condition) { mutableListOf() }
-                    if (liste.none { it.monstre == monstre.name && it.action == action }) {
-                        liste += Source(monstre.name, action, section, sauvegarde)
-                    }
-                }
-            }
-        }
-        return resultat.mapValues { (_, l) -> l.sortedWith(compareBy({ it.monstre.lowercase() }, { it.action })) }
-    }
-
-    fun construire(monstres: List<SrdEntry>): List<SrdSectionEntry> {
-        val sources = sourcesParEtat(monstres)
+    fun construire(): List<SrdSectionEntry> {
         val intro = SrdSectionEntry(
             name = "Les états",
             category = CATEGORIE_REGLES,
@@ -60,8 +27,8 @@ object LivreEtats {
 
                 ## Dans l'application
                 - Le champ **Condition** d'une fiche peut contenir plusieurs états séparés par des virgules (« Paralysé, Empoisonné ») ainsi que des mentions libres.
-                - Les états se cochent depuis le **menu latéral MJ** (personnage du groupe), la fiche, ou la carte d'un combattant ; tout reste synchronisé entre la fiche et le combat.
-                - Les attaques des monstres qui infligent un état l'appliquent d'office quand elles touchent ; si un jet de sauvegarde est prévu, le MJ l'applique en un geste en cas d'échec.
+                - Les états se donnent depuis le **menu latéral MJ** (personnage du groupe → « Donner un état »), la fiche, ou la carte d'un combattant ; tout reste synchronisé entre la fiche et le combat.
+                - Sur la fiche d'un monstre, chaque capacité qui inflige un état l'indique. En combat, ses attaques l'appliquent d'office quand elles touchent ; si un jet de sauvegarde est prévu, le MJ l'applique en un geste en cas d'échec.
             """.trimIndent(),
         )
         val fiches = Etats.fiches.map { fiche ->
@@ -74,7 +41,6 @@ object LivreEtats {
                     inclut = fiche.inclut.map { it.label },
                     effets = Etats.resumeEffets(listOf(fiche.condition)),
                     automatise = fiche.automatise,
-                    sources = sources[fiche.condition].orEmpty(),
                 ),
             )
         }
@@ -87,7 +53,6 @@ object LivreEtats {
                 inclut = emptyList(),
                 effets = emptyList(),
                 automatise = Etats.automatiseEpuisement,
-                sources = emptyList(),
             ),
         )
         // Ordre alphabétique des états officiels (comme dans les règles), puis Concentration.
@@ -101,7 +66,6 @@ object LivreEtats {
         inclut: List<String>,
         effets: List<String>,
         automatise: List<String>,
-        sources: List<Source>,
     ): String = buildString {
         appendLine("*$resume*")
         appendLine()
@@ -119,18 +83,6 @@ object LivreEtats {
             appendLine()
             appendLine("## Dans l'application")
             automatise.forEach { appendLine("- $it") }
-        }
-        appendLine()
-        appendLine("## Monstres qui l'infligent")
-        if (sources.isEmpty()) {
-            appendLine("Aucun monstre du bestiaire ne l'inflige directement.")
-        } else {
-            appendLine("${sources.map { it.monstre }.distinct().size} monstre(s) :")
-            appendLine()
-            sources.forEach { s ->
-                val section = s.section.takeIf { it.isNotBlank() && it != "Actions" }?.let { ", $it" } ?: ""
-                appendLine("- **${s.monstre}** — ${s.action}$section" + (s.sauvegarde?.let { " ($it)" } ?: ""))
-            }
         }
     }
 }

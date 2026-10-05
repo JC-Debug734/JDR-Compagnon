@@ -69,15 +69,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jc2.jdrcompagnon.feature_boutique.domain.usecase.echantillonnerSansRemise
 import com.jc2.jdrcompagnon.feature_environnement.domain.model.Environnement
-import com.jc2.jdrcompagnon.feature_environnement.domain.model.EpreuveEnvironnementale
 import com.jc2.jdrcompagnon.feature_environnement.domain.model.TERRAINS_SRD
 import com.jc2.jdrcompagnon.feature_environnement.domain.model.rencontrableDans
 import com.jc2.jdrcompagnon.feature_environnement.domain.model.terrainsEffectifs
 import com.jc2.jdrcompagnon.feature_environnement.domain.model.LootEntry
-import com.jc2.jdrcompagnon.feature_environnement.domain.usecase.catalogueEpreuves
 import com.jc2.jdrcompagnon.feature_environnement.data.EnvironmentImageStore
 import com.jc2.jdrcompagnon.feature_environnement.presentation.EnvironmentDetailViewModel
-import com.jc2.jdrcompagnon.feature_environnement.presentation.EpreuveSession
 import com.jc2.jdrcompagnon.ui.availableLoopTracks
 import com.jc2.jdrcompagnon.ui.screens.mj.challengeSortKey
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdEntry
@@ -93,7 +90,7 @@ private val MusicTracks: List<Pair<String, String>>
 
 /**
  * Écran d'édition d'un environnement : nom/description, image, musique, événements, tables
- * aléatoires, épreuves environnementales, bestiaire (suggéré + ajout manuel) et table de butin
+ * aléatoires, bestiaire (suggéré + ajout manuel) et table de butin
  * (avec tirage pondéré).
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -103,7 +100,7 @@ fun EnvironmentDetailScreen(
     worldId: String?,
     onOpenBestiaryDetail: (String) -> Unit,
     onOpenEquipmentDetail: (String) -> Unit,
-    onOuvrirEpreuve: () -> Unit = {},
+
     onOpenTableAleatoire: (String) -> Unit = {},
     onBack: () -> Unit,
 ) {
@@ -259,14 +256,6 @@ fun EnvironmentDetailScreen(
                 )
             }
 
-            SubsectionCard(current.id, "Épreuves environnementales") {
-                EpreuvesSection(
-                    epreuves = current.epreuves,
-                    onEpreuvesChanged = { viewModel.mettreAJour(current.copy(epreuves = it)) },
-                    onOuvrirEpreuve = onOuvrirEpreuve
-                )
-            }
-
             SubsectionCard(current.id, "Bestiaire") {
                 BestiaireSection(
                     environnement = current,
@@ -318,124 +307,6 @@ private fun environmentFieldColors() = OutlinedTextFieldDefaults.colors(
 @Composable
 internal fun SubsectionTitle(text: String) {
     Text(text, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Black, color = Color.White)
-}
-
-@Composable
-private fun EpreuvesSection(
-    epreuves: List<EpreuveEnvironnementale>,
-    onEpreuvesChanged: (List<EpreuveEnvironnementale>) -> Unit,
-    onOuvrirEpreuve: () -> Unit,
-) {
-    val epreuveActive by EpreuveSession.etat.collectAsState()
-    var afficherCreation by remember { mutableStateOf(false) }
-    var afficherCatalogue by remember { mutableStateOf(false) }
-    var epreuveALancer by remember { mutableStateOf<EpreuveEnvironnementale?>(null) }
-    var epreuveEditee by remember { mutableStateOf<Int?>(null) }
-
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        epreuveActive?.let { active ->
-            OutlinedButton(onClick = onOuvrirEpreuve, modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    (if (active.issue == null) "Épreuve en cours : " else "Épreuve terminée : ") +
-                        "${active.epreuve.nom} (${active.progres}/${active.progresMax})"
-                )
-            }
-        }
-        if (epreuves.isEmpty()) {
-            Text(
-                "Aucune épreuve. Ajoutez-en depuis le catalogue ou créez la vôtre.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        epreuves.forEachIndexed { index, epreuve ->
-            EpreuveCard(
-                epreuve = epreuve,
-                onLancer = { epreuveALancer = epreuve },
-                onModifier = { epreuveEditee = index },
-                onSupprimer = { onEpreuvesChanged(epreuves.filterIndexed { i, _ -> i != index }) }
-            )
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { afficherCatalogue = true }, modifier = Modifier.weight(1f)) { Text("Catalogue") }
-            Button(onClick = { afficherCreation = true }, modifier = Modifier.weight(1f)) { Text("Créer") }
-        }
-    }
-
-    if (afficherCreation) {
-        CreerEpreuveDialog(
-            onDismiss = { afficherCreation = false },
-            onConfirmer = { onEpreuvesChanged(epreuves + it); afficherCreation = false }
-        )
-    }
-
-    epreuveEditee?.let { index ->
-        CreerEpreuveDialog(
-            initiale = epreuves[index],
-            onDismiss = { epreuveEditee = null },
-            onConfirmer = { modifiee ->
-                onEpreuvesChanged(epreuves.mapIndexed { i, e -> if (i == index) modifiee else e })
-                epreuveEditee = null
-            }
-        )
-    }
-
-    if (afficherCatalogue) {
-        var apercu by remember { mutableStateOf<String?>(null) }
-        AlertDialog(
-            onDismissRequest = { afficherCatalogue = false },
-            title = { Text("Catalogue d'épreuves") },
-            text = {
-                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                    catalogueEpreuves.forEach { epreuve ->
-                        val ouvert = apercu == epreuve.nom
-                        val dejaPresente = epreuves.any { it.nom == epreuve.nom }
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { apercu = if (ouvert) null else epreuve.nom }
-                                .padding(vertical = 8.dp)
-                        ) {
-                            Text(epreuve.nom, style = MaterialTheme.typography.titleSmall)
-                            if (ouvert) {
-                                EpreuveContenu(epreuve)
-                                if (dejaPresente) {
-                                    Text(
-                                        "Déjà dans cet environnement : la mise à jour remplace ta version (tes modifications seront perdues).",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.error
-                                    )
-                                    Button(onClick = {
-                                        onEpreuvesChanged(epreuves.map { if (it.nom == epreuve.nom) epreuve else it })
-                                        afficherCatalogue = false
-                                    }) { Text("Mettre à jour depuis le catalogue") }
-                                } else {
-                                    Button(onClick = { onEpreuvesChanged(epreuves + epreuve); afficherCatalogue = false }) {
-                                        Text("Ajouter à l'environnement")
-                                    }
-                                }
-                            } else {
-                                Text(
-                                    "${epreuve.type.label} · ${epreuve.capacites.size} capacités" +
-                                        (if (dejaPresente) " · déjà présente" else "") + " · toucher pour voir",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = { TextButton(onClick = { afficherCatalogue = false }) { Text("Fermer") } }
-        )
-    }
-
-    epreuveALancer?.let { epreuve ->
-        LancerEpreuveDialog(
-            epreuve = epreuve,
-            onDismiss = { epreuveALancer = null },
-            onLancee = { epreuveALancer = null; onOuvrirEpreuve() }
-        )
-    }
 }
 
 /** Tranches de FP proposées pour affiner le bestiaire suggéré (mêmes paliers que les tables d'exemple). */

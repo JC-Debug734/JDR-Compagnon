@@ -166,6 +166,7 @@ private fun CombatJoueurScreenInterne(
                         d.detail,
                         deplacement?.cibleId, deplacement?.visee?.name, d.attaques,
                         ciblesZone = d.ciblesZone.map { it.id },
+                        zone = d.zone,
                     )
                     enModification = false
                     actionChoisie = null

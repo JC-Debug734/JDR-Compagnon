@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jc2.jdrcompagnon.di.CarteDependencies
+import com.jc2.jdrcompagnon.ui.screens.mj.scenario.ChapitresScenarios
 import com.jc2.jdrcompagnon.feature_carte.data.CarteImageStore
 import com.jc2.jdrcompagnon.feature_carte.domain.model.CarteCampagne
 import com.jc2.jdrcompagnon.feature_carte.ui.envoyerCarteALaTable
@@ -109,12 +110,26 @@ fun CampaignOverviewScreen(
 
             CarteDeLaZoneSection(ownerKey, campaign.id, onOpenCarte)
 
-            val attaches = campaign.scenarioIds.mapNotNull { id -> scenarios.firstOrNull { it.id == id } }
+            val attachesBruts = campaign.scenarioIds.mapNotNull { id -> scenarios.firstOrNull { it.id == id } }
+            // Ordre de jeu : par chapitre puis par numéro (ordre de la campagne sinon).
+            val attaches = ChapitresScenarios.trier(attachesBruts)
+            val avecChapitres = ChapitresScenarios.aDesChapitres(attaches)
             CollapsibleSectionCard(ownerKey = ownerKey, title = "Scénarios") {
                 if (attaches.isEmpty()) {
                     Text("Aucun scénario attaché à cette campagne.", style = MaterialTheme.typography.bodyMedium, color = OverviewHintColor)
                 } else {
                     attaches.forEachIndexed { index, scenario ->
+                        val chapitre = ChapitresScenarios.libelleChapitre(scenario.chapitreNumero, scenario.chapitreTitre)
+                        val chapitrePrecedent = attaches.getOrNull(index - 1)?.let { ChapitresScenarios.libelleChapitre(it.chapitreNumero, it.chapitreTitre) }
+                        if (avecChapitres && (index == 0 || chapitre != chapitrePrecedent)) {
+                            Text(
+                                chapitre ?: "Sans chapitre",
+                                color = ForcedDarkPalette.AccentGold,
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleSmall,
+                                modifier = Modifier.padding(top = if (index == 0) 0.dp else 12.dp, bottom = 2.dp),
+                            )
+                        }
                         val enCours = scenario.id == lastScenarioId
                         Row(
                             modifier = Modifier
@@ -132,7 +147,7 @@ fun CampaignOverviewScreen(
                                 modifier = Modifier.size(20.dp)
                             )
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(scenario.title, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(ChapitresScenarios.titreNumerote(scenario), color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 val detail = listOfNotNull(
                                     "En cours".takeIf { enCours },
                                     scenario.scenes.size.takeIf { it > 1 }?.let { "$it scènes" },
