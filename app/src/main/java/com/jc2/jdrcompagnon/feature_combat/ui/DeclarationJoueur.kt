@@ -54,6 +54,7 @@ import com.jc2.jdrcompagnon.feature_combat.domain.model.ArsenalPersonnage
 import com.jc2.jdrcompagnon.feature_combat.domain.model.formatMetres
 import com.jc2.jdrcompagnon.feature_combat.domain.model.CapaciteAttaque
 import com.jc2.jdrcompagnon.feature_combat.domain.model.Distance
+import com.jc2.jdrcompagnon.feature_combat.domain.model.Terrain
 import com.jc2.jdrcompagnon.network.CombatJoueurData
 import com.jc2.jdrcompagnon.network.CombattantJoueurData
 import com.jc2.jdrcompagnon.network.DeclarationJoueurData
@@ -110,7 +111,9 @@ private fun ratioSante(c: CombattantJoueurData): Float = when {
 
 /**
  * Vue tactique : ennemis (du plus proche au plus loin) puis alliés, avec la distance et la santé
- * de chacun. Avec [onSelection], sert aussi à choisir la cible d'une action.
+ * de chacun. Sous chaque nom, sa position (au contact de qui, ou à distance) et, pour le
+ * MJ, son comportement IA. Sans [moiId] (MJ), les ennemis sont les monstres. Avec
+ * [onSelection], sert aussi à choisir la cible d'une action.
  */
 @Composable
 internal fun TableauTactique(
@@ -123,9 +126,11 @@ internal fun TableauTactique(
     selectionIds: Set<String> = setOfNotNull(selectionId),
 ) {
     val moi = combat.ordre.firstOrNull { it.id == moiId }
-    val (ennemis, allies) = combat.ordre.filter { it.id != moiId }.partition { moi != null && it.estMonstre != moi.estMonstre }
+    val (ennemis, allies) = combat.ordre.filter { it.id != moiId }.partition { if (moi != null) it.estMonstre != moi.estMonstre else it.estMonstre }
     val ordreDistance = { c: CombattantJoueurData -> c.distance?.let { d -> runCatching { Distance.valueOf(d).ordinal }.getOrNull() } ?: 9 }
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        // Boss (vue joueur ; le MJ a son panneau sur l'écran de combat) : choix de cible éclairé.
+        if (onSelection == null && moiId != null) combat.boss.forEach { BandeauBoss(it, nbAnnonces = 1) }
         // Ordre d'initiative de tous les participants (ordre de jeu du round).
         if (combat.ordre.any { it.initiative != null }) {
             Surface(
@@ -181,7 +186,7 @@ private fun LigneTactique(c: CombattantJoueurData, estMoi: Boolean, selectionnee
             Spacer(Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    c.nom + if (estMoi) " (vous)" else "",
+                    (if (c.boss) "👑 " else if (c.objectif) "🎯 " else "") + c.nom + if (estMoi) " (vous)" else "",
                     fontWeight = FontWeight.Bold,
                     color = if (selectionnee) ForcedDarkPalette.AccentGold else Color.White,
                     maxLines = 1,
@@ -193,6 +198,14 @@ private fun LigneTactique(c: CombattantJoueurData, estMoi: Boolean, selectionnee
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White,
                 )
+                c.position?.let { position ->
+                    Text(
+                        "📍 $position",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (position.startsWith("Au contact")) ForcedDarkPalette.AccentGold else Color.White,
+                    )
+                }
+                c.ia?.let { Text("🧠 IA : $it", style = MaterialTheme.typography.bodySmall, color = Color.White) }
                 LinearProgressIndicator(
                     progress = { ratio.coerceIn(0f, 1f) },
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp).height(5.dp),
@@ -226,6 +239,68 @@ private fun LigneTactique(c: CombattantJoueurData, estMoi: Boolean, selectionnee
 }
 
 // ─── Déplacement (écran des actions) ─────────────────────────────────────────
+
+/** Pions du terrain d'après la vue joueur du combat. */
+internal fun CombatJoueurData.pionsTerrain(): List<PionTerrain> = ordre.filter { !it.objectif }.map { c ->
+    PionTerrain(
+        id = c.id, nom = c.nom, estMonstre = c.estMonstre,
+        zone = c.zone ?: Terrain.zoneDepart(c.estMonstre),
+        horsCombat = c.horsCombat, actif = c.id == actifId, moi = c.id == monCombattantId,
+    )
+}
+
+/**
+ * Où le personnage finit son tour : un appui sur une bande du terrain. Même bande qu'un ennemi =
+ * au contact ; une bande par 9 m de vitesse, deux en se précipitant.
+ */
+@Composable
+internal fun CarteTerrainJoueur(
+    combat: CombatJoueurData,
+    moiId: String,
+    zoneVisee: Int?,
+    desengage: Boolean,
+    onChange: (Int?) -> Unit,
+) {
+    val moi = combat.ordre.firstOrNull { it.id == moiId } ?: return
+    val ici = moi.zone ?: Terrain.zoneDepart(moi.estMonstre)
+    val vitesse = moi.vitesse ?: Distance.VITESSE_STANDARD
+    val pas = Terrain.pasMax(vitesse)
+    val ennemisIci = combat.ordre.any { it.estMonstre != moi.estMonstre && !it.horsCombat && (it.zone ?: Terrain.zoneDepart(it.estMonstre)) == ici }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f), contentColor = Color.White),
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Déplacement", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Black, color = ForcedDarkPalette.AccentGold)
+            Text(
+                "Touchez la zone où finir votre tour. Même zone qu'un ennemi : au contact.",
+                style = MaterialTheme.typography.bodySmall, color = Color.White,
+            )
+            TerrainCombat(
+                pions = combat.pionsTerrain(),
+                repereZone = ici,
+                pasNormal = pas,
+                pasMax = pas * 2,
+                zoneChoisie = zoneVisee ?: ici,
+                onZone = { z -> onChange(z.takeIf { it != ici }) },
+            )
+            val ecart = zoneVisee?.let { kotlin.math.abs(it - ici) } ?: 0
+            if (ecart > pas) {
+                Text(
+                    "Au-delà de votre vitesse (${formatMetres(vitesse)}) : choisissez l'action Se précipiter, sinon vous vous arrêtez en chemin.",
+                    style = MaterialTheme.typography.bodySmall, color = ForcedDarkPalette.AccentGold,
+                )
+            }
+            if (zoneVisee != null && ennemisIci && !desengage) {
+                Text(
+                    "Quitter le contact sans vous désengager expose à une attaque d'opportunité.",
+                    style = MaterialTheme.typography.bodySmall, color = ForcedDarkPalette.AccentGold,
+                )
+            }
+        }
+    }
+}
 
 /** Où le personnage finit son déplacement ce round, par rapport à un adversaire. */
 @OptIn(ExperimentalLayoutApi::class)

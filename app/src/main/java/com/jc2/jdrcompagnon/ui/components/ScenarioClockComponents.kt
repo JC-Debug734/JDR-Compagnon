@@ -172,12 +172,8 @@ fun ScenarioClockRow(modifier: Modifier = Modifier, onClick: (() -> Unit)? = nul
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Icon(
-                imageVector = dayPeriodIcon(period),
-                contentDescription = null,
-                tint = ForcedDarkPalette.AccentGold,
-                modifier = Modifier.size(20.dp),
-            )
+            // Une seule icône : météo du moment, soleil ou lune selon l'heure.
+            IconeMeteo(clock.weather, period, taille = 30.dp, description = weatherLabel(clock.weather))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = ScenarioClockState.formattedCalendarDay(clock.scenarioMinutes, activeCalendar) +
@@ -203,14 +199,12 @@ fun ScenarioClockRow(modifier: Modifier = Modifier, onClick: (() -> Unit)? = nul
                 Text(text = it.nom, style = MaterialTheme.typography.bodySmall, color = ForcedDarkPalette.AccentGold, fontWeight = FontWeight.Bold)
             }
         }
-        // Joueur connecté au MJ : état de la synchronisation de l'heure et du calendrier.
-        if (role == SessionRole.PLAYER) {
+        // Joueur en partie réseau : rien quand tout va bien (synchronisé avec le MJ) ; seuls une
+        // synchronisation en cours ou une perte de connexion sont signalés.
+        if (role == SessionRole.PLAYER && playerState != PlayerConnectionState.CONNECTED) {
             val (syncLabel, syncColor) = when (playerState) {
-                PlayerConnectionState.CONNECTED ->
-                    (if (remoteCalendar != null) "Synchronisé avec le MJ · ${remoteCalendar?.nom}" else "Synchronisé avec le MJ") to Color(0xFF7BC67B)
-                PlayerConnectionState.CONNECTING, PlayerConnectionState.RECONNECTING ->
-                    "Synchronisation en cours…" to ForcedDarkPalette.AccentGold
                 PlayerConnectionState.DISCONNECTED -> "Non synchronisé (hors ligne)" to Color(0xFFE57373)
+                else -> "Synchronisation en cours…" to ForcedDarkPalette.AccentGold
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Icon(Icons.Default.Sync, contentDescription = null, tint = syncColor, modifier = Modifier.size(16.dp))
@@ -221,23 +215,12 @@ fun ScenarioClockRow(modifier: Modifier = Modifier, onClick: (() -> Unit)? = nul
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Icon(
-                imageVector = weatherIcon(clock.weather),
-                contentDescription = null,
-                tint = ForcedDarkPalette.Content,
-                modifier = Modifier.size(20.dp),
-            )
             Text(
                 text = weatherLabel(clock.weather),
                 style = MaterialTheme.typography.bodySmall,
                 color = ForcedDarkPalette.Content,
             )
-            Icon(
-                imageVector = Icons.Default.Thermostat,
-                contentDescription = null,
-                tint = temperatureColor(clock.temperature),
-                modifier = Modifier.size(18.dp),
-            )
+            IconeTemperature(clock.temperature, temperatureColor(clock.temperature), taille = 16.dp)
             Text(
                 text = clock.temperature.label,
                 style = MaterialTheme.typography.bodySmall,
@@ -268,12 +251,7 @@ fun ScenarioClockTicker(modifier: Modifier = Modifier) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Icon(
-            imageVector = dayPeriodIcon(period),
-            contentDescription = null,
-            tint = ForcedDarkPalette.AccentGold,
-            modifier = Modifier.size(14.dp),
-        )
+        IconeMeteo(clock.weather, period, taille = 16.dp)
         // Police à chasse fixe : la largeur ne change pas à chaque tic.
         Text(
             text = ScenarioClockState.formattedTime(clock.scenarioMinutes, clock.scenarioSeconds),
@@ -404,7 +382,7 @@ private fun ChoixMeteo(meteos: Set<ScenarioWeather>, onToggle: (ScenarioWeather)
                 selected = weather in meteos,
                 onClick = { onToggle(weather) },
                 label = { Text(weatherLabel(weather)) },
-                leadingIcon = { Icon(weatherIcon(weather), contentDescription = null, modifier = Modifier.size(16.dp)) },
+                leadingIcon = { IconeMeteo(weather, DayPeriod.JOUR, taille = 18.dp) },
             )
         }
     }
@@ -420,6 +398,7 @@ private fun ChoixTemperatures(temperatures: Set<ScenarioTemperature>, onToggle: 
                 selected = temperature in temperatures,
                 onClick = { onToggle(temperature) },
                 label = { Text(temperature.label, color = temperatureColor(temperature)) },
+                leadingIcon = { IconeTemperature(temperature, temperatureColor(temperature), taille = 16.dp) },
             )
         }
     }
@@ -434,7 +413,7 @@ private fun ChoixTemperatures(temperatures: Set<ScenarioTemperature>, onToggle: 
  * changement est rediffusé en direct aux joueurs connectés (voir
  * NetworkSessionManager.broadcastTimeState).
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ScenarioClockScreen(
     onBack: () -> Unit,
@@ -447,6 +426,9 @@ fun ScenarioClockScreen(
     val hour = ScenarioClockState.hourOfDay(clock.scenarioMinutes)
     val period = ScenarioClockState.dayPeriod(hour)
 
+    // Réglage précis (heure, date, météo manuelle), aussi accessible depuis le menu latéral.
+    var reglageOuvert by remember { mutableStateOf(false) }
+    if (reglageOuvert) ReglageHorlogeDialog(onDismiss = { reglageOuvert = false })
     val weatherSoundSettings by GameState.weatherSoundSettings.collectAsState()
     var weatherSoundVolume by remember { mutableStateOf(weatherSoundSettings.volume) }
     LaunchedEffect(weatherSoundSettings.volume) { weatherSoundVolume = weatherSoundSettings.volume }
@@ -489,24 +471,36 @@ fun ScenarioClockScreen(
                 contentColor = Color.White,
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
+                    // En-tête : une seule icône (météo et moment de la journée), grande heure,
+                    // date, météo et température ; tient sur un petit téléphone (texte qui passe
+                    // à la ligne plutôt qu'une rangée d'icônes qui déborde).
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Icon(dayPeriodIcon(period), contentDescription = null, modifier = Modifier.size(28.dp))
-                        Icon(weatherIcon(clock.weather), contentDescription = null, modifier = Modifier.size(24.dp))
-                        Text(weatherLabel(clock.weather), style = MaterialTheme.typography.bodyMedium)
-                        Icon(Icons.Default.Thermostat, contentDescription = null, tint = temperatureColor(clock.temperature), modifier = Modifier.size(22.dp))
-                        Text(clock.temperature.label, style = MaterialTheme.typography.bodyMedium, color = temperatureColor(clock.temperature))
+                        IconeMeteo(clock.weather, period, taille = 48.dp, description = weatherLabel(clock.weather))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = ScenarioClockState.formattedTime(clock.scenarioMinutes, clock.scenarioSeconds),
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Text(
+                                text = ScenarioClockState.formattedCalendarDay(clock.scenarioMinutes, activeCalendar),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(weatherLabel(clock.weather), style = MaterialTheme.typography.bodySmall)
+                                Text("·", style = MaterialTheme.typography.bodySmall)
+                                IconeTemperature(clock.temperature, temperatureColor(clock.temperature), taille = 16.dp)
+                                Text(clock.temperature.label, style = MaterialTheme.typography.bodySmall, color = temperatureColor(clock.temperature))
+                            }
+                        }
                     }
-                    Text(
-                        text = ScenarioClockState.formattedCalendarDate(clock.scenarioMinutes, activeCalendar, clock.scenarioSeconds),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
                     ScenarioClockState.climatCourant(clock.scenarioMinutes, activeCalendar)?.saison?.takeIf { it.isNotBlank() }?.let {
-                        Text("Saison : $it", style = MaterialTheme.typography.bodySmall)
+                        Text("Saison : $it", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp))
                     }
                     ScenarioClockState.jourFerie(clock.scenarioMinutes, activeCalendar)?.let {
                         Text("🎉 ${it.nom}", style = MaterialTheme.typography.bodyMedium, color = ForcedDarkPalette.AccentGold, fontWeight = FontWeight.Bold)
@@ -514,12 +508,44 @@ fun ScenarioClockScreen(
                     clock.temperature.regle?.let {
                         Text("⚠ $it", style = MaterialTheme.typography.bodySmall, color = temperatureColor(clock.temperature))
                     }
-                    Text(
-                        "Heure, date et météo manuelle : touchez l'horloge dans le menu latéral.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.75f),
-                        modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
-                    )
+
+                    // Commandes rapides : pause / reprise et avance du temps, sans quitter l'écran.
+                    if (clock.enabled) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = com.jc2.jdrcompagnon.ui.components.IconesAsset.LisereDore)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            val enPause = !clock.autoAdvanceEnabled
+                            OutlinedButton(
+                                onClick = { ScenarioClockState.setAutoAdvanceEnabled(enPause) },
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
+                            ) {
+                                Icon(if (enPause) Icons.Default.PlayArrow else Icons.Default.Pause, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(if (enPause) "Reprendre" else "Pause")
+                            }
+                            listOf("+10 min" to 10L, "+1 h" to 60L, "+8 h" to 480L).forEach { (libelle, minutes) ->
+                                OutlinedButton(
+                                    onClick = { ScenarioClockState.advanceManually(minutes) },
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
+                                ) { Text(libelle) }
+                            }
+                            OutlinedButton(
+                                onClick = { ScenarioClockState.advanceDays(1) },
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
+                            ) { Text("+1 jour") }
+                        }
+                        androidx.compose.material3.Button(
+                            onClick = { reglageOuvert = true },
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp),
+                        ) {
+                            Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Régler l'heure, la date et la météo")
+                        }
+                    }
+
 
                     ToggleRow(
                         label = "Activer la fonction",
@@ -631,7 +657,13 @@ private fun CalendarSelector(calendars: List<CalendarConfig>, activeCalendar: Ca
             val created = ScenarioClockState.addCalendar("Nouveau calendrier ${calendars.size + 1}")
             ScenarioClockState.setActiveCalendarId(created.id)
         }) { Text("Nouveau calendrier", color = Color.White) }
-        if (calendars.none { it.nom == CalendarConfig.calendrierHarptos().nom }) {
+        if (calendars.none { it.nom == CalendarConfig.NOM_CLASSIQUE }) {
+            OutlinedButton(onClick = {
+                val created = ScenarioClockState.addClassicCalendar()
+                ScenarioClockState.setActiveCalendarId(created.id)
+            }) { Text("Calendrier classique", color = Color.White) }
+        }
+        if (calendars.none { it.nom == CalendarConfig.NOM_HARPTOS }) {
             OutlinedButton(onClick = {
                 val created = ScenarioClockState.addHarptosCalendar()
                 ScenarioClockState.setActiveCalendarId(created.id)
@@ -756,11 +788,16 @@ fun CalendarConfigEditor(
         )
         TextButton(onClick = {
             val n = config.monthNames.size
-            // Répartition en 4 saisons égales, l'année commençant en hiver.
             var maj = config
-            for (i in 0 until n) maj = maj.avecClimat(i, ClimatMois.saisons[(i * 4 / n).coerceIn(0, 3)])
+            if (n == 12) {
+                // Année de 12 mois : saisons et températures de l'hémisphère nord, mois par mois.
+                ClimatMois.anneeHemisphereNord.forEachIndexed { i, climat -> maj = maj.avecClimat(i, climat) }
+            } else {
+                // Sinon 4 saisons égales, l'hiver couvrant le premier et le dernier mois de l'année.
+                for (i in 0 until n) maj = maj.avecClimat(i, ClimatMois.saisons[((i + 1) * 4 / n) % 4])
+            }
             onConfigChanged(maj)
-        }) { Text("Répartir les 4 saisons sur l'année", color = Color.White) }
+        }) { Text("Répartir les saisons (hémisphère nord)", color = Color.White) }
         config.monthNames.forEachIndexed { index, name ->
             MoisEditor(
                 index = index,

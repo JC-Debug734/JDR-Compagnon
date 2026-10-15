@@ -21,12 +21,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.Backpack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CheckCircleOutline
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.Terrain
 import androidx.compose.material.icons.filled.Thunderstorm
@@ -34,6 +39,7 @@ import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -132,14 +138,19 @@ internal fun SceneToolsBar(
     // 0 : aucun événement de la bibliothèque lié à la scène ni à son environnement (pas d'icône).
     nombreEvenements: Int = 0,
     onOpenEvenements: () -> Unit = {},
+    // Flèches de scène précédente/suivante (false : scénario d'une seule scène). Un callback
+    // null grise la flèche (déjà sur la première/dernière scène).
+    showSceneArrows: Boolean = false,
+    onPreviousScene: (() -> Unit)? = null,
+    onNextScene: (() -> Unit)? = null,
+    modifier: Modifier = Modifier.fillMaxWidth(),
 ) {
     val context = LocalContext.current
     var showVolumeDialog by remember { mutableStateOf(false) }
     fun toast(message: String) = Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
 
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
+        modifier = modifier
             .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.55f))
             .padding(horizontal = 8.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -174,12 +185,28 @@ internal fun SceneToolsBar(
                 icon = Icons.Default.AutoStories,
                 description = "Événements de la scène ($nombreEvenements)",
                 onClick = onOpenEvenements,
-                onLongClick = { toast("Événements de la scène et de son environnement ($nombreEvenements)") },
+                onLongClick = { toast("Événements de l'environnement de la scène ($nombreEvenements)") },
             )
         }
 
         Spacer(modifier = Modifier.weight(1f))
 
+        if (showSceneArrows) {
+            ToolIcon(
+                icon = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                description = "Scène précédente",
+                enabled = onPreviousScene != null,
+                onClick = { onPreviousScene?.invoke() },
+                onLongClick = { toast("Scène précédente") },
+            )
+            ToolIcon(
+                icon = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                description = "Scène suivante",
+                enabled = onNextScene != null,
+                onClick = { onNextScene?.invoke() },
+                onLongClick = { toast("Scène suivante") },
+            )
+        }
         onOpenScenes?.let { open ->
             ToolIcon(
                 icon = Icons.AutoMirrored.Filled.List,
@@ -225,6 +252,7 @@ private fun ToolIcon(
     onClick: () -> Unit,
     icon: ImageVector? = null,
     highlighted: Boolean = false,
+    enabled: Boolean = true,
     onDoubleClick: (() -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
     content: (@Composable () -> Unit)? = null,
@@ -235,6 +263,7 @@ private fun ToolIcon(
             .clip(CircleShape)
             .background(if (highlighted) MaterialTheme.colorScheme.primary.copy(alpha = 0.35f) else Color.Transparent)
             .combinedClickable(
+                enabled = enabled,
                 onClickLabel = description,
                 onClick = onClick,
                 onDoubleClick = onDoubleClick,
@@ -243,7 +272,7 @@ private fun ToolIcon(
         contentAlignment = Alignment.Center,
     ) {
         if (content != null) content()
-        else if (icon != null) Icon(icon, contentDescription = description, tint = Color.White, modifier = Modifier.size(22.dp))
+        else if (icon != null) Icon(icon, contentDescription = description, tint = if (enabled) Color.White else Color.White.copy(alpha = 0.38f), modifier = Modifier.size(22.dp))
     }
 }
 
@@ -257,12 +286,38 @@ private fun SoundVolumeDialog(onDismiss: () -> Unit) {
     val weatherSettings by GameState.weatherSoundSettings.collectAsState()
     var musicVolume by remember { mutableFloatStateOf(musicSettings.volume) }
     var weatherVolume by remember { mutableFloatStateOf(weatherSettings.volume) }
+    val currentTrack by MusicManager.currentTrack.collectAsState()
+    val isPlaying by MusicManager.isPlaying.collectAsState()
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Volume", fontWeight = FontWeight.Bold) },
         text = {
             Column {
+                // Musique en cours, quelle qu'elle soit (lancée par une autre scène ou depuis
+                // l'écran Musique) : pause/reprise et arrêt, même si la scène n'a pas de musique.
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Musique en cours", style = MaterialTheme.typography.labelSmall)
+                        Text(
+                            currentTrack?.let { if (isPlaying) it else "$it (en pause)" } ?: "Aucune",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                    if (currentTrack != null) {
+                        IconButton(onClick = { if (isPlaying) MusicManager.pauseByUser() else MusicManager.resume() }) {
+                            Icon(
+                                if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = if (isPlaying) "Mettre la musique en pause" else "Reprendre la musique",
+                            )
+                        }
+                        IconButton(onClick = { MusicManager.stopByUser() }) {
+                            Icon(Icons.Default.Stop, contentDescription = "Arrêter la musique")
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
                 VolumeSlider(
                     icon = Icons.Default.MusicNote,
                     label = "Musique",

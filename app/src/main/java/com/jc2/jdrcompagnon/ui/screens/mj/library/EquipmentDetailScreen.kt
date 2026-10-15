@@ -104,12 +104,23 @@ fun EquipmentDetailScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    com.jc2.jdrcompagnon.ui.screens.mj.library.srd.ObjetImage(current)
+
                     // Catégorie
                     Text(
                         text = current.category,
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary
                     )
+
+                    if (current.maudit) {
+                        Text(
+                            text = "Objet maudit : une fois équipé, il ne peut plus être retiré." +
+                                current.malediction.takeIf { it.isNotBlank() }?.let { " $it" }.orEmpty(),
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
 
                     // Grille de champs structurés
                     EquipmentStatsGrid(item = current, currentWorld = currentWorld)

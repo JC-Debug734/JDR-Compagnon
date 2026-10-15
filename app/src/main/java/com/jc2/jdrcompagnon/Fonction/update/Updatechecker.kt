@@ -18,13 +18,13 @@ object UpdateChecker {
 
     private val VERSION_REGEX = Regex("""AUTO-VERSION: (\d+\.\d+\.\d+)""")
 
-    // Lien fixe vers l'APK sur Google Drive (mets à jour le fichier via
-    // "Gérer les versions" sur Drive, ou en changeant cet ID si tu changes
-    // de fichier — ce lien s'ouvre dans le navigateur pour un téléchargement
-    // manuel classique, pas de récupération automatique du binaire).
-    // Repassé sur Drive : GitHub refuse les fichiers trop volumineux.
-    private const val DRIVE_FILE_ID = "1cGy1pgsXCYWLO9A8kHlig2EH7DB93y0c"
-    private const val APK_URL = "https://drive.google.com/file/d/$DRIVE_FILE_ID/view?usp=sharing"
+    // Lien fixe vers l'APK debug "JDRCompagnon-debug.apk" du dossier Drive
+    // "Claude". Chaque nouvelle version remplace ce fichier (import Drive →
+    // "Remplacer le fichier existant"), ce qui garde le même ID — ce lien
+    // s'ouvre dans le navigateur pour un téléchargement manuel classique.
+    // Sur Drive : GitHub refuse les fichiers trop volumineux.
+    private const val DRIVE_FILE_ID = "12lh54JGeq7p6u7vkJowlt3WpNHf6PVmQ"
+    const val APK_URL ="https://drive.google.com/file/d/$DRIVE_FILE_ID/view?usp=sharing"
 
     private const val TAG = "UpdateChecker"
 

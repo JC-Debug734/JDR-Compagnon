@@ -152,12 +152,25 @@ private data class EntreeLootDto(
     val quantiteMax: Int = 1
 )
 
+@Serializable
+private data class EntreesNomsDto(
+    val prenoms: List<String> = emptyList(),
+    val noms: List<String> = emptyList(),
+    val pseudos: List<String> = emptyList(),
+    val chanceVidePrenom: Int = 0,
+    val chanceVideNom: Int = 0,
+    val chanceVidePseudo: Int = 0
+)
+
 private val json = Json { ignoreUnknownKeys = true }
+
+private fun decoderNoms(texte: String): EntreesNomsDto =
+    runCatching { json.decodeFromString<EntreesNomsDto>(texte) }.getOrDefault(EntreesNomsDto())
 
 private fun decoderEntrees(texte: String): List<EntreeEvenementDto> =
     runCatching { json.decodeFromString<List<EntreeEvenementDto>>(texte) }.getOrDefault(emptyList())
 
-private fun TableAleatoireEntity.toDomain(evenements: Map<String, Evenement>): TableAleatoire = TableAleatoire(
+private fun TableAleatoireEntity.toDomain(evenements: Map<String, Evenement>): TableAleatoire = decoderNoms(entreesNomsJson).let { entreesNoms -> TableAleatoire(
     id = id,
     nom = nom,
     worldId = worldId,
@@ -170,8 +183,14 @@ private fun TableAleatoireEntity.toDomain(evenements: Map<String, Evenement>): T
         EntreeEvenement(id = dto.id, evenementId = evenementId, poids = dto.poids, evenement = evenements[evenementId])
     },
     entreesLoot = runCatching { json.decodeFromString<List<EntreeLootDto>>(entreesLootJson) }.getOrDefault(emptyList())
-        .map { dto -> EntreeLoot(dto.id, dto.equipementNom, dto.poids, dto.quantiteMin, dto.quantiteMax) }
-)
+        .map { dto -> EntreeLoot(dto.id, dto.equipementNom, dto.poids, dto.quantiteMin, dto.quantiteMax) },
+    prenoms = entreesNoms.prenoms,
+    noms = entreesNoms.noms,
+    pseudos = entreesNoms.pseudos,
+    chanceVidePrenom = entreesNoms.chanceVidePrenom,
+    chanceVideNom = entreesNoms.chanceVideNom,
+    chanceVidePseudo = entreesNoms.chanceVidePseudo
+) }
 
 private fun TableAleatoire.toEntity(): TableAleatoireEntity = TableAleatoireEntity(
     id = id,
@@ -186,5 +205,8 @@ private fun TableAleatoire.toEntity(): TableAleatoireEntity = TableAleatoireEnti
     ),
     entreesLootJson = json.encodeToString(
         entreesLoot.map { EntreeLootDto(it.id, it.equipementNom, it.poids, it.quantiteMin, it.quantiteMax) }
+    ),
+    entreesNomsJson = json.encodeToString(
+        EntreesNomsDto(prenoms, noms, pseudos, chanceVidePrenom, chanceVideNom, chanceVidePseudo)
     )
 )

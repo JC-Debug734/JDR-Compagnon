@@ -9,9 +9,9 @@ import com.jc2.jdrcompagnon.feature_carte.presentation.VoyageSession
 /**
  * Côté MJ, quel que soit l'écran : une fois le voyage parti (tout le monde prêt au départ, voir
  * VoyageSession), chaque étape — les haltes de fin de journée puis l'arrivée — fait avancer
- * l'horloge et l'icône du groupe, propose un événement de voyage puis l'écran de repos (le repos
- * long est proposé aux joueurs connectés, qui choisissent leur repos). Après l'arrivée, le voyage
- * est terminé.
+ * l'horloge et l'icône du groupe et propose un événement de voyage. Seules les haltes enchaînent
+ * sur l'écran de repos (le repos long est proposé aux joueurs connectés, qui choisissent leur
+ * repos) : un trajet fait dans la journée n'en déclenche pas. Après l'arrivée, le voyage est terminé.
  */
 @Composable
 fun VoyageMjOverlay() {
@@ -19,6 +19,7 @@ fun VoyageMjOverlay() {
     val progression by VoyageSession.progression.collectAsState()
     val v = voyage?.takeIf { it.enRoute } ?: return
     val etape = progression.etape.coerceAtMost(VoyageSession.nombreEtapes(v) - 1)
+    val estHalte = etape < v.arrets.size
 
     LaunchedEffect(v.id, etape) { VoyageSession.entrerEtape(v, etape) }
 
@@ -27,7 +28,7 @@ fun VoyageMjOverlay() {
             campagneId = v.campagneId,
             contexte = "Voyage vers ${v.arriveeNom} · ${VoyageSession.libelleEtape(v, etape)} " +
                 "(étape ${etape + 1}/${VoyageSession.nombreEtapes(v)})",
-            onDismiss = { VoyageSession.versRepos() },
+            onDismiss = { if (estHalte) VoyageSession.versRepos() else VoyageSession.etapeSuivante() },
         )
     } else {
         ReposGroupeDialog(

@@ -34,6 +34,7 @@ import com.jc2.jdrcompagnon.ui.theme.ForcedDarkPalette
  * - un clic sur le reste de la carte ouvre la modification ;
  * - à droite, la corbeille (la confirmation reste à la charge de l'écran appelant).
  * [extraActions] permet d'ajouter une action avant la corbeille (ex. "Lire" un scénario).
+ * [leading] s'affiche entre le rond de sélection et le titre (ex. miniature d'une campagne).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,6 +47,7 @@ fun SelectableListCard(
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
     extraActions: @Composable RowScope.() -> Unit = {},
+    leading: (@Composable () -> Unit)? = null,
 ) {
     Card(
         onClick = onEdit,
@@ -73,6 +75,7 @@ fun SelectableListCard(
                     modifier = Modifier.size(28.dp)
                 )
             }
+            leading?.invoke()
             Column(modifier = Modifier.weight(1f).padding(vertical = 8.dp)) {
                 Text(
                     text = title,

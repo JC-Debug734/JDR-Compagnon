@@ -157,7 +157,7 @@ fun CharacterDraft.versCharacter(
         ).joinToString("\n")
     }.orEmpty()
 
-    return Character(
+    val perso = Character(
         name = nomPersonnage.orEmpty(),
         type = "PJ",
         worldId = worldId,
@@ -180,7 +180,8 @@ fun CharacterDraft.versCharacter(
         proficiencyBonus = BONUS_MAITRISE_NIVEAU_1,
         savingThrowProficiencies = classe?.maitriseJetsSauvegarde?.map { it.label } ?: emptyList(),
         skillProficiencies = competencesFinales,
-        skillExpertise = expertisesFinales,
+        // Expertise choisie à la création (Roublard niveau 1), parmi les compétences maîtrisées.
+        skillExpertise = (expertisesFinales + valeursEffet("classe:", EffetBalise.EXPERTISE).filter { it in competencesFinales }).distinct(),
         spells = (sortsMineursChoisis + sortsChoisis + effetsEspece.sorts + valeursEffet("don:", EffetBalise.SORTS)).distinct(),
         // D'où vient chaque sort (affiché sur sa carte) : le premier gain l'emporte.
         spellSources = buildMap {
@@ -209,4 +210,7 @@ fun CharacterDraft.versCharacter(
         // `size` vide (espèce sans balise "taille") : Character le déduit de `race` via
         // sizeForRace ailleurs dans le code.
     )
+    // Effets automatiques des dons reçus (Robuste : +2 PV au niveau 1) ; leurs choix (outils,
+    // compétences, sorts) sont déjà appliqués ci-dessus.
+    return donsRecus.fold(perso) { p, (don, _) -> p.avecEffetsDon(effetsDon(don, emptyMap(), niveau = 1), don.nom, avecPv = true) }
 }

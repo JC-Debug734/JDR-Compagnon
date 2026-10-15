@@ -24,6 +24,8 @@ interface EvenementRepository {
     suspend fun sauvegarder(evenement: Evenement)
     suspend fun sauvegarderTous(evenements: List<Evenement>)
     suspend fun supprimer(id: String)
+    /** Ids des événements propres à la campagne [campagneId] (créés avec elle). */
+    suspend fun idsDeCampagne(campagneId: String): List<String>
     suspend fun compterPourMonde(worldId: String): Int
 }
 
@@ -50,6 +52,8 @@ class EvenementRepositoryImpl(
     override suspend fun supprimer(id: String) = dao.supprimer(id)
 
     override suspend fun compterPourMonde(worldId: String): Int = dao.compterPourMonde(worldId)
+
+    override suspend fun idsDeCampagne(campagneId: String): List<String> = dao.getIdsParCampagne(campagneId)
 }
 
 @Serializable
@@ -116,7 +120,8 @@ private fun EvenementEntity.toDomain(): Evenement = Evenement(
                 nom = dto.nom,
                 quantite = dto.quantite.coerceAtLeast(1)
             )
-        }
+        },
+    imageFileName = imageFileName
 )
 
 private fun Evenement.toEntity(): EvenementEntity = EvenementEntity(
@@ -131,5 +136,6 @@ private fun Evenement.toEntity(): EvenementEntity = EvenementEntity(
     issuesJson = json.encodeToString(
         issues.map { IssueEvenementDto(it.id, it.nature.name, it.titre, it.description, it.effets.map { effet -> effet.toDto() }, it.declencheCombat) }
     ),
-    profilsJson = json.encodeToString(profils.map { ProfilEvenementDto(it.type.name, it.nom, it.quantite) })
+    profilsJson = json.encodeToString(profils.map { ProfilEvenementDto(it.type.name, it.nom, it.quantite) }),
+    imageFileName = imageFileName
 )

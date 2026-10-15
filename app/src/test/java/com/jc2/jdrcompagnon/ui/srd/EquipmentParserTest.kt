@@ -149,4 +149,27 @@ class EquipmentParserTest {
         assertEquals("paladin", entries[2].harmonisationPrerequis)
         assertEquals(false, entries[3].harmonisation)
     }
+
+    @Test
+    fun `image et malediction d un objet de livre`() {
+        val snippet = """
+            ### Chevalière en or
+            <!-- type: objet -->
+            **Type** Objet merveilleux
+            **Image** images/chevaliere.webp
+            **Maudit** Oui : elle ne peut plus être retirée.
+            **Description** Une lourde bague.
+            ---
+
+            ### Dague
+            **Type** Arme
+            ---
+        """.trimIndent()
+        val (chevaliere, dague) = EquipmentParser.parse(snippet)
+        assertEquals("images/chevaliere.webp", chevaliere.image)
+        assertTrue(chevaliere.maudit)
+        assertEquals("elle ne peut plus être retirée.", chevaliere.malediction)
+        assertEquals(null, dague.image)
+        assertEquals(false, dague.maudit)
+    }
 }

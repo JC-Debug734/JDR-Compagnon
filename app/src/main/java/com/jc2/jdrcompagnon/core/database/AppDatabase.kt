@@ -46,7 +46,7 @@ import com.jc2.jdrcompagnon.feature_table_aleatoire.data.local.TableAleatoireEnt
         EvenementEntity::class,
         EpreuveEntity::class
     ],
-    version = 23,
+    version = 33,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -244,6 +244,99 @@ abstract class AppDatabase : RoomDatabase() {
         val MIGRATION_22_23 = object : Migration(22, 23) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE `epreuves` ADD COLUMN `difficulte` TEXT")
+            }
+        }
+
+        /** Outil BOUTIQUES : campagne de la boutique (liste filtrée sur la campagne en cours). */
+        val MIGRATION_23_24 = object : Migration(23, 24) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `boutiques` ADD COLUMN `campagneId` TEXT")
+                // Boutiques déjà liées à une ville : rattachées à la campagne de cette ville.
+                db.execSQL(
+                    "UPDATE `boutiques` SET `campagneId` = (SELECT `campagneId` FROM `points_interet` WHERE `points_interet`.`id` = `boutiques`.`villeId`) " +
+                        "WHERE `villeId` IS NOT NULL"
+                )
+            }
+        }
+
+        /** Outil TABLES ALÉATOIRES : tables de noms (listes de prénoms et de noms). */
+        val MIGRATION_24_25 = object : Migration(24, 25) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `tables_aleatoires` ADD COLUMN `entreesNomsJson` TEXT NOT NULL DEFAULT '{}'")
+            }
+        }
+
+        /** Outil ÉVÉNEMENTS : illustration d'un événement, affichée sur la table quand il est joué. */
+        val MIGRATION_25_26 = object : Migration(25, 26) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `evenements` ADD COLUMN `imageFileName` TEXT")
+            }
+        }
+
+        /** Outil BOUTIQUES : image de la boutique (enseigne fournie avec l'app ou image de l'appareil). */
+        val MIGRATION_26_27 = object : Migration(26, 27) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `boutiques` ADD COLUMN `image` TEXT")
+            }
+        }
+
+        /** Outil VILLES : emblème de la ville (fourni avec l'app ou image de l'appareil). */
+        val MIGRATION_27_28 = object : Migration(27, 28) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `points_interet` ADD COLUMN `embleme` TEXT")
+            }
+        }
+
+        /**
+         * Outil BOUTIQUES : prix, caisses et services comptés en pièces de cuivre (1 po = 100 pc) pour
+         * représenter les prix inférieurs à 1 po. Les colonnes gardent leur nom ; les montants en po
+         * sont convertis.
+         */
+        val MIGRATION_28_29 = object : Migration(28, 29) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("UPDATE `boutiques` SET `argentDisponibleEnPo` = `argentDisponibleEnPo` * 100")
+                db.execSQL("UPDATE `articles_en_vente` SET `coutBaseEnPo` = `coutBaseEnPo` * 100, `prixApplique` = `prixApplique` * 100")
+                db.execSQL("UPDATE `services_boutique` SET `prixEnPo` = `prixEnPo` * 100")
+            }
+        }
+
+        /**
+         * Outil VILLES : fonction d'un lieu à visiter (temple, panneau de quêtes, auberge...), ses
+         * réglages, et lieu caché ou non aux joueurs.
+         */
+        val MIGRATION_29_30 = object : Migration(29, 30) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `lieux_notables` ADD COLUMN `fonction` TEXT NOT NULL DEFAULT 'AUCUNE'")
+                db.execSQL("ALTER TABLE `lieux_notables` ADD COLUMN `chancePourcent` INTEGER NOT NULL DEFAULT 50")
+                db.execSQL("ALTER TABLE `lieux_notables` ADD COLUMN `prixPc` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `lieux_notables` ADD COLUMN `texte` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `lieux_notables` ADD COLUMN `queteIds` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `lieux_notables` ADD COLUMN `visibleJoueurs` INTEGER NOT NULL DEFAULT 1")
+            }
+        }
+
+        /** Outil VILLES : DD et valeur des fonctions de lieu (bibliothèque, arène, banque, maître d'armes). */
+        val MIGRATION_30_31 = object : Migration(30, 31) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `lieux_notables` ADD COLUMN `dd` INTEGER NOT NULL DEFAULT 12")
+                db.execSQL("ALTER TABLE `lieux_notables` ADD COLUMN `valeur` INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        /** Outil BOUTIQUES : effet d'un service sur l'application (repas, nuit = repos long...). */
+        val MIGRATION_31_32 = object : Migration(31, 32) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `services_boutique` ADD COLUMN `effet` TEXT NOT NULL DEFAULT 'AUTO'")
+            }
+        }
+
+        /** Outil ÉPREUVES : échecs qui font perdre l'épreuve, issues de réussite et d'échec, combat final. */
+        val MIGRATION_32_33 = object : Migration(32, 33) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `epreuves` ADD COLUMN `echecsMax` INTEGER NOT NULL DEFAULT 3")
+                db.execSQL("ALTER TABLE `epreuves` ADD COLUMN `issueReussite` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `epreuves` ADD COLUMN `issueEchec` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `epreuves` ADD COLUMN `combatEchec` TEXT NOT NULL DEFAULT ''")
             }
         }
     }

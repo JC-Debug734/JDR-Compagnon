@@ -41,6 +41,10 @@ private fun EpreuveEntity.toDomain(): Epreuve = Epreuve(
     complications = runCatching { json.decodeFromString<List<ComplicationEpreuve>>(complicationsJson) }.getOrDefault(emptyList()),
     musicTrackId = musicTrackId,
     difficulte = difficulte?.let { nom -> DifficulteEpreuve.entries.firstOrNull { it.name == nom } },
+    echecsMax = echecsMax,
+    issueReussite = issueReussite,
+    issueEchec = issueEchec,
+    combatEchec = combatEchec,
 )
 
 private fun Epreuve.toEntity(): EpreuveEntity = EpreuveEntity(
@@ -53,4 +57,8 @@ private fun Epreuve.toEntity(): EpreuveEntity = EpreuveEntity(
     complicationsJson = json.encodeToString(complications.filter { it.titre.isNotBlank() }),
     musicTrackId = musicTrackId,
     difficulte = difficulte?.name,
+    echecsMax = echecsMax,
+    issueReussite = issueReussite,
+    issueEchec = issueEchec,
+    combatEchec = combatEchec,
 )

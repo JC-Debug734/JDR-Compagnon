@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Thème de base — Compose Material 3 gère la palette via JdrCompagnonTheme (Theme.kt). -->
-    <style name="Theme.JDRCompagnon" parent="android:Theme.DeviceDefault.Light.NoActionBar">
+    <!-- Thème toujours sombre (l'appli l'est, voir ForcedDarkPalette), même quand le téléphone est en
+         mode clair : sinon fond blanc au démarrage et barres système blanches (Samsung). -->
+    <style name="Theme.JDRCompagnon" parent="android:Theme.DeviceDefault.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:navigationBarColor">@android:color/transparent</item>
-        <item name="android:windowBackground">@android:color/white</item>
+        <item name="android:navigationBarColor">@color/bleu_barre_du_bas</item>
+        <item name="android:windowBackground">@color/bleu_barre_du_bas</item>
     </style>
 </resources>

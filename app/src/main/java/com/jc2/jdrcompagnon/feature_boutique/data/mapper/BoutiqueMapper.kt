@@ -24,8 +24,10 @@ fun BoutiqueAvecDetails.toDomain(): Boutique = Boutique(
     inventaire = articles.map { it.toDomain() },
     type = TypeBoutique.valueOf(boutique.type),
     services = services.map { it.toDomain() },
-    argentDisponibleEnPo = boutique.argentDisponibleEnPo,
-    villeId = boutique.villeId
+    argentDisponibleEnPc = boutique.argentDisponibleEnPc,
+    villeId = boutique.villeId,
+    campagneId = boutique.campagneId,
+    image = boutique.image
 )
 
 fun Boutique.toEntity(): BoutiqueEntity = BoutiqueEntity(
@@ -35,14 +37,16 @@ fun Boutique.toEntity(): BoutiqueEntity = BoutiqueEntity(
     nomMarchand = marchand.nom,
     descriptionMarchand = marchand.description,
     type = type.name,
-    argentDisponibleEnPo = argentDisponibleEnPo,
+    argentDisponibleEnPc = argentDisponibleEnPc,
     traitMarchand = marchand.trait,
-    villeId = villeId
+    villeId = villeId,
+    campagneId = campagneId,
+    image = image
 )
 
 fun ArticleEnVenteEntity.toDomain(): ArticleEnVente = ArticleEnVente(
-    equipement = EquipementReference(nom = equipementNom, coutBaseEnPo = coutBaseEnPo, type = equipementType),
-    prixApplique = prixApplique,
+    equipement = EquipementReference(nom = equipementNom, coutBaseEnPc = coutBaseEnPc, type = equipementType),
+    prixEnPc = prixEnPc,
     quantiteStock = quantiteStock,
     toujoursDisponible = toujoursDisponible
 )
@@ -51,8 +55,8 @@ fun ArticleEnVente.toEntity(boutiqueId: String): ArticleEnVenteEntity = ArticleE
     boutiqueId = boutiqueId,
     equipementNom = equipement.nom,
     equipementType = equipement.type,
-    coutBaseEnPo = equipement.coutBaseEnPo,
-    prixApplique = prixApplique,
+    coutBaseEnPc = equipement.coutBaseEnPc,
+    prixEnPc = prixEnPc,
     quantiteStock = quantiteStock,
     toujoursDisponible = toujoursDisponible
 )
@@ -69,18 +73,20 @@ fun Employe.toEntity(boutiqueId: String): EmployeEntity = EmployeEntity(
 fun ServiceEntity.toDomain(): Service = Service(
     nom = nom,
     description = description,
-    prixEnPo = prixEnPo,
+    prixEnPc = prixEnPc,
     quantiteDisponible = quantiteDisponible,
     actif = actif,
-    personnalise = personnalise
+    personnalise = personnalise,
+    effet = com.jc2.jdrcompagnon.feature_boutique.domain.model.EffetService.depuis(effet),
 )
 
 fun Service.toEntity(boutiqueId: String): ServiceEntity = ServiceEntity(
     boutiqueId = boutiqueId,
     nom = nom,
     description = description,
-    prixEnPo = prixEnPo,
+    prixEnPc = prixEnPc,
     quantiteDisponible = quantiteDisponible,
     actif = actif,
-    personnalise = personnalise
+    personnalise = personnalise,
+    effet = effet.name,
 )

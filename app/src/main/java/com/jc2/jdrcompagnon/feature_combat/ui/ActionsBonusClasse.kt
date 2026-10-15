@@ -28,6 +28,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jc2.jdrcompagnon.feature_combat.domain.model.ArsenalPersonnage
+import com.jc2.jdrcompagnon.feature_combat.domain.model.ConditionCombat
+import com.jc2.jdrcompagnon.feature_combat.domain.model.Paladin
 import com.jc2.jdrcompagnon.ui.Character
 import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.theme.ForcedDarkPalette
@@ -35,10 +37,7 @@ import com.jc2.jdrcompagnon.ui.theme.ForcedDarkPalette
 /** Créature au contact que le Paladin peut toucher (lui-même, un allié, un PNJ ou un ennemi). */
 internal data class CibleContact(val id: String, val nom: String)
 
-/** Coût en Puissance curative pour retirer l'état Empoisonné. */
-private const val COUT_POISON = 5
-
-private const val ECHEC_ENVOI = "Envoi impossible : connexion au MJ perdue. Rien n'a été dépensé."
+internal const val ECHEC_ENVOI = "Envoi impossible : connexion au MJ perdue. Rien n'a été dépensé."
 
 /** Le personnage a-t-il des actions bonus de classe gérées ici (Imposition des mains, Châtiment divin) ? */
 internal fun aActionsBonusClasse(c: Character): Boolean =
@@ -46,8 +45,9 @@ internal fun aActionsBonusClasse(c: Character): Boolean =
 
 /**
  * Actions bonus du Paladin :
- * - Imposition des mains : Guérison (PV puisés dans la Puissance curative) ou retrait de l'état
- *   Empoisonné (5 points), sur n'importe quelle créature au contact — [cibles].
+ * - Imposition des mains : Guérison (PV puisés dans la Puissance curative) ou retrait d'états,
+ *   5 points chacun — Empoisonné, plus Assourdi, Aveuglé, Charmé, Effrayé, Étourdi et Paralysé
+ *   avec Toucher réparateur (niv. 14) —, sur n'importe quelle créature au contact — [cibles].
  * - Châtiment divin (niveau 2+) : après avoir touché au corps à corps, 2d8 radiants (+1d8 par
  *   niveau d'emplacement au-delà du 1er, +1d8 contre un Fiélon ou un Mort-vivant) ; une fois
  *   gratuit par repos long, sinon avec un emplacement.
@@ -61,7 +61,8 @@ internal fun ActionsBonusPaladin(
     personnage: Character,
     cibles: List<CibleContact>,
     emplacementsRestants: Map<Int, Int>,
-    onImposition: (cible: CibleContact, pv: Int, retirerPoison: Boolean) -> String?,
+    // [etats] : libellés des états retirés (« Empoisonné »…) ; vide = Guérison de [pv] PV.
+    onImposition: (cible: CibleContact, pv: Int, etats: List<String>) -> String?,
     onChatiment: (des: List<Int>, formule: String) -> String?,
     modifier: Modifier = Modifier,
 ) {
@@ -78,24 +79,43 @@ internal fun ActionsBonusPaladin(
             Text("Actions bonus", fontWeight = FontWeight.Bold, color = ForcedDarkPalette.AccentGold)
 
             if (reserve > 0) {
-                var retirerPoison by remember { mutableStateOf(false) }
+                var retirerEtats by remember { mutableStateOf(false) }
+                var etatsChoisis by remember { mutableStateOf(setOf(ConditionCombat.EMPOISONNE.label)) }
                 var cibleId by remember { mutableStateOf(cibles.firstOrNull()?.id) }
                 var pv by remember { mutableIntStateOf(5) }
                 val pvEffectifs = pv.coerceIn(1, restant.coerceAtLeast(1))
                 val cible = cibles.firstOrNull { it.id == cibleId }
+                val retirables = Paladin.etatsRetirables(personnage).map { it.label }
                 Text("Imposition des mains", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 Text("Puissance curative : $restant / $reserve PV (récupérée au repos long)", style = MaterialTheme.typography.bodySmall)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FilterChip(selected = !retirerPoison, onClick = { retirerPoison = false }, label = { Text("Guérison") })
-                    FilterChip(selected = retirerPoison, onClick = { retirerPoison = true }, label = { Text("Retirer Empoisonné ($COUT_POISON pts)") })
+                    FilterChip(selected = !retirerEtats, onClick = { retirerEtats = false }, label = { Text("Guérison") })
+                    FilterChip(
+                        selected = retirerEtats,
+                        onClick = { retirerEtats = true },
+                        label = { Text(if (retirables.size > 1) "Retirer des états (${Paladin.COUT_ETAT} pts chacun)" else "Retirer Empoisonné (${Paladin.COUT_ETAT} pts)") },
+                    )
                 }
+                if (retirerEtats && retirables.size > 1) {
+                    Text("Toucher réparateur : états à retirer", style = MaterialTheme.typography.labelMedium)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        retirables.forEach { e ->
+                            FilterChip(
+                                selected = e in etatsChoisis,
+                                onClick = { etatsChoisis = if (e in etatsChoisis) etatsChoisis - e else etatsChoisis + e },
+                                label = { Text(e) },
+                            )
+                        }
+                    }
+                }
+                val etatsRetires = if (!retirerEtats) emptyList() else retirables.filter { it in etatsChoisis }
                 Text("Cible au contact (PJ, PNJ, allié ou ennemi)", style = MaterialTheme.typography.labelMedium)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     cibles.forEach { c ->
                         FilterChip(selected = c.id == cibleId, onClick = { cibleId = c.id }, label = { Text(c.nom) })
                     }
                 }
-                if (!retirerPoison) {
+                if (!retirerEtats) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         TextButton(onClick = { pv = (pvEffectifs - 1).coerceAtLeast(1) }, enabled = pvEffectifs > 1) { Text("−") }
                         Text("$pvEffectifs PV", fontWeight = FontWeight.Bold)
@@ -103,19 +123,19 @@ internal fun ActionsBonusPaladin(
                         TextButton(onClick = { pv = restant }, enabled = restant > 0) { Text("Tout") }
                     }
                 }
-                val cout = if (retirerPoison) COUT_POISON else pvEffectifs
+                val cout = if (retirerEtats) Paladin.COUT_ETAT * etatsRetires.size else pvEffectifs
                 Button(
                     enabled = cible != null && restant >= cout && cout > 0,
                     onClick = {
                         val c = cible ?: return@Button
-                        val resultat = onImposition(c, if (retirerPoison) 0 else pvEffectifs, retirerPoison)
+                        val resultat = onImposition(c, if (retirerEtats) 0 else pvEffectifs, etatsRetires)
                         if (resultat != null) GameState.setLayOnHandsUsed(personnage.id, personnage.layOnHandsUsed + cout, reserve)
                         message = resultat ?: ECHEC_ENVOI
                     },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(
-                        if (retirerPoison) "Retirer Empoisonné" + (cible?.let { " de ${it.nom}" } ?: "")
+                        if (retirerEtats) "Retirer ${etatsRetires.joinToString().ifEmpty { "…" }}" + (cible?.let { " de ${it.nom}" } ?: "") + " ($cout pts)"
                         else "Soigner " + (cible?.nom ?: "…") + " de $pvEffectifs PV"
                     )
                 }
@@ -162,7 +182,16 @@ internal fun ActionsBonusPaladin(
                             if (n == null) GameState.setDivineSmiteFreeUsed(personnage.id, true)
                             else GameState.setSpellSlotUsed(personnage.id, n, (personnage.spellSlotsUsed[n] ?: 0) + 1)
                         }
-                        message = resultat ?: ECHEC_ENVOI
+                        // Dévotion niv. 15 — Châtiment de protection ; Gloire niv. 3 — Châtiment d'exaltation.
+                        val protecteur = when {
+                            resultat == null -> ""
+                            Paladin.niveauDevotion(personnage) >= 15 ->
+                                " Châtiment de protection : abri partiel (+2 CA et JS Dex) pour vous et vos alliés dans l'aura jusqu'au début de votre prochain tour."
+                            Paladin.niveauGloire(personnage) >= 3 && Paladin.conduitDivinRestants(personnage) > 0 ->
+                                " Châtiment d'exaltation possible (Conduit divin) : voir « Aptitudes du Paladin »."
+                            else -> ""
+                        }
+                        message = resultat?.plus(protecteur) ?: ECHEC_ENVOI
                     },
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("Lancer Châtiment divin (${nbDes}d8)") }

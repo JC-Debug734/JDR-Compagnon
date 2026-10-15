@@ -43,6 +43,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -56,9 +57,6 @@ import com.jc2.jdrcompagnon.network.NetworkSessionManager
 import com.jc2.jdrcompagnon.ui.Character
 import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.WorldState
-import com.jc2.jdrcompagnon.ui.screens.mj.scenario.SceneProfilesColumn
-import com.jc2.jdrcompagnon.ui.screens.mj.scenario.openSceneProfileMenu
-import com.jc2.jdrcompagnon.ui.screens.mj.scenario.sceneProfiles
 import com.jc2.jdrcompagnon.ui.theme.ForcedDarkPalette
 
 /**
@@ -68,11 +66,6 @@ import com.jc2.jdrcompagnon.ui.theme.ForcedDarkPalette
  * cette extraction, chaque écran réinventait son propre contenu de tiroir
  * (certains se limitaient à un simple "Retour"), ce qui donnait l'impression
  * de perdre l'accès aux outils MJ en changeant d'écran.
- *
- * Sélecteurs Campagne/Scénario branchés sur l'état global persistant
- * (GameState.currentCampaignId / GameState.lastScenarioId) plutôt que sur un
- * état local à un écran, pour que le choix fait ici reste cohérent partout,
- * y compris sur le tableau de bord MJ.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,40 +80,90 @@ fun MjDrawer(
     onOpenProposalStatus: () -> Unit = {},
     // Fiche d'un état dans le livre États de la bibliothèque (depuis l'édition rapide d'un personnage).
     onOpenEtat: (String) -> Unit = {},
+    // Fiche du groupe sélectionné (appui sur la section GROUPE).
+    onOpenGroupe: (groupId: String) -> Unit = {},
+    // Retour à une activité quittée en cours de route (section « EN COURS »).
+    onOpenCombatEnCours: () -> Unit = {},
+    onOpenEpreuveEnCours: () -> Unit = {},
+    // Aide de séance (section SÉANCE) : ouverture des entrées de l'agenda, préparation complète.
+    navigationAgenda: com.jc2.jdrcompagnon.feature_preparation.ui.NavigationAgenda? = null,
+    onOpenPreparation: () -> Unit = {},
     onCloseDrawer: () -> Unit,
 ) {
     val context = LocalContext.current
     LaunchedEffect(Unit) { GameState.syncScenariosFromDisk(context) }
-    // Scénarios et campagnes limités au monde courant : après un changement d'univers, le
-    // scénario sélectionné d'un autre univers ne doit plus être accessible.
-    val allScenarios by GameState.mjScenarios.collectAsState()
-    val allCampaigns by GameState.mjCampaigns.collectAsState()
-    val mjScenarios = allScenarios.filter { it.worldId == (currentWorld?.id ?: "") }
-    val mjCampaigns = allCampaigns.filter { it.worldId == (currentWorld?.id ?: "") }
     val mjGroups by GameState.mjGroups.collectAsState()
     val characters by GameState.characters.collectAsState()
-    val selectedCampaignId by GameState.currentCampaignId.collectAsState()
-    val selectedScenarioId by GameState.lastScenarioId.collectAsState()
     val selectedGroupId by GameState.currentGroupId.collectAsState()
     var quickEditCharacter by remember { mutableStateOf<Character?>(null) }
-    var questToValidate by remember { mutableStateOf<com.jc2.jdrcompagnon.feature_quete.domain.model.Quest?>(null) }
     // Appui sur l'horloge : réglage de l'heure, de la date et de la météo manuelle.
     var reglageHorloge by remember { mutableStateOf(false) }
     if (reglageHorloge) ReglageHorlogeDialog(onDismiss = { reglageHorloge = false })
+    var aideSeance by remember { mutableStateOf(false) }
+    if (aideSeance && navigationAgenda != null) {
+        // Ouvrir un élément ferme l'aide et le menu ; lancer un combat ou une épreuve se fait dans l'aide.
+        fun puis(action: () -> Unit) { aideSeance = false; onCloseDrawer(); action() }
+        com.jc2.jdrcompagnon.feature_preparation.ui.AideSeanceDialog(
+            onDismiss = { aideSeance = false },
+            navigation = com.jc2.jdrcompagnon.feature_preparation.ui.NavigationAgenda(
+                ouvrirScenario = { puis { navigationAgenda.ouvrirScenario(it) } },
+                ouvrirPnj = { puis { navigationAgenda.ouvrirPnj(it) } },
+                ouvrirEnvironnement = { puis { navigationAgenda.ouvrirEnvironnement(it) } },
+                ouvrirVille = { c, v -> puis { navigationAgenda.ouvrirVille(c, v) } },
+                ouvrirBoutique = { puis { navigationAgenda.ouvrirBoutique(it) } },
+                ouvrirCombat = { puis { navigationAgenda.ouvrirCombat() } },
+            ),
+            onOpenPreparation = { puis(onOpenPreparation) },
+        )
+    }
+    var noteRapide by remember { mutableStateOf(false) }
+    if (noteRapide) {
+        com.jc2.jdrcompagnon.feature_preparation.ui.NoteRapideDialog(
+            worldId = currentWorld?.id ?: "",
+            onDismiss = { noteRapide = false },
+        )
+    }
     val hasPendingGroupProposals by NetworkSessionManager.hasPendingGroupProposals.collectAsState()
 
-    val selectedCampaign = selectedCampaignId?.let { id -> mjCampaigns.firstOrNull { it.id == id } }
-    val visibleScenarios = if (selectedCampaign != null) {
-        mjScenarios.filter { it.id in selectedCampaign.scenarioIds }
-    } else {
-        mjScenarios.filter { com.jc2.jdrcompagnon.ui.PorteeCampagne.scenarioVisible(it) }
-    }
     val visibleGroups = mjGroups.filter { it.worldId == (currentWorld?.id ?: "") }
     val selectedGroup = selectedGroupId?.let { id -> visibleGroups.firstOrNull { it.id == id } }
-    val selectedScenario = mjScenarios.firstOrNull { it.id == selectedScenarioId }
+
+    // Joueur connecté qui incarne un personnage, et lieu où se trouve ce personnage : ville et
+    // lieu visité signalés par son joueur (positionsVille), sinon le lieu du groupe.
+    val claimedCharacters by NetworkSessionManager.claimedCharacters.collectAsState()
+    val connectedClients by NetworkSessionManager.connectedClients.collectAsState()
+    val positionsVille by NetworkSessionManager.positionsVille.collectAsState()
+    val villes by remember {
+        com.jc2.jdrcompagnon.di.CarteDependencies.repository.observerToutesLesVilles()
+    }.collectAsState(initial = emptyList())
+    fun joueurDe(c: Character): String? =
+        claimedCharacters[c.id]?.let { clientId -> connectedClients.firstOrNull { it.id == clientId }?.displayName }
+    fun lieuDe(c: Character): String? {
+        val clientId = claimedCharacters[c.id]
+        val position = positionsVille.firstOrNull { clientId != null && it.clientId == clientId }
+            ?: positionsVille.firstOrNull { it.personnage.isNotBlank() && it.personnage.equals(c.name, ignoreCase = true) }
+            // Pas de position réseau : lieu écrit sur la fiche par le menu joueur (même téléphone
+            // ou fiche synchronisée), sinon le lieu du groupe.
+            ?: return c.lieuVille.takeIf { it.isNotBlank() } ?: selectedGroup?.location?.takeIf { it.isNotBlank() }
+        val ville = villes.firstOrNull { it.id == position.villeId }?.nom ?: selectedGroup?.location.orEmpty()
+        val endroit = position.lieuNom.ifBlank { com.jc2.jdrcompagnon.feature_carte.ui.ENTREE_DE_LA_VILLE }
+        return listOf(ville, endroit).filter { it.isNotBlank() }.joinToString(" · ")
+    }
 
     ModalDrawerSheet(
-        drawerContainerColor = ForcedDarkPalette.Surface,
+        // Liseré doré sur le flanc droit du menu, comme celui du haut de la barre du bas
+        // (en retrait des coins arrondis de la feuille).
+        modifier = Modifier.drawWithContent {
+            drawContent()
+            val x = size.width - 1.dp.toPx()
+            drawLine(
+                color = com.jc2.jdrcompagnon.ui.components.IconesAsset.LisereDore,
+                start = androidx.compose.ui.geometry.Offset(x, 16.dp.toPx()),
+                end = androidx.compose.ui.geometry.Offset(x, size.height - 16.dp.toPx()),
+                strokeWidth = 1.dp.toPx(),
+            )
+        },
+        drawerContainerColor = com.jc2.jdrcompagnon.ui.components.IconesAsset.FondIcones,
         drawerContentColor = ForcedDarkPalette.Content,
     ) {
         Column(
@@ -186,135 +229,92 @@ fun MjDrawer(
                 )
             }
             ScenarioClockRow(onClick = { reglageHorloge = true })
-            HorizontalDivider(color = ForcedDarkPalette.Indicator)
+            HorizontalDivider(thickness = 1.dp, color = com.jc2.jdrcompagnon.ui.components.IconesAsset.LisereDore)
 
-        // --- CAMPAGNE (affichage seul : la sélection se fait dans l'outil CAMPAGNES) : section
-        // entièrement masquée tant qu'aucune campagne n'est sélectionnée. Le contenu réel
-        // s'affiche directement (pas juste des titres cliquables vers un écran séparé). ---
-        if (selectedCampaign != null) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(Icons.Default.Checklist, contentDescription = null, tint = ForcedDarkPalette.AccentGold, modifier = Modifier.size(20.dp))
-                Spacer(modifier = Modifier.width(8.dp))
+            // --- EN COURS : combat, discussion PNJ ou épreuve quittés sans être terminés ---
+            val combatEnCours by com.jc2.jdrcompagnon.feature_combat.presentation.CombatSession.etat.collectAsState()
+            val discussionEnCours by com.jc2.jdrcompagnon.ui.screens.mj.scenario.DiscussionEnCours.enCours.collectAsState()
+            val epreuveEnCours by com.jc2.jdrcompagnon.feature_epreuve.presentation.EpreuveOutilSession.etat.collectAsState()
+            if (combatEnCours != null || discussionEnCours != null || epreuveEnCours != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.PlayCircle, contentDescription = null, tint = ForcedDarkPalette.AccentGold, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "EN COURS",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Black,
+                        color = ForcedDarkPalette.AccentGold
+                    )
+                }
+                if (combatEnCours != null) {
+                    RetourEnCoursRow(Icons.Default.SportsMartialArts, "Retourner au combat") {
+                        onCloseDrawer()
+                        onOpenCombatEnCours()
+                    }
+                }
+                discussionEnCours?.let { d ->
+                    RetourEnCoursRow(Icons.Default.Forum, "Retourner à la discussion : ${d.character.name}") {
+                        onCloseDrawer()
+                        com.jc2.jdrcompagnon.ui.screens.mj.scenario.DiscussionEnCours.rouvrir()
+                    }
+                }
+                epreuveEnCours?.let { e ->
+                    RetourEnCoursRow(Icons.Default.Terrain, "Retourner à l'épreuve : ${e.epreuve.nom}") {
+                        onCloseDrawer()
+                        onOpenEpreuveEnCours()
+                    }
+                }
+                HorizontalDivider(thickness = 1.dp, color = com.jc2.jdrcompagnon.ui.components.IconesAsset.LisereDore)
+            }
+
+        // --- SÉANCE : raccourci vers l'aide de séance (préparation du carnet MJ du monde) ---
+        val carnets by com.jc2.jdrcompagnon.feature_preparation.data.CarnetMj.carnets.collectAsState()
+        val carnet = carnets[currentWorld?.id ?: ""] ?: com.jc2.jdrcompagnon.feature_preparation.domain.model.CarnetMonde()
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { aideSeance = true }
+                .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Default.EventNote, contentDescription = null, tint = ForcedDarkPalette.AccentGold, modifier = Modifier.size(20.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "CAMPAGNE",
+                    text = "SÉANCE ${carnet.preparation.numero}",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Black,
                     color = ForcedDarkPalette.AccentGold
                 )
-            }
-            Text(
-                text = selectedCampaign.title,
-                style = MaterialTheme.typography.bodySmall,
-                color = ForcedDarkPalette.Content
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Quêtes en cours : un toucher ouvre la validation (choix du groupe, récompenses).
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Flag, contentDescription = null, tint = ForcedDarkPalette.Content, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Quêtes en cours", style = MaterialTheme.typography.labelMedium, color = ForcedDarkPalette.Content)
-            }
-            val quetesEnCours = selectedCampaign.quests.filter { it.status == com.jc2.jdrcompagnon.feature_quete.domain.model.QuestStatus.EN_COURS }
-            if (quetesEnCours.isEmpty()) {
-                Text("Aucune quête en cours", style = MaterialTheme.typography.bodySmall, color = ForcedDarkPalette.Content, modifier = Modifier.padding(start = 26.dp))
-            } else {
-                quetesEnCours.forEach { quest ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { questToValidate = quest }
-                            .padding(start = 26.dp, top = 4.dp, bottom = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            quest.title + (quest.location.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = ForcedDarkPalette.Content,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Icon(Icons.Default.EmojiEvents, contentDescription = "Valider", tint = ForcedDarkPalette.AccentGold, modifier = Modifier.size(16.dp))
-                    }
-                }
-            }
-
-            HorizontalDivider(color = ForcedDarkPalette.Indicator)
-        }
-
-        // --- SCÉNARIOS (affichage seul : la sélection se fait dans l'outil SCÉNARIOS) ---
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(Icons.Default.Description, contentDescription = null, tint = ForcedDarkPalette.AccentGold, modifier = Modifier.size(20.dp))
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "SCÉNARIOS",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Black,
-                color = ForcedDarkPalette.AccentGold
-            )
-        }
-        // Seul le scénario sélectionné est affiché (même quand une campagne en compte plusieurs).
-        Text(
-            text = selectedScenario?.title ?: when {
-                selectedCampaign != null && visibleScenarios.isEmpty() -> "Aucun scénario dans cette campagne"
-                mjScenarios.isEmpty() -> "Aucun scénario"
-                else -> "Aucun scénario sélectionné"
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = ForcedDarkPalette.Content
-        )
-
-        // Profils présents dans la scène en cours du scénario sélectionné : un clic ouvre le
-        // petit menu combat / dialogue / fiche (SceneProfileActionsHost, au niveau navigation).
-        if (selectedScenario != null) {
-            val sceneIndexes by GameState.currentSceneIndexByScenario.collectAsState()
-            val scenes = selectedScenario.scenes.ifEmpty {
-                listOf(GameState.MjScene(title = selectedScenario.title, markdownContent = selectedScenario.markdownContent))
-            }
-            val sceneIndex = (sceneIndexes[selectedScenario.id] ?: GameState.currentSceneIndex(selectedScenario.id))
-                .coerceIn(0, scenes.size - 1)
-            val currentScene = scenes[sceneIndex]
-            val profiles = remember(currentScene.markdownContent, characters) {
-                sceneProfiles(currentScene.markdownContent, characters)
-            }
-            Spacer(modifier = Modifier.height(4.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.TheaterComedy, contentDescription = null, tint = ForcedDarkPalette.Content, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
+                val secretsAPlacer = carnet.preparation.secretIds.count { id -> carnet.secrets.any { it.id == id && !it.decouvert } }
+                val filsOuverts = carnet.fils.count { !it.resolu }
                 Text(
-                    "Scène ${sceneIndex + 1} — ${currentScene.title}",
-                    style = MaterialTheme.typography.labelMedium,
+                    listOfNotNull(
+                        carnet.preparation.agenda.count { !it.fait }.takeIf { it > 0 }?.let { "$it à l'agenda" },
+                        secretsAPlacer.takeIf { it > 0 }?.let { "$it secret(s) à placer" },
+                        filsOuverts.takeIf { it > 0 }?.let { "$it fil(s) en suspens" },
+                    ).joinToString(" · ").ifBlank { "Aide de séance" },
+                    style = MaterialTheme.typography.bodySmall,
                     color = ForcedDarkPalette.Content
                 )
             }
-            if (profiles.isEmpty()) {
-                Text(
-                    "Aucun profil dans cette scène",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ForcedDarkPalette.Content,
-                    modifier = Modifier.padding(start = 26.dp)
-                )
-            } else {
-                SceneProfilesColumn(
-                    profiles = profiles,
-                    contentColor = ForcedDarkPalette.Content,
-                    onClick = { profile ->
-                        onCloseDrawer()
-                        openSceneProfileMenu(profile, currentScene, selectedScenario.worldId)
-                    }
-                )
-            }
+            Icon(Icons.Default.ChevronRight, contentDescription = "Ouvrir l'aide de séance", tint = ForcedDarkPalette.AccentGold, modifier = Modifier.size(20.dp))
         }
+        RetourEnCoursRow(Icons.Default.EditNote, "Note rapide") { noteRapide = true }
+        HorizontalDivider(thickness = 1.dp, color = com.jc2.jdrcompagnon.ui.components.IconesAsset.LisereDore)
 
-        // --- GROUPE (affichage seul : la sélection se fait dans l'outil GROUPES) ---
-        HorizontalDivider(color = ForcedDarkPalette.Indicator)
+        // Pas de section SCÉNARIOS ici : scénario et profils de la scène font doublon avec
+        // l'icône « Profils et liens du scénario » de la lecture.
+
+        // --- GROUPE (la sélection se fait dans l'outil GROUPES ; appui = fiche du groupe) ---
         Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(if (selectedGroup != null) Modifier.clickable { onOpenGroupe(selectedGroup.id) } else Modifier)
+                .padding(vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(Icons.Default.Group, contentDescription = null, tint = ForcedDarkPalette.AccentGold, modifier = Modifier.size(20.dp))
@@ -325,11 +325,16 @@ fun MjDrawer(
                 fontWeight = FontWeight.Black,
                 color = ForcedDarkPalette.AccentGold
             )
+            if (selectedGroup != null) {
+                Spacer(modifier = Modifier.weight(1f))
+                Icon(Icons.Default.ChevronRight, contentDescription = "Voir le groupe", tint = ForcedDarkPalette.AccentGold, modifier = Modifier.size(20.dp))
+            }
         }
         Text(
             text = selectedGroup?.name ?: "Aucun groupe sélectionné",
             style = MaterialTheme.typography.bodySmall,
-            color = ForcedDarkPalette.Content
+            color = ForcedDarkPalette.Content,
+            modifier = if (selectedGroup != null) Modifier.clickable { onOpenGroupe(selectedGroup.id) } else Modifier,
         )
         if (selectedGroup != null) {
             val groupCharacters = characters.filter { it.id in selectedGroup.memberIds }
@@ -352,10 +357,27 @@ fun MjDrawer(
                     ) {
                         Icon(Icons.Default.Person, contentDescription = null, tint = ForcedDarkPalette.Content, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        // Inspiration et conditions visibles d'un coup d'œil ; un clic ouvre l'édition rapide.
+                        // Joueur connecté, lieu, inspiration et conditions visibles d'un coup d'œil ;
+                        // un clic ouvre les ajustements rapides (PersonnageMjDialog).
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(member.name, style = MaterialTheme.typography.bodySmall, color = ForcedDarkPalette.Content)
-                            val conditionsMembre = conditionsDe(member)
+                            Text(
+                                member.name + (joueurDe(member)?.let { " ($it)" } ?: ""),
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = ForcedDarkPalette.Content,
+                            )
+                            // Points de vie : texte coloré ; un appui sur la ligne permet de les modifier.
+                            Text(
+                                "❤ " + com.jc2.jdrcompagnon.ui.components.textePv(member),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = com.jc2.jdrcompagnon.ui.components.couleurPv(member.currentHitPoints, member.maxHitPoints),
+                            )
+                            lieuDe(member)?.let { lieu ->
+                                Text("📍 $lieu", style = MaterialTheme.typography.labelSmall, color = ForcedDarkPalette.Content)
+                            }
+                            // Conditions avec la fatigue (épuisement) et son niveau.
+                            val conditionsMembre = conditionsDe(member) + listOfNotNull(com.jc2.jdrcompagnon.ui.screens.joueur.character.libelleEpuisement(member.exhaustionLevel))
                             if (conditionsMembre.isNotEmpty()) {
                                 Text(
                                     conditionsMembre.joinToString(", "),
@@ -392,7 +414,7 @@ fun MjDrawer(
         // --- PROPOSITION EN COURS (visible seulement tant qu'une proposition de groupe
         // n'est pas résolue : décision manquante, ou joueur ayant passé). ---
         if (hasPendingGroupProposals) {
-            HorizontalDivider(color = ForcedDarkPalette.Indicator)
+            HorizontalDivider(thickness = 1.dp, color = com.jc2.jdrcompagnon.ui.components.IconesAsset.LisereDore)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -419,8 +441,10 @@ fun MjDrawer(
 
     quickEditCharacter?.let { member ->
         val liveMember = characters.firstOrNull { it.id == member.id } ?: member
-        QuickEditCharacterDialog(
+        PersonnageMjDialog(
             character = liveMember,
+            joueur = joueurDe(liveMember),
+            lieu = lieuDe(liveMember),
             onDismiss = { quickEditCharacter = null },
             onOpenEtat = { nom ->
                 quickEditCharacter = null
@@ -429,241 +453,20 @@ fun MjDrawer(
             },
         )
     }
-
-    val questCampaign = selectedCampaign
-    val quest = questToValidate
-    if (quest != null && questCampaign != null) {
-        com.jc2.jdrcompagnon.feature_quete.ui.ValidateQuestDialog(
-            campaign = questCampaign,
-            quest = quest,
-            onDismiss = { questToValidate = null },
-        )
-    }
 }
 
-/** Conditions d'un personnage : texte libre séparé par des virgules (Character.condition). */
-private fun conditionsDe(character: Character): List<String> =
-    character.condition.split(",").map { it.trim() }.filter { it.isNotEmpty() }
-
-/**
- * Ajustements rapides MJ (inspiration, états, XP, épuisement) depuis le tiroir, sans passer
- * par la fiche complète. Les changements passent par GameState (source unique de vérité,
- * persistée) : si ce personnage est réclamé par un joueur connecté, NetworkSessionManager les
- * relaie automatiquement à ce client dès que GameState.characters change (voir son init).
- */
-@OptIn(ExperimentalLayoutApi::class)
+/** Ligne de la section « EN COURS » du menu latéral MJ : retour à une activité non terminée. */
 @Composable
-private fun QuickEditCharacterDialog(character: Character, onDismiss: () -> Unit, onOpenEtat: (String) -> Unit) {
-    var xpDelta by rememberSaveable(character.id) { mutableStateOf("") }
-    // Liste complète des états repliée tant que le MJ n'a pas appuyé sur « Donner un état ».
-    var choixEtatOuvert by rememberSaveable(character.id) { mutableStateOf(false) }
-    var autreCondition by rememberSaveable(character.id) { mutableStateOf("") }
-    val claimedCharacters by NetworkSessionManager.claimedCharacters.collectAsState()
-    val isConnectedToPlayer = character.id in claimedCharacters
-    // Le champ condition peut contenir plusieurs états (« Paralysé, Empoisonné ») et des mentions libres.
-    val conditions = conditionsDe(character)
-    val etats = Etats.lire(character.condition)
-    val autres = Etats.autres(character.condition)
-
-    fun basculerEtat(etat: ConditionCombat) {
-        GameState.setCondition(character.id, Etats.ecrire(character.condition, if (etat in etats) etats - etat else etats + etat))
+private fun RetourEnCoursRow(icon: androidx.compose.ui.graphics.vector.ImageVector, texte: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(start = 18.dp, top = 6.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, contentDescription = null, tint = ForcedDarkPalette.Content, modifier = Modifier.size(18.dp))
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(texte, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = ForcedDarkPalette.Content)
     }
-
-    fun retirerAutre(libre: String) {
-        GameState.setCondition(character.id, Etats.ecrire(autres.filterNot { it == libre }.joinToString(", "), etats))
-    }
-
-    /** Un état saisi à la main (« paralysée ») est reconnu et coché ; sinon il reste une mention libre. */
-    fun ajouterLibre(saisie: String) {
-        val libelle = saisie.trim().takeIf { it.isNotEmpty() } ?: return
-        val reconnu = Etats.reconnaitre(libelle)
-        when {
-            reconnu != null -> if (reconnu !in etats) basculerEtat(reconnu)
-            autres.none { it.equals(libelle, ignoreCase = true) } ->
-                GameState.setCondition(character.id, Etats.ecrire((autres + libelle).joinToString(", "), etats))
-        }
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(character.name) },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                if (isConnectedToPlayer) {
-                    Text(
-                        "Connecté : les changements sont envoyés immédiatement au joueur.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = ForcedDarkPalette.AccentGold,
-                    )
-                }
-
-                // --- INSPIRATION HÉROÏQUE (règles 2024 : on l'a ou pas) ---
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        if (character.heroicInspiration) Icons.Default.Star else Icons.Default.StarBorder,
-                        contentDescription = null,
-                        tint = ForcedDarkPalette.AccentGold,
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        if (character.heroicInspiration) "Inspiration héroïque" else "Pas d'inspiration",
-                        style = MaterialTheme.typography.labelMedium,
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (character.heroicInspiration) {
-                        OutlinedButton(onClick = { GameState.setHeroicInspiration(character.id, false) }) { Text("Retirer") }
-                    } else {
-                        Button(onClick = { GameState.setHeroicInspiration(character.id, true) }) { Text("Donner") }
-                    }
-                }
-
-                // --- ÉTATS (catalogue Etats, le même qu'en combat et dans le livre États) ---
-                // États subis en puces (appui = retirer) ; la liste complète ne s'ouvre qu'avec « Donner un état ».
-                Text("États", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                if (conditions.isEmpty()) {
-                    Text("Aucun état.", style = MaterialTheme.typography.bodySmall)
-                } else {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        etats.sortedBy { it.ordinal }.forEach { etat ->
-                            InputChip(
-                                selected = true,
-                                onClick = { basculerEtat(etat) },
-                                label = { Text(etat.label) },
-                                trailingIcon = { Icon(Icons.Default.Close, contentDescription = "Retirer ${etat.label}", modifier = Modifier.size(16.dp)) },
-                            )
-                        }
-                        autres.forEach { libre ->
-                            InputChip(
-                                selected = true,
-                                onClick = { retirerAutre(libre) },
-                                label = { Text(libre) },
-                                trailingIcon = { Icon(Icons.Default.Close, contentDescription = "Retirer $libre", modifier = Modifier.size(16.dp)) },
-                            )
-                        }
-                    }
-                    // Ce que les états imposent (en combat : actions bloquées, vitesse 0…) et leur règle.
-                    com.jc2.jdrcompagnon.feature_combat.ui.ResumeEffetsEtats(etats)
-                    if (etats.isNotEmpty()) {
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            etats.sortedBy { it.ordinal }.forEach { etat ->
-                                TextButton(onClick = { onOpenEtat(etat.label) }) {
-                                    Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Règle : ${etat.label}")
-                                }
-                            }
-                        }
-                    }
-                }
-                if (choixEtatOuvert) {
-                    Text("Choisir l'état à donner", style = MaterialTheme.typography.bodySmall)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Etats.choisissables.filter { it !in etats }.forEach { etat ->
-                            AssistChip(
-                                onClick = {
-                                    basculerEtat(etat)
-                                    choixEtatOuvert = false
-                                },
-                                label = { Text(etat.label) },
-                            )
-                        }
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(
-                            value = autreCondition,
-                            onValueChange = { autreCondition = it.replace(",", "") },
-                            label = { Text("Autre état (texte libre)") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                        )
-                        TextButton(
-                            onClick = {
-                                ajouterLibre(autreCondition)
-                                autreCondition = ""
-                                choixEtatOuvert = false
-                            },
-                            enabled = autreCondition.isNotBlank(),
-                        ) { Text("Ajouter") }
-                    }
-                    TextButton(onClick = { choixEtatOuvert = false }) { Text("Annuler") }
-                } else {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { choixEtatOuvert = true }) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Donner un état")
-                        }
-                        if (conditions.isNotEmpty()) {
-                            TextButton(onClick = { GameState.setCondition(character.id, "") }) { Text("Tout retirer") }
-                        }
-                    }
-                }
-
-                HorizontalDivider()
-
-                // --- XP ---
-                Text(
-                    "Expérience : ${character.experience} PX (niveau ${character.level})",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                )
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf(25, 50, 100, 250, 500).forEach { montant ->
-                        AssistChip(onClick = { GameState.addExperience(character.id, montant) }, label = { Text("+$montant PX") })
-                    }
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = xpDelta,
-                        onValueChange = { xpDelta = it.filter { c -> c.isDigit() } },
-                        label = { Text("Autre montant (PX)") },
-                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Column {
-                        TextButton(
-                            onClick = { xpDelta.toIntOrNull()?.let { GameState.addExperience(character.id, it) }; xpDelta = "" },
-                            enabled = xpDelta.isNotEmpty(),
-                        ) { Text("Ajouter") }
-                        TextButton(
-                            onClick = { xpDelta.toIntOrNull()?.let { GameState.addExperience(character.id, -it) }; xpDelta = "" },
-                            enabled = xpDelta.isNotEmpty(),
-                        ) { Text("Retirer") }
-                    }
-                }
-
-                HorizontalDivider()
-
-                // --- ÉPUISEMENT (anciennement « Fatigue ») : niveau de 0 à 6 et son effet réel ---
-                val niveau = character.exhaustionLevel
-                Text("Épuisement : niveau $niveau / 6", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                Text(
-                    when {
-                        niveau == 0 -> "Aucun effet. Chaque niveau donne −2 aux jets de d20 et −1,50 m de vitesse ; au niveau 6, le personnage meurt."
-                        niveau >= 6 -> "Niveau 6 : le personnage meurt."
-                        else -> "Effet actuel : −${niveau * 2} aux jets de d20, vitesse −${"%.2f".format(niveau * 1.5).replace('.', ',')} m. Un repos long retire un niveau."
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        onClick = { GameState.setExhaustionLevel(character.id, niveau - 1) },
-                        enabled = niveau > 0,
-                    ) { Text("Retirer un niveau") }
-                    OutlinedButton(
-                        onClick = { GameState.setExhaustionLevel(character.id, niveau + 1) },
-                        enabled = niveau < 6,
-                    ) { Text("Ajouter un niveau") }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Fermer") }
-        },
-    )
 }

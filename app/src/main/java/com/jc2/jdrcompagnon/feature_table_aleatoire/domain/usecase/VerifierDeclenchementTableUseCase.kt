@@ -1,6 +1,7 @@
 package com.jc2.jdrcompagnon.feature_table_aleatoire.domain.usecase
 
 import com.jc2.jdrcompagnon.feature_table_aleatoire.domain.model.TableAleatoire
+import com.jc2.jdrcompagnon.feature_table_aleatoire.domain.model.TypeTable
 
 /**
  * Détermine si une table doit se déclencher au temps de lecture [minutesLecture] (voir
@@ -13,7 +14,7 @@ import com.jc2.jdrcompagnon.feature_table_aleatoire.domain.model.TableAleatoire
 class VerifierDeclenchementTableUseCase {
 
     operator fun invoke(table: TableAleatoire, minutesLecture: Long?): Boolean {
-        if (minutesLecture == null || !table.active || table.nombreEntrees == 0) return false
+        if (minutesLecture == null || !table.active || table.nombreEntrees == 0 || table.type == TypeTable.NOMS) return false
         return minutesLecture - depart(table, minutesLecture) >= intervalleMinutes(table)
     }
 

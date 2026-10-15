@@ -55,7 +55,7 @@ class CharacterDiffTest {
     fun `champ simple - valeurs completes`() {
         val diff = diffCharacters(base.copy(gold = 12), base.copy(gold = 30)).single()
 
-        assertEquals("Or", diff.fieldLabel)
+        assertEquals("Pièces d'or", diff.fieldLabel)
         assertEquals("12", diff.localValue)
         assertEquals("30", diff.remoteValue)
     }

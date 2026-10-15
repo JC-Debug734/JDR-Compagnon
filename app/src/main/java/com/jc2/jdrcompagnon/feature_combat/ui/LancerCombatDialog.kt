@@ -32,14 +32,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.jc2.jdrcompagnon.feature_combat.domain.model.BossCatalogue
+import com.jc2.jdrcompagnon.feature_combat.domain.model.BossDefinition
 import com.jc2.jdrcompagnon.feature_combat.domain.model.Combattant
 import com.jc2.jdrcompagnon.feature_combat.domain.model.CompositionCombat
+import com.jc2.jdrcompagnon.feature_combat.presentation.PreparationBoss
 import com.jc2.jdrcompagnon.feature_combat.domain.model.ProfilCombatMonstre
 import com.jc2.jdrcompagnon.feature_combat.domain.model.ProfilIA
 import com.jc2.jdrcompagnon.feature_combat.domain.model.bornesFormuleDes
@@ -53,6 +57,7 @@ import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdRepository
 import com.jc2.jdrcompagnon.ui.screens.mj.monsterChallenge
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -68,6 +73,8 @@ private data class GroupeMonstres(
     val profil: ProfilCombatMonstre?,
     val quantiteScenario: Int = quantite,
     val xp: Int = 0,
+    // Boss (BossCatalogue) : un seul exemplaire, jamais retiré par l'ajustement à la difficulté.
+    val boss: BossDefinition? = null,
 )
 
 /** Un participant du côté des personnages : fiche (PJ/PNJ) ou joueur sans fiche d'un groupe. */
@@ -96,7 +103,7 @@ private fun ajusterALaDifficulte(
     niveaux: List<Int>,
     difficulte: EncounterDifficulty,
 ): List<GroupeMonstres> {
-    val ajustables = groupes.indices.filter { groupes[it].xp > 0 }
+    val ajustables = groupes.indices.filter { groupes[it].xp > 0 && groupes[it].boss == null }
     if (niveaux.isEmpty() || ajustables.isEmpty()) return groupes
     val budgets = evaluerRencontre(niveaux, emptyList()).budgets
     val seuil = budgets.getValue(difficulte)
@@ -168,6 +175,7 @@ fun LancerCombatDialog(
     difficulteInitiale: EncounterDifficulty? = null,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val combatActif by CombatSession.etat.collectAsState()
     var ignorerCombatActif by remember { mutableStateOf(false) }
 
@@ -178,7 +186,7 @@ fun LancerCombatDialog(
             title = { Text("Combat en cours", fontWeight = FontWeight.Bold) },
             text = {
                 Text(
-                    "« ${actif.titre} » est déjà en cours" +
+                    "« ${actif.nomCombat} » est déjà en cours" +
                         (if (actif.demarre) " (round ${actif.round})." else " (en préparation).") +
                         " Le reprendre, ou le remplacer par ce nouveau combat ?"
                 )
@@ -199,13 +207,19 @@ fun LancerCombatDialog(
     LaunchedEffect(composition, worldId) {
         chargement = true
         groupes = CompositionCombat.parser(composition).map { ligne ->
+            // Boss : sa fiche de base du bestiaire (Cryovain → Jeune dragon blanc).
+            BossCatalogue.parNom(ligne.monstreNom)?.let { def ->
+                val ficheBase = SrdRepository.getMonsterByName(context, def.monstreBase, worldId)
+                val xpBase = ficheBase?.let { monsterChallenge(it)?.second?.filter(Char::isDigit)?.toIntOrNull() } ?: 0
+                return@map GroupeMonstres(def.nom, 1, ficheBase?.let { ProfilCombatMonstre.depuisFiche(it.rawMarkdown) }, xp = xpBase, boss = def)
+            }
             val fiche = SrdRepository.getMonsterByName(context, ligne.monstreNom, worldId)
             // Pas au bestiaire : PNJ / créature du scénario, pris depuis sa fiche personnage.
             val perso = if (fiche == null) {
                 GameState.characters.value.firstOrNull { it.type != "PJ" && it.name.equals(ligne.monstreNom.trim(), ignoreCase = true) }
             } else null
             val profil = fiche?.let { ProfilCombatMonstre.depuisFiche(it.rawMarkdown) }
-                ?: perso?.let { ProfilCombatMonstre(it.armorClass, it.maxHitPoints.coerceAtLeast(1), null, Math.floorDiv(it.dexterity - 10, 2)) }
+                ?: perso?.let { ProfilCombatMonstre(GameState.caCombat(it),it.maxHitPoints.coerceAtLeast(1), null, Math.floorDiv(it.dexterity - 10, 2), sauvegardes = com.jc2.jdrcompagnon.feature_combat.domain.model.Sauvegardes.depuisPersonnage(it), typeCreature = com.jc2.jdrcompagnon.feature_combat.domain.model.TypesCreature.normaliser(it.typeCreature) ?: "Humanoïde", defenses = com.jc2.jdrcompagnon.feature_combat.domain.model.TypesCreature.defensesPersonnage(it)) }
             val xp = fiche?.let { monsterChallenge(it)?.second?.filter(Char::isDigit)?.toIntOrNull() } ?: 0
             GroupeMonstres(fiche?.name ?: perso?.name ?: ligne.monstreNom, ligne.quantite, profil, xp = xp)
         }
@@ -231,7 +245,7 @@ fun LancerCombatDialog(
                 cle = perso.id,
                 nom = perso.name,
                 niveau = perso.level,
-                detail = "niv. ${perso.level}, CA ${perso.armorClass}, PV ${perso.currentHitPoints}/${perso.maxHitPoints}" +
+                detail = "niv. ${perso.level}, CA ${GameState.caCombat(perso)}, PV${perso.currentHitPoints}/${perso.maxHitPoints}" +
                     if (connectes.any { it.id == perso.id }) " (connecté)" else "",
                 versCombattant = { CombatSession.combattantDepuisPersonnage(perso) },
             )
@@ -332,6 +346,27 @@ fun LancerCombatDialog(
                     Text("Aucun monstre dans ce combat.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 groupes.forEachIndexed { index, g ->
+                    val def = g.boss
+                    if (def != null) {
+                        val profil = g.profil
+                        Column {
+                            Text("👑 ${def.nom} — ${def.titre}", fontWeight = FontWeight.Bold)
+                            Text(
+                                "Boss (${def.monstreBase}) · CA ${profil?.ca ?: "?"} · PV " +
+                                    BossCatalogue.pvAjustes(def, profil?.pvMoyens ?: 0, niveauxSelectionnes.size, difficulte) +
+                                    " (${niveauxSelectionnes.size} personnage(s), difficulté ${difficulte?.label?.lowercase() ?: "du scénario"}) · " +
+                                    "${BossCatalogue.pointsAjustes(def, niveauxSelectionnes.size, difficulte)} actions légendaires · " +
+                                    "${BossCatalogue.resistancesAjustees(def, difficulte)} résistances · ${def.phases.size} phases" +
+                                    (if (def.pointsFaibles.isNotEmpty()) " · ${def.pointsFaibles.size} points faibles" else ""),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (profil == null) {
+                                Text("Fiche « ${def.monstreBase} » introuvable : valeurs par défaut", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                        return@forEachIndexed
+                    }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(g.nom, fontWeight = FontWeight.SemiBold)
@@ -399,30 +434,20 @@ fun LancerCombatDialog(
             TextButton(
                 enabled = !chargement && (groupes.any { it.quantite > 0 } || selection.values.any { it }),
                 onClick = {
-                    val monstres = groupes.filter { it.quantite > 0 }.flatMap { g ->
+                    val monstres = groupes.filter { it.quantite > 0 && it.boss == null }.flatMap { g ->
                         val profil = g.profil ?: ProfilCombatMonstre(10, 10, null, 0)
                         (1..g.quantite).map { numero ->
-                            val pv = pvPour(profil)
-                            Combattant(
-                                id = UUID.randomUUID().toString(),
-                                nom = if (g.quantite > 1) "${g.nom} $numero" else g.nom,
-                                estMonstre = true,
-                                monstreNom = g.nom,
-                                ca = profil.ca,
-                                pvMax = pv,
-                                pv = pv,
-                                bonusInitiative = profil.bonusInitiative,
-                                attaques = profil.actions.attaques,
-                                vitesse = profil.vitesse,
-                                nbAttaquesMultiples = profil.actions.nbAttaquesMultiples,
-                                profilIA = profil.comportement.profil,
-                                raisonProfil = profil.comportement.raison
-                            )
+                            profil.versCombattant(if (g.quantite > 1) "${g.nom} $numero" else g.nom, g.nom, pvPour(profil))
                         }
                     }
                     val personnagesCombat = participants.filter { selection[it.cle] == true }.map { it.versCombattant() }
-                    CombatSession.demarrer(composition, personnagesCombat + monstres)
-                    onLance()
+                    // Boss : préparés (bestiaire, renforts) avant de démarrer.
+                    val boss = groupes.mapNotNull { it.boss }
+                    scope.launch {
+                        val prepares = boss.map { PreparationBoss.preparer(context, it, worldId, personnagesCombat.size.coerceAtLeast(1), difficulte) }
+                        CombatSession.demarrer(composition, personnagesCombat + monstres, prepares)
+                        onLance()
+                    }
                 }
             ) { Text("Préparer le combat") }
         },

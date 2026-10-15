@@ -12,13 +12,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DriveFolderUpload
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,13 +27,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import com.jc2.jdrcompagnon.ui.theme.ForcedDarkPalette
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.jc2.jdrcompagnon.feature_import.ImportNavigation
 import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.WorldState
 import com.jc2.jdrcompagnon.ui.components.SelectableListCard
@@ -93,26 +91,15 @@ fun ScenariosScreen(
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = {
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        placeholder = { Text("Rechercher un scénario...") },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Rechercher") },
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                        singleLine = true,
-                        shape = RoundedCornerShape(24.dp)
-                    )
-                },
+                title = { Text("Scénarios", fontWeight = FontWeight.Bold, color = Color.White) },
                 navigationIcon = {
                     IconButton(onClick = onOpenMenu) {
                         Icon(Icons.Default.Menu, contentDescription = "Menu")
                     }
                 },
                 actions = {
-                    // Scénario .md ou dossier de scénarios : via l'outil IMPORT.
-                    IconButton(onClick = { ImportNavigation.ouvrir() }) {
-                        Icon(Icons.Default.UploadFile, contentDescription = "Importer", tint = Color.White)
+                    IconButton(onClick = { onOpenScenarioEditor(null) }) {
+                        Icon(Icons.Default.Add, contentDescription = "Nouveau scénario", tint = ForcedDarkPalette.AccentGold)
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
@@ -122,15 +109,6 @@ fun ScenariosScreen(
         // Fond transparent : le fond d'écran global de l'app doit rester visible ; seules les
         // cartes de scénario (couleur unie) doivent être lisibles, même principe que GroupsScreen.
         containerColor = Color.Transparent,
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { onOpenScenarioEditor(null) },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Nouveau scénario")
-            }
-        }
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -138,6 +116,15 @@ fun ScenariosScreen(
                 .padding(innerPadding)
                 .padding(16.dp)
         ) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text("Rechercher un scénario...") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Rechercher") },
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                singleLine = true,
+                shape = RoundedCornerShape(24.dp)
+            )
             if (scenarios.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {

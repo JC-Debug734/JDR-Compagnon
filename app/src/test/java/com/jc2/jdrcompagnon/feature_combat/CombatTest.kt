@@ -43,7 +43,7 @@ class CombatTest {
             FP: 1/4 (50 PX ; BM +2)
         """.trimIndent()
         val profil = ProfilCombatMonstre.depuisFiche(MonsterParser.parse(md).single().rawMarkdown)
-        assertEquals(ProfilCombatMonstre(12, 11, "2d8 + 2", 2), profil)
+        assertEquals(ProfilCombatMonstre(12, 11, "2d8 + 2", 2, typeCreature = "Bête"), profil)
     }
 
     @Test

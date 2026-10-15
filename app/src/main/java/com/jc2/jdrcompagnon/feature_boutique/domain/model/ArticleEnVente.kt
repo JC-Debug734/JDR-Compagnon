@@ -13,14 +13,14 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class EquipementReference(
     val nom: String,
-    val coutBaseEnPo: Int,
+    val coutBaseEnPc: Int, // en pièces de cuivre (1 po = 100 pc), cf. Monnaie
     val type: String // Arme, Armure, Outil, etc. (cf. champ **Type** du SRD)
 )
 
 @Serializable
 data class ArticleEnVente(
     val equipement: EquipementReference,
-    val prixApplique: Int,   // prix de base ajusté par le standing de la boutique
+    val prixEnPc: Int,   // prix de base ajusté par le standing de la boutique, en pièces de cuivre
     val quantiteStock: Int,
     val toujoursDisponible: Boolean = false // si true, jamais retiré lors d'une "nouvelle visite"
 )

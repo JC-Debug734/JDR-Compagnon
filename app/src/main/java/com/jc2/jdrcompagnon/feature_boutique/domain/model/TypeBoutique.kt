@@ -15,5 +15,11 @@ enum class TypeBoutique(val label: String) {
     GUILDE_RECRUTEMENT(label = "Guilde de recrutement"),
     ECURIE(label = "Écurie"),
     BANQUE(label = "Banque"),
-    GUILDE_MAGES(label = "Guilde des mages")
+    GUILDE_MAGES(label = "Guilde des mages"),
+    // Marchand itinérant : vend un petit inventaire et quelques services (repas), sans ville ;
+    // le MJ le fait venir auprès des joueurs où qu'ils soient (invitation réseau).
+    VENDEUR_AMBULANT(label = "Vendeur ambulant");
+
+    /** Vend des objets (inventaire SRD) plutôt que seulement des services. */
+    val vendDesObjets: Boolean get() = this == MARCHAND || this == VENDEUR_AMBULANT
 }

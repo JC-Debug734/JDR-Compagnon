@@ -75,6 +75,8 @@ import com.jc2.jdrcompagnon.feature_combat.domain.model.SortPret
 import com.jc2.jdrcompagnon.feature_combat.domain.model.Distance
 import com.jc2.jdrcompagnon.feature_combat.domain.model.ConditionCombat
 import com.jc2.jdrcompagnon.feature_combat.domain.model.Etats
+import com.jc2.jdrcompagnon.feature_combat.domain.model.Paladin
+import com.jc2.jdrcompagnon.feature_combat.domain.model.Guerrier
 import com.jc2.jdrcompagnon.feature_combat.domain.model.decomposerFormule
 import com.jc2.jdrcompagnon.feature_combat.presentation.PhaseCombat
 import com.jc2.jdrcompagnon.network.CombatJoueurData
@@ -117,6 +119,7 @@ private fun CombatJoueurScreenInterne(
     var actionChoisie by rememberSaveable(courantCombat?.id, courantCombat?.round) { mutableStateOf<String?>(null) }
     var armePreselectionnee by rememberSaveable(courantCombat?.id, courantCombat?.round) { mutableStateOf<String?>(null) }
     val context = LocalContext.current
+    remember { PreferencesCombat.init(context) }
     val personnages by GameState.characters.collectAsState()
     val monPersonnageId by NetworkSessionManager.claimedCharacterId.collectAsState()
     val monPersonnage = personnages.firstOrNull { it.id == monPersonnageId }
@@ -127,15 +130,8 @@ private fun CombatJoueurScreenInterne(
     // Armes en main, capacités d'attaque et sorts prêts, calculés depuis la fiche.
     val arsenal = rememberArsenal(monPersonnage)
 
-    // Déplacement du round, réglé sur l'écran des actions (repris d'une déclaration précédente).
-    var deplacement by remember(courantCombat?.id, courantCombat?.round) {
-        mutableStateOf(
-            courantCombat?.maDeclaration?.let { d ->
-                val visee = d.distanceVisee?.let { runCatching { Distance.valueOf(it) }.getOrNull() }
-                if (d.deplacementCibleId != null && visee != null) DeplacementJoueur(d.deplacementCibleId, visee) else null
-            }
-        )
-    }
+    // Zone du terrain où finir le tour, réglée sur l'écran des actions (reprise d'une déclaration précédente).
+    var zoneVisee by remember(courantCombat?.id, courantCombat?.round) { mutableStateOf(courantCombat?.maDeclaration?.zoneVisee) }
 
     // Déclaration : le joueur choisit sur l'écran Actions de Combat (bascule Tactique en haut à
     // droite, déplacement en bas) ; toucher une action ouvre l'assistant (détail puis cible).
@@ -143,8 +139,10 @@ private fun CombatJoueurScreenInterne(
     // États du personnage (libellés reçus du MJ) : Neutralisé & co. empêchent de déclarer, vitesse 0 de bouger.
     val mesEtats = moiDeclaration?.conditions.orEmpty().mapNotNull(Etats::reconnaitre).toSet()
     val immobilise = Etats.immobilisant(mesEtats)
-    if (courantCombat != null && moiDeclaration != null && courantCombat.phase == PhaseCombat.DECLARATION.name &&
-        Etats.peutAgir(mesEtats) && (courantCombat.maDeclaration == null || enModification)
+    // Son tour venu, le joueur choisit son action (puis peut la changer tant qu'il n'a rien lancé).
+    if (courantCombat != null && moiDeclaration != null && courantCombat.phase == PhaseCombat.EN_COURS.name &&
+        courantCombat.actifId == moiDeclaration.id && Etats.peutAgir(mesEtats) &&
+        (courantCombat.maDeclaration == null || enModification)
     ) {
         // Action touchée : l'assistant (détail puis cible) remplace l'écran des actions.
         val actionEnCours = actionChoisie?.let { id -> ActionsCombat.toutes.firstOrNull { it.id == id } }
@@ -164,9 +162,10 @@ private fun CombatJoueurScreenInterne(
                         // Sort de zone : toutes les cibles nommées (« Gobelin 1, Gobelin 2 »).
                         d.ciblesZone.takeIf { it.size > 1 }?.joinToString { it.nom } ?: d.cible?.nom,
                         d.detail,
-                        deplacement?.cibleId, deplacement?.visee?.name, d.attaques,
+                        attaques = d.attaques,
                         ciblesZone = d.ciblesZone.map { it.id },
                         zone = d.zone,
+                        zoneVisee = zoneVisee,
                     )
                     enModification = false
                     actionChoisie = null
@@ -178,7 +177,11 @@ private fun CombatJoueurScreenInterne(
         CombatActionsScreen(
             onBack = onBack,
             onOpenMenu = onOpenMenu,
-            titre = "Round ${courantCombat.round} — votre action",
+            titre = "Round ${courantCombat.round} — à toi de jouer !",
+            // Boss : sa phase et son attaque annoncée comptent dans le choix de l'action.
+            entete = courantCombat.boss.takeIf { it.isNotEmpty() }?.let { liste ->
+                { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { liste.forEach { BandeauBoss(it, nbAnnonces = 2) } } }
+            },
             onChoisirAction = { actionChoisie = it.id; armePreselectionnee = null },
             personnageId = monPersonnage?.id,
             // Carte d'une arme : action Attaquer avec cette arme déjà choisie.
@@ -191,12 +194,12 @@ private fun CombatJoueurScreenInterne(
                 if (immobilise != null) {
                     CarteInfo("${immobilise.label} : votre vitesse est de 0, vous ne pouvez pas vous déplacer ce round.")
                 } else {
-                    CarteDeplacement(
+                    CarteTerrainJoueur(
                         combat = courantCombat,
                         moiId = moiDeclaration.id,
-                        deplacement = deplacement,
+                        zoneVisee = zoneVisee,
                         desengage = courantCombat.maDeclaration?.actionId == "disengage",
-                        onChange = { deplacement = it },
+                        onChange = { zoneVisee = it },
                     )
                 }
             },
@@ -235,15 +238,23 @@ private fun CombatJoueurScreenInterne(
             }
             return@Scaffold
         }
-        ContenuCombatJoueur(
-            combat = courant,
-            mesEtats = mesEtats,
+        // Sons du récit, bannières, et « À toi de jouer ! » (avec vibration) quand vient son tour.
+        EffetsRecit(
+            lignes = courant.recit,
+            actifId = courant.actifId,
+            monCombattantId = courant.monCombattantId,
             modifier = Modifier.fillMaxSize().padding(padding),
-            monPersonnage = monPersonnage,
-            consommables = consommables,
-            arsenal = arsenal,
-            onChangerAction = { enModification = true },
-        )
+        ) {
+            ContenuCombatJoueur(
+                combat = courant,
+                mesEtats = mesEtats,
+                modifier = Modifier.fillMaxSize(),
+                monPersonnage = monPersonnage,
+                consommables = consommables,
+                arsenal = arsenal,
+                onChangerAction = { enModification = true },
+            )
+        }
     }
 }
 
@@ -262,6 +273,7 @@ private fun ContenuCombatJoueur(
     val actif = combat.ordre.firstOrNull { it.id == combat.actifId }
     val sortAnnonce = combat.maDeclaration?.libelle?.let { sortRegex.find(it) }
     val sortPretAnnonce = sortAnnonce?.let { m -> arsenal?.sorts?.firstOrNull { it.nom == m.groupValues[1] } }
+    val outilsOuverts by PreferencesCombat.outilsSpectateur.collectAsState()
 
     LazyColumn(
         modifier = modifier,
@@ -276,6 +288,9 @@ private fun ContenuCombatJoueur(
                 color = ForcedDarkPalette.AccentGold,
             )
         }
+
+        // Boss : barre de vie par phases, actions légendaires, annonces lues à la table.
+        items(combat.boss, key = { "boss-${it.combattantId}" }) { BandeauBoss(it) }
 
         // États subis (Paralysé, Agrippé…) et ce qu'ils imposent, rappelés au joueur.
         if (moi != null && mesEtats.isNotEmpty()) item {
@@ -296,46 +311,45 @@ private fun ContenuCombatJoueur(
                 CarteInfo("Votre personnage ne participe pas à ce combat.")
             }
             phase == PhaseCombat.PREPARATION -> item {
-                CarteInfo("Le MJ prépare le combat (initiative). Vous choisirez votre action dès qu'il le lancera.")
-            }
-            phase == PhaseCombat.DECLARATION -> item {
-                Card(colors = CardDefaults.cardColors(containerColor = FondCarte, contentColor = Color.White)) {
-                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Votre action", fontWeight = FontWeight.Bold, color = ForcedDarkPalette.AccentGold)
-                        combat.maDeclaration?.let { TexteDeclaration(it) }
-                            ?: Text("Aucune action : vous ne pouvez pas agir ce round.", color = Color.White)
-                        LinearProgressIndicator(
-                            progress = { if (combat.nbAttendus > 0) combat.nbDeclares.toFloat() / combat.nbAttendus else 0f },
-                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                        )
-                        Text(
-                            "${combat.nbDeclares}/${combat.nbAttendus} combattants ont choisi. Le MJ résoudra ensuite les actions dans l'ordre d'initiative.",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        // Neutralisé : l'« Aucune action » imposée par le MJ ne se change pas.
-                        if (Etats.peutAgir(mesEtats)) TextButton(onClick = onChangerAction) { Text("Changer d'action") }
-                    }
-                }
+                CarteInfo("Le MJ prépare le combat (initiative). Vous choisirez votre action quand viendra votre tour.")
             }
             else -> {
-                item {
-                    val monTour = actif?.id == moi.id
+                val monTour = actif?.id == moi.id
+                // Hors de son tour : pas de récit écrit, la scène animée de ce qui se passe, le
+                // terrain, ses PV ; dés et aptitudes (réactions) restent à portée, repliés.
+                if (!monTour) {
+                    item(key = "scene") { SceneCombat(combat) }
+                    item(key = "pv") { CarteMesPv(moi) }
+                    item(key = "terrain") { CarteTerrainLecture(combat) }
+                    item(key = "outils") {
+                        TextButton(onClick = { PreferencesCombat.basculerOutilsSpectateur() }, modifier = Modifier.fillMaxWidth()) {
+                            Text(if (outilsOuverts) "▲ Masquer mes dés et aptitudes" else "▼ Mes dés et aptitudes (réactions)", color = Color.White)
+                        }
+                    }
+                }
+                if (monTour || outilsOuverts) item {
                     Card(
                         modifier = if (monTour) Modifier.border(2.dp, ForcedDarkPalette.AccentGold, MaterialTheme.shapes.medium) else Modifier,
                         colors = CardDefaults.cardColors(containerColor = FondCarte, contentColor = Color.White),
                     ) {
                         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            // Seul le tour du joueur est signalé : l'ordre du tour est suivi à la table.
-                            if (monTour) {
-                                Text(
-                                    "C'est votre tour ! Le MJ décrit la scène, lancez vos dés quand il vous le demande.",
+                            when {
+                                monTour -> Text(
+                                    "⚔ C'est votre tour ! Lancez vos dés et suivez le MJ.",
                                     fontWeight = FontWeight.Bold,
                                     color = ForcedDarkPalette.AccentGold,
                                 )
+                                combat.prochainId == moi.id -> Text(
+                                    "⏳ Au tour de ${actif?.nom ?: "…"} — vous êtes le prochain, préparez votre action !",
+                                    fontWeight = FontWeight.Bold,
+                                )
+                                else -> Text("Au tour de ${actif?.nom ?: "…"}.", fontWeight = FontWeight.Bold)
                             }
                             combat.maDeclaration?.let {
                                 Text("Votre action :", style = MaterialTheme.typography.bodySmall)
                                 TexteDeclaration(it, sansResume = true)
+                                // Neutralisé : l'« Aucune action » imposée par le MJ ne se change pas.
+                                if (monTour && Etats.peutAgir(mesEtats)) TextButton(onClick = onChangerAction) { Text("Changer d'action") }
                             }
                             val objetAnnonce = combat.maDeclaration?.detail
                                 ?.takeIf { it.startsWith(PREFIXE_OBJET) }
@@ -353,27 +367,35 @@ private fun ContenuCombatJoueur(
                             // Sort de prédilection lancé sans emplacement : une fois par repos court ou long.
                             val sansEmplacement = sortAnnonce?.groupValues?.get(3)?.isNotEmpty() == true
                             if (monTour && sansEmplacement && monPersonnage != null &&
-                                sortPretAnnonce?.lancementGratuit == ArsenalPersonnage.SORT_PREDILECTION
+                                (sortPretAnnonce?.lancementGratuit == ArsenalPersonnage.SORT_PREDILECTION || sortPretAnnonce?.lancementGratuit == ArsenalPersonnage.SORT_ARCANUM)
                             ) {
                                 UtiliserPredilection(combat.id, combat.round, sortPretAnnonce, monPersonnage)
                             }
                         }
                     }
                 }
-                item {
+                if (monTour || outilsOuverts) item {
                     val d = combat.maDeclaration
                     // Attaques déclarées dans l'ordre (déclaration d'avant l'Attaque supplémentaire : une seule).
                     val attaques = d?.attaques?.ifEmpty { null }
                         ?: listOfNotNull(d?.libelle?.takeIf { it.startsWith("Attaquer : ") }?.removePrefix("Attaquer : "))
                     val sauvagerie = monPersonnage?.let(ArsenalPersonnage::aSauvagerieMartiale) == true
+                    // Fougue dépensée ce round (au premier jet « Attaque (Fougue) ») : ses autres
+                    // attaques restent proposées même si plus aucune utilisation ne reste.
+                    var fougueEnCours by rememberSaveable("${combat.id}-${combat.round}") { mutableStateOf(false) }
                     PanneauDes(
                         etapes = etapesAction(arsenal, attaques, sortPretAnnonce, sauvagerie),
-                        suivantes = optionsSuivantes(arsenal, sauvagerie),
+                        suivantes = optionsSuivantes(arsenal?.let { if (fougueEnCours) it.copy(fougue = true) else it }, sauvagerie),
                         cleRound = "${combat.id}-${combat.round}",
                         jetsLances = combat.jetsLances.ifEmpty { combat.typesLances.associateWith { 1 } },
                         relances = combat.relances,
+                        attaquesParAction = arsenal?.nbAttaques ?: 1,
                         onUtilisation = { option ->
                             val a = option.arme
+                            if (monPersonnage != null && option.libelle == "Attaque (Fougue)" && !fougueEnCours) {
+                                Guerrier.ressource(monPersonnage, Guerrier.FOUGUE)?.let { r -> GameState.utiliserCompteur(monPersonnage.id, r.cle, r.max) }
+                                fougueEnCours = true
+                            }
                             if (monPersonnage != null && a != null) {
                                 when {
                                     a.munition != null -> GameState.consommerMunition(monPersonnage.id, a.munition)
@@ -382,6 +404,21 @@ private fun ContenuCombatJoueur(
                             }
                         },
                     )
+                }
+                if (!monTour && !outilsOuverts) return@LazyColumn
+                // Occultiste — Pacte de la lame (action Bonus), pendant son tour.
+                if (monPersonnage != null && actif?.id == moi.id && aPacteDeLaLame(monPersonnage)) item {
+                    ActionPacteDeLaLame(monPersonnage)
+                }
+                // Occultiste — aptitudes de protecteur ; les soins de Lumière guérisseuse partent au MJ.
+                if (monPersonnage != null && aAptitudesOccultiste(monPersonnage)) item {
+                    val cibles = listOf(CibleContact(moi.id, moi.nom + " (vous)")) + combat.ordre
+                        .filter { it.id != moi.id && !it.estMonstre }
+                        .map { CibleContact(it.id, it.nom) }
+                    CarteAptitudesOccultiste(monPersonnage, cibles, onSoin = { cible, pv, detail ->
+                        val ok = NetworkSessionManager.envoyerJetCombat("Soins (Lumière guérisseuse)", detail, listOf(pv), 0, false, cibleId = cible.id)
+                        if (ok) "Lumière guérisseuse envoyée au MJ : ${cible.nom} récupère $pv PV." else null
+                    })
                 }
                 // Actions bonus de classe (Paladin : Imposition des mains, Châtiment divin), pendant son tour.
                 if (monPersonnage != null && actif?.id == moi.id && aActionsBonusClasse(monPersonnage)) item {
@@ -393,10 +430,10 @@ private fun ContenuCombatJoueur(
                         personnage = monPersonnage,
                         cibles = cibles,
                         emplacementsRestants = arsenal?.restants(monPersonnage).orEmpty(),
-                        onImposition = { cible, pv, poison ->
-                            val ok = if (poison) {
+                        onImposition = { cible, pv, etats ->
+                            val ok = if (etats.isNotEmpty()) {
                                 NetworkSessionManager.envoyerJetCombat(
-                                    "Imposition des mains", "retire l'état Empoisonné de ${cible.nom}", emptyList(), 0, false, cibleId = cible.id,
+                                    "Imposition des mains", "retire ${etats.joinToString()} de ${cible.nom}", emptyList(), 0, false, cibleId = cible.id,
                                 )
                             } else {
                                 NetworkSessionManager.envoyerJetCombat(
@@ -404,7 +441,7 @@ private fun ContenuCombatJoueur(
                                 )
                             }
                             if (!ok) null
-                            else if (poison) "Imposition des mains envoyée au MJ : Empoisonné retiré de ${cible.nom}."
+                            else if (etats.isNotEmpty()) "Imposition des mains envoyée au MJ : ${etats.joinToString()} retiré(s) de ${cible.nom}."
                             else "Imposition des mains envoyée au MJ : ${cible.nom} récupère $pv PV."
                         },
                         onChatiment = { des, formule ->
@@ -413,8 +450,64 @@ private fun ContenuCombatJoueur(
                         },
                     )
                 }
-                // Vue tactique : distance et santé des ennemis et des alliés.
-                item {
+                // Paladin niv. 3+ — Conduit divin, Frappes radiantes, Nimbe sacré : annoncés au MJ.
+                if (monPersonnage != null && Paladin.aAptitudes(monPersonnage)) item {
+                    CarteAptitudesPaladin(
+                        monPersonnage,
+                        emplacementsRestants = arsenal?.restants(monPersonnage).orEmpty(),
+                        onAnnonce = { libelle, texte ->
+                            if (NetworkSessionManager.envoyerJetCombat(libelle, texte, emptyList(), 0, false)) "$libelle annoncé au MJ." else null
+                        },
+                        onDegats = { libelle, des, formule ->
+                            if (NetworkSessionManager.envoyerJetCombat(libelle, formule, des, 0, false))
+                                "${formule.substringAfter("(").removeSuffix(")")} : ${des.sum()} dégâts radiants envoyés au MJ." else null
+                        },
+                    )
+                }
+                // Guerrier — Second souffle, Fougue, Inflexible, ressources de sous-classe : annoncés au MJ.
+                if (monPersonnage != null && Guerrier.niveau(monPersonnage) > 0) item {
+                    CarteAptitudesGuerrier(
+                        monPersonnage,
+                        onAnnonce = { libelle, texte ->
+                            if (NetworkSessionManager.envoyerJetCombat(libelle, texte, emptyList(), 0, false)) "$libelle annoncé au MJ : $texte." else null
+                        },
+                        onDegats = { libelle, des, formule ->
+                            if (NetworkSessionManager.envoyerJetCombat(libelle, formule, des, 0, false)) "${des.sum()} dégâts envoyés au MJ ($formule)." else null
+                        },
+                        onSoin = { pv, detail ->
+                            if (NetworkSessionManager.envoyerJetCombat("Soins (Second souffle)", detail, listOf(pv), 0, false, cibleId = moi.id))
+                                "Second souffle envoyé au MJ : $pv PV." else null
+                        },
+                    )
+                }
+                // Roublard — Attaque sournoise (Frappe malicieuse), ressources de sous-classe : envoyées au MJ.
+                if (monPersonnage != null && com.jc2.jdrcompagnon.feature_combat.domain.model.Roublard.niveau(monPersonnage) > 0) item {
+                    CarteAptitudesRoublard(
+                        monPersonnage,
+                        onAnnonce = { libelle, texte ->
+                            if (NetworkSessionManager.envoyerJetCombat(libelle, texte, emptyList(), 0, false)) "$libelle annoncé au MJ : $texte." else null
+                        },
+                        onDegats = { libelle, des, formule ->
+                            if (NetworkSessionManager.envoyerJetCombat(libelle, formule, des, 0, false)) "${des.sum()} dégâts envoyés au MJ ($formule)." else null
+                        },
+                    )
+                }
+                // Dons — Points de chance, Regain de vitalité, sorts gratuits : annoncés au MJ.
+                if (monPersonnage != null && com.jc2.jdrcompagnon.feature_combat.domain.model.Dons.ressources(monPersonnage).isNotEmpty()) item {
+                    CarteRessourcesDons(
+                        monPersonnage,
+                        onAnnonce = { libelle, texte ->
+                            if (NetworkSessionManager.envoyerJetCombat(libelle, texte, emptyList(), 0, false)) "$libelle annoncé au MJ." else null
+                        },
+                        onSoin = { pv, detail ->
+                            if (NetworkSessionManager.envoyerJetCombat("Soins ($detail)", detail, listOf(pv), 0, false, cibleId = moi.id))
+                                "$detail envoyé au MJ : $pv PV." else null
+                        },
+                    )
+                }
+                // À son tour : le terrain, puis la santé de chacun.
+                if (monTour) item(key = "terrain-tour") { CarteTerrainLecture(combat) }
+                if (monTour) item {
                     Card(colors = CardDefaults.cardColors(containerColor = FondCarte, contentColor = Color.White)) {
                         Column(modifier = Modifier.padding(14.dp)) {
                             Text("Tactique", fontWeight = FontWeight.Bold, color = ForcedDarkPalette.AccentGold)
@@ -424,6 +517,46 @@ private fun ContenuCombatJoueur(
                     }
                 }
             }
+        }
+    }
+}
+
+/** Le terrain du combat, en lecture (positions de chacun). */
+@Composable
+private fun CarteTerrainLecture(combat: CombatJoueurData) {
+    val moi = combat.ordre.firstOrNull { it.id == combat.monCombattantId }
+    Card(colors = CardDefaults.cardColors(containerColor = FondCarte, contentColor = Color.White)) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Terrain", fontWeight = FontWeight.Bold, color = ForcedDarkPalette.AccentGold)
+            TerrainCombat(pions = combat.pionsTerrain(), repereZone = moi?.zone)
+        }
+    }
+}
+
+/** PV et états du personnage du joueur, d'un coup d'œil. */
+@Composable
+private fun CarteMesPv(moi: CombattantJoueurData) {
+    val pv = moi.pv ?: return
+    val max = (moi.pvMax ?: pv).coerceAtLeast(1)
+    val ratio = (pv.coerceAtLeast(0).toFloat() / max).coerceIn(0f, 1f)
+    val couleur = when {
+        ratio > 0.5f -> Color(0xFF66BB6A)
+        ratio > 0.25f -> Color(0xFFFFA726)
+        else -> Color(0xFFEF5350)
+    }
+    Card(colors = CardDefaults.cardColors(containerColor = FondCarte, contentColor = Color.White)) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(moi.nom, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.weight(1f))
+                Text("PV $pv / $max", fontWeight = FontWeight.Bold, color = couleur)
+            }
+            androidx.compose.material3.LinearProgressIndicator(
+                progress = { ratio },
+                color = couleur,
+                trackColor = Color.White.copy(alpha = 0.15f),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            if (moi.conditions.isNotEmpty()) Text(moi.conditions.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = Color.White)
         }
     }
 }
@@ -452,20 +585,22 @@ private fun DepenserEmplacement(combatId: String, round: Int, niveau: Int, perso
 @Composable
 private fun UtiliserPredilection(combatId: String, round: Int, sort: SortPret, personnage: Character) {
     var fait by rememberSaveable(combatId, round, sort.nom) { mutableStateOf(false) }
+    // Arcanum mystique, Communication avec le protecteur (Occultiste) : une fois par repos long.
+    val arcanum = sort.lancementGratuit == ArsenalPersonnage.SORT_ARCANUM
     when {
-        fait -> Text("Sort de prédilection utilisé (récupéré au prochain repos).", style = MaterialTheme.typography.bodySmall, color = ForcedDarkPalette.AccentGold)
+        fait -> Text(if (arcanum) "Sort utilisé sans emplacement (récupéré au prochain repos long)." else "Sort de prédilection utilisé (récupéré au prochain repos).", style = MaterialTheme.typography.bodySmall, color = ForcedDarkPalette.AccentGold)
         !sort.gratuitDisponible -> Text(
-            "Prédilection déjà utilisée depuis le dernier repos : dépensez un emplacement (changez d'action).",
+            if (arcanum) "Déjà lancé sans emplacement depuis le dernier repos long : dépensez un emplacement (changez d'action)." else "Prédilection déjà utilisée depuis le dernier repos : dépensez un emplacement (changez d'action).",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.error,
         )
         else -> Button(
             onClick = {
-                GameState.utiliserSortPredilection(personnage.id, sort.nom)
+                if (arcanum) GameState.utiliserSortArcanum(personnage.id, sort.nom) else GameState.utiliserSortPredilection(personnage.id, sort.nom)
                 fait = true
             },
             modifier = Modifier.fillMaxWidth(),
-        ) { Text("Lancer ${sort.nom} sans emplacement (prédilection)") }
+        ) { Text("Lancer ${sort.nom} sans emplacement (${if (arcanum) "1/repos long" else "prédilection"})") }
     }
 }
 
@@ -583,12 +718,17 @@ private fun PanneauDes(
     relances: Int = 0,
     // Jet envoyé : dépense la munition de l'arme, ou retire l'exemplaire lancé, de la fiche.
     onUtilisation: (OptionJet) -> Unit = {},
+    // Attaques de l'action Attaquer (Attaque supplémentaire) : autant d'attaques avec Fougue.
+    attaquesParAction: Int = 1,
 ) {
     // Jets envoyés depuis cet écran ce round, en attendant la confirmation du MJ.
     val envoyesLocaux = remember(cleRound, relances) { mutableStateMapOf<String, Int>() }
     fun envoyes(libelle: String) = maxOf(jetsLances[libelle] ?: 0, envoyesLocaux[libelle] ?: 0)
-    // Jets autorisés par type : autant de « Attaque » que d'attaques déclarées, sinon un seul.
-    fun autorises(libelle: String) = etapes.count { it.libelle == libelle }.coerceAtLeast(1)
+    // Jets autorisés par type : autant de « Attaque » que d'attaques déclarées, autant d'attaques
+    // que l'action Attaquer en permet pour Fougue, sinon un seul.
+    fun autorises(libelle: String) =
+        if (libelle == "Attaque (Fougue)") attaquesParAction.coerceAtLeast(1)
+        else etapes.count { it.libelle == libelle }.coerceAtLeast(1)
     // Prochaine étape de l'action : la première dont le jet n'est pas encore parti.
     val indexEtape = run {
         val vus = mutableMapOf<String, Int>()
@@ -712,8 +852,9 @@ private fun JetEnCours(
     // (nombre de dés, faces, bonus) des dégâts ou des soins.
     val des = option.formule?.let { decomposerFormule(it) }
     val d20Manuel = saisieD20.toIntOrNull()?.takeIf { it in 1..20 }
-    // 20 naturel sur une attaque : les dés de dégâts sont doublés.
-    val nbDesManuel = des?.let { if (attaque && d20Manuel == 20) it.first * 2 else it.first }
+    // Coup critique (20 naturel, 19-18 pour le Champion) sur une attaque : les dés de dégâts sont doublés.
+    val seuilCritique = option.arme?.seuilCritique ?: 20
+    val nbDesManuel = des?.let { if (attaque && d20Manuel != null && d20Manuel >= seuilCritique) it.first * 2 else it.first }
     val bornesDegats = des?.let { nbDesManuel!!..(nbDesManuel * it.second) }
     val degatsManuel = saisieDegats.toIntOrNull()?.takeIf { v -> bornesDegats?.contains(v) == true }
     val manuelPret = when (option.genre) {
@@ -746,13 +887,15 @@ private fun JetEnCours(
             val totalDegats = if (attaque && des != null) (degats.sum() + des.third).coerceAtLeast(0) else null
             NetworkSessionManager.envoyerJetCombat(
                 option.libelle, "1d20" + signeFormule(bonus) + suffixe, listOf(garde), bonus, manuel,
-                formuleDegats = if (attaque) formuleDegats(garde == 20)?.let { f -> noteDegats?.let { "$f · $it" } ?: f } else null,
+                formuleDegats = if (attaque) formuleDegats(garde >= seuilCritique)?.let { f -> noteDegats?.let { "$f · $it" } ?: f } else null,
                 desDegats = degats,
                 bonusDegats = des?.third ?: 0,
+                arme = option.arme?.nom ?: option.nom,
+                typeDegats = option.typeDegats,
             ).also { if (it) jet = JetEnvoye(option.libelle, garde + bonus, totalDegats, noteDegats, d20s, if (attaque) degats else emptyList()) }
         } else {
             val b = des?.third ?: 0
-            NetworkSessionManager.envoyerJetCombat(option.libelle, formuleDegats(false).orEmpty(), degats, b, manuel)
+            NetworkSessionManager.envoyerJetCombat(option.libelle, formuleDegats(false).orEmpty(), degats, b, manuel, arme = option.arme?.nom ?: option.nom, typeDegats = option.typeDegats)
                 .also { if (it) jet = JetEnvoye(option.libelle, degats.sum() + b, null, desDegats = degats) }
         }
         val envoye = jet
@@ -768,7 +911,7 @@ private fun JetEnCours(
     fun lancerAvecAppli() {
         val d20s = List(if (avecD20 && mode != ModeD20.NORMAL) 2 else 1) { (1..20).random() }
         val garde = if (mode == ModeD20.DESAVANTAGE) d20s.min() else d20s.max()
-        val critique = attaque && garde == 20
+        val critique = attaque && garde >= seuilCritique
         fun lancerDegats() = des?.takeIf { !avecD20 || attaque }
             ?.let { (nb, faces, _) -> List(if (critique) nb * 2 else nb) { (1..faces).random() } }
             .orEmpty()

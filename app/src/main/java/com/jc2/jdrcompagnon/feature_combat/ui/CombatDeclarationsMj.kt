@@ -1,5 +1,6 @@
 package com.jc2.jdrcompagnon.feature_combat.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -82,7 +84,11 @@ internal fun BlocDeclaration(
         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
         if (declaration == null) {
             Text(
-                if (joueurConnecte) "⏳ Le joueur choisit son action…" else "⏳ Action à déclarer",
+                when {
+                    !actif -> "En attente de son tour"
+                    joueurConnecte -> "⏳ Le joueur choisit son action sur son appareil…"
+                    else -> "⏳ À vous de saisir ce qu'il fait"
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -97,30 +103,48 @@ internal fun BlocDeclaration(
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = if (actif) FontWeight.Bold else FontWeight.Normal
             )
-            // Jets déjà lancés à la déclaration : toucher (d20) et dés de dégâts de chaque attaque.
-            declaration.resultats?.forEach { r ->
+            // Jets déjà lancés par l'appli : une ligne par attaque, le verdict d'abord.
+            val resultats = declaration.resultats.orEmpty()
+            resultats.forEachIndexed { i, r ->
                 Text(
-                    "🎲 " + texteResultat(r, declaration.attaque),
+                    (if (resultats.size > 1) "Attaque ${i + 1} : " else "🎲 ") + texteResultat(r, declaration.attaque),
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFFFFD778)
+                    color = when {
+                        r.d20 == null -> Color(0xFFFFD778)
+                        r.touche -> Color(0xFF81C784)
+                        else -> Color(0xFFFF8A80)
+                    },
                 )
             }
-            if (declaration.degatsAppliques) {
-                Text("✓ appliqué", style = MaterialTheme.typography.bodySmall, color = Color(0xFFFFD778))
-                // États soumis à un JS (« JS Constitution DD 10 ou Paralysé ») : le MJ tranche.
-                val cibleTouchee = combattants.firstOrNull { it.id == declaration.cibleId }
-                val aTrancher = declaration.attaque?.conditions.orEmpty()
-                    .filter { it.surEchecJs && cibleTouchee != null && it.condition !in cibleTouchee.conditions }
-                if (cibleTouchee != null && declaration.resultats?.any { it.touche } == true && aTrancher.isNotEmpty()) {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        aTrancher.forEach { inflige ->
-                            OutlinedButton(onClick = {
-                                CombatSession.appliquerCondition(cibleTouchee.id, inflige.condition, "${combattant.nom} — JS ${inflige.sauvegarde ?: ""} DD ${inflige.dd} raté")
-                            }) { Text("JS raté : ${cibleTouchee.nom} ${inflige.condition.label}") }
-                        }
-                    }
-                }
+            val attaque = declaration.attaque
+            // Attaque de zone ou à JS pas encore résolue : qui la subira (d'après les positions).
+            if (attaque != null && (attaque.zone || attaque.bonusToucher == null) && !declaration.degatsAppliques) {
+                val etatCombat by CombatSession.etat.collectAsState()
+                val touchees = etatCombat?.let { CombatSession.ciblesAttaqueSauvegarde(it, combattant.id) }.orEmpty()
+                Text(
+                    if (touchees.isEmpty()) "🎯 Personne n'est dans la zone"
+                    else "🎯 Touchés : ${touchees.joinToString { it.nom }}" +
+                        (attaque.dd?.let { " — chacun fait son JS${attaque.sauvegarde?.let { s -> " de $s" }.orEmpty()} DD $it (moitié des dégâts s'il réussit)" }.orEmpty()),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                )
+            }
+            // Jet de sauvegarde lancé par l'appli seulement quand l'attaque en impose un (souffle, poison…).
+            val avecJs = attaque != null && (attaque.dd != null || attaque.conditions.any { it.surEchecJs })
+            val manoeuvre = declaration.attaquesJoueur.any {
+                it == com.jc2.jdrcompagnon.feature_combat.domain.model.ArsenalPersonnage.EMPOIGNADE ||
+                    it == com.jc2.jdrcompagnon.feature_combat.domain.model.ArsenalPersonnage.BOUSCULADE
+            }
+            when {
+                !declaration.degatsAppliques -> Unit
+                declaration.libelle.startsWith("Jet de sauvegarde contre la mort") ->
+                    Text("🎲 ${declaration.detail.orEmpty()}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = Color(0xFFFFD778))
+                attaque != null ->
+                    Text("✓ Appliqué" + if (avecJs) " (jet de sauvegarde de la cible lancé par l'appli)" else "", style = MaterialTheme.typography.bodySmall, color = Color(0xFFFFD778))
+                manoeuvre -> Text("✓ Jet de sauvegarde de la cible lancé par l'appli", style = MaterialTheme.typography.bodySmall, color = Color(0xFFFFD778))
+                else -> Text("✓ Appliqué", style = MaterialTheme.typography.bodySmall, color = Color(0xFFFFD778))
             }
             deplacement?.let {
                 Text("🏃 $it", style = MaterialTheme.typography.bodySmall)
@@ -141,7 +165,8 @@ internal fun BlocDeclaration(
             val verdict = if (j.libelle.startsWith("Attaque") && j.des.isNotEmpty() && cibleDeclaree != null) {
                 val d20 = j.des.singleOrNull()
                 when {
-                    j.formule.startsWith("1d20") && d20 == 20 -> " → CRITIQUE sur ${cibleDeclaree.nom}"
+                    // 20 naturel, ou critique élargi du Champion (signalé dans la formule des dégâts).
+                    j.formule.startsWith("1d20") && (d20 == 20 || j.formuleDegats?.contains("(critique)") == true) -> " → CRITIQUE sur ${cibleDeclaree.nom}"
                     j.formule.startsWith("1d20") && d20 == 1 -> " → échec automatique"
                     j.total >= cibleDeclaree.ca -> " → touche ${cibleDeclaree.nom} (CA ${cibleDeclaree.ca})"
                     else -> " → rate ${cibleDeclaree.nom} (CA ${cibleDeclaree.ca})"
@@ -169,6 +194,13 @@ internal fun BlocDeclaration(
             if (j.applique) {
                 Text("✓ traité par le MJ", style = MaterialTheme.typography.bodySmall, color = Color(0xFFFFD778))
             }
+            // Imposition des mains (Empoisonné, Toucher réparateur) : retrait des états annoncés.
+            if (j.des.isEmpty() && j.libelle == "Imposition des mains" && j.cibleId != null && !j.applique) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Button(onClick = { CombatSession.appliquerRetraitEtats(j.id) }) { Text("Retirer les états") }
+                    TextButton(onClick = { CombatSession.ignorerJet(j.id) }) { Text("Ne pas appliquer") }
+                }
+            }
             // Dégâts / soins d'un joueur : rien n'est appliqué sans le MJ. « Soins (Imposition des
             // mains) », « Dégâts (Châtiment divin) » : jets de capacité, distincts des jets d'action.
             val soin = j.libelle.startsWith("Soins")
@@ -179,12 +211,22 @@ internal fun BlocDeclaration(
                 val cibleParDefaut = (combattants.firstOrNull { it.id == j.cibleId } ?: cibleDeclaree)?.takeIf { soin || !it.horsCombat }
                 // Sort de zone déclaré par le joueur : les dégâts vont à chacune des cibles choisies.
                 val zone = !soin && j.cibleId == null && (declaration?.ciblesZone?.size ?: 0) > 1
+                // Sort à jet de sauvegarde : chaque cible fait son JS, lancé par l'application.
+                val js = if (soin) null else com.jc2.jdrcompagnon.feature_combat.domain.model.Sauvegardes.duResume(declaration?.detail)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (zone) {
-                        Button(onClick = { choixZone = true }) { Text("Appliquer aux ${declaration?.ciblesZone?.size} cibles") }
+                        Button(onClick = { CombatSession.appliquerJetZone(j.id, declaration?.ciblesZone.orEmpty()) }) {
+                            Text("Appliquer aux ${declaration?.ciblesZone?.size} cibles" + if (js != null) " (JS auto)" else "")
+                        }
                     } else if (cibleParDefaut != null) {
                         Button(onClick = { CombatSession.appliquerJet(j.id, cibleParDefaut.id, soin) }) {
-                            Text(if (soin) "Soigner ${cibleParDefaut.nom} de $montant" else "Appliquer $montant à ${cibleParDefaut.nom}")
+                            Text(
+                                when {
+                                    soin -> "Soigner ${cibleParDefaut.nom} de $montant"
+                                    js != null -> "JS de ${cibleParDefaut.nom} et dégâts ($montant)"
+                                    else -> "Appliquer $montant à ${cibleParDefaut.nom}"
+                                }
+                            )
                         }
                     }
                     MenuOptions(
@@ -225,43 +267,98 @@ internal fun BlocDeclaration(
             }
         }
         // Action principale en bouton ; toutes les autres options dans un menu déroulant.
-        val attaqueAResoudre = phase == PhaseCombat.RESOLUTION && actif && declaration?.attaque != null
+        val attaqueAResoudre = phase == PhaseCombat.EN_COURS && actif && declaration?.attaque != null
         val options = buildList<Pair<String, () -> Unit>> {
             if (attaqueAResoudre && declaration?.attaque?.let { it.zone || it.bonusToucher == null } == false) {
                 add("Changer de cible / relancer" to onResoudre)
             }
-            // Joueur connecté qui n'a pas encore choisi : le MJ peut exceptionnellement le faire.
-            if (declaration == null && joueurConnecte) add("Déclarer à sa place" to onDeclarer)
-            if (combattant.piloteParIa && phase != PhaseCombat.PREPARATION) add("Autre décision IA" to onRedecider)
-            if (declaration != null && (phase == PhaseCombat.DECLARATION || actif)) {
-                add((if (phase == PhaseCombat.RESOLUTION) "Changer l'action" else "Modifier l'action") to onDeclarer)
+            if (attaqueAResoudre && declaration?.degatsAppliques == false && declaration.attaque?.let { it.zone || it.bonusToucher == null } == true) {
+                add("Choisir le centre / relancer les dégâts" to onResoudre)
             }
+            // Joueur connecté qui n'a pas encore choisi : le MJ peut exceptionnellement le faire.
+            if (declaration == null && joueurConnecte && actif) add("Choisir à sa place" to onDeclarer)
+            if (combattant.piloteParIa && actif && declaration?.degatsAppliques != true) add("Autre décision IA" to onRedecider)
+            if (declaration != null && actif && !declaration.degatsAppliques) add("Changer l'action" to onDeclarer)
             // Un seul jet par type et par round côté joueur : le MJ peut en accorder un de plus.
-            if (phase == PhaseCombat.RESOLUTION && joueurConnecte) {
+            if (phase == PhaseCombat.EN_COURS && joueurConnecte) {
                 add(("Autoriser un jet de plus" + (relances.takeIf { it > 0 }?.let { " ($it accordé)" } ?: "")) to { CombatSession.autoriserRelance(combattant.id) })
             }
-            if (phase == PhaseCombat.RESOLUTION && actif && declaration != null && !declaration.libelle.startsWith("Action impossible")) {
+            // Occultiste Fiélon (niveau 14) : Traversée des enfers sur la cible touchée (JS lancé par l'appli).
+            val ficheOccultiste = combattant.characterId?.let { id -> GameState.characters.value.firstOrNull { it.id == id } }
+            val occultiste = com.jc2.jdrcompagnon.feature_combat.domain.model.Occultiste
+            if (phase == PhaseCombat.EN_COURS && actif && ficheOccultiste != null && occultiste.niveauFielon(ficheOccultiste) >= 14 && cibleDeclaree != null && !cibleDeclaree.horsCombat) {
+                if (occultiste.traverseeDisponible(ficheOccultiste)) {
+                    add("Traversée des enfers → ${cibleDeclaree.nom}" to { CombatSession.traverseeDesEnfers(combattant.id, cibleDeclaree.id) })
+                } else {
+                    add("Récupérer Traversée des enfers (1 emplacement de pacte)" to {
+                        GameState.traverseeDesEnfers(ficheOccultiste.id, utilisee = false, parEmplacement = true)
+                    })
+                }
+            }
+            if (phase == PhaseCombat.EN_COURS && actif && declaration != null && !declaration.libelle.startsWith("Action impossible")) {
                 add("Action impossible" to onImpossible)
             }
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
             if (attaqueAResoudre && declaration?.attaque != null) {
                 val resultats = declaration.resultats
                 val total = resultats?.sumOf { it.degats } ?: 0
                 val ciblee = declaration.cibleNom
                 if (declaration.attaque.zone || declaration.attaque.bonusToucher == null) {
-                    Button(onClick = onResoudre) { Text("Appliquer aux cibles") }
+                    // Chaque créature touchée fait son JS : l'application lance les dés et applique.
+                    if (!declaration.degatsAppliques) {
+                        Button(onClick = { CombatSession.resoudreAttaqueSauvegarde(combattant.id) }, modifier = Modifier.weight(1f, fill = false)) { Text("Lancer les JS et appliquer") }
+                    }
                 } else if (resultats != null && ciblee != null && !declaration.degatsAppliques) {
-                    Button(onClick = { CombatSession.appliquerJets(combattant.id) }) {
+                    // Largeur limitée : le menu Options garde sa place à droite.
+                    Button(onClick = { CombatSession.appliquerJets(combattant.id) }, modifier = Modifier.weight(1f, fill = false)) {
                         Text(if (total > 0) "Appliquer $total dégâts à $ciblee" else "Noter l'échec")
                     }
                 }
             }
-            if (declaration == null && !joueurConnecte) {
-                TextButton(onClick = onDeclarer) { Text("Déclarer") }
+            // Empoignade / bousculade d'un joueur : la cible fait son JS (Force ou Dextérité), lancé par l'appli.
+            val manoeuvre = declaration?.attaquesJoueur.orEmpty().any {
+                it == com.jc2.jdrcompagnon.feature_combat.domain.model.ArsenalPersonnage.EMPOIGNADE ||
+                    it == com.jc2.jdrcompagnon.feature_combat.domain.model.ArsenalPersonnage.BOUSCULADE
             }
-            Spacer(Modifier.weight(1f))
+            if (phase == PhaseCombat.EN_COURS && actif && manoeuvre && declaration?.degatsAppliques == false && cibleDeclaree != null) {
+                Button(onClick = { CombatSession.resoudreManoeuvre(combattant.id) }) { Text("JS de ${cibleDeclaree.nom} (auto)") }
+            }
             MenuOptions(options)
+        }
+        // Le MJ peut écarter une attaque (narration, erreur de placement…) sans rien appliquer.
+        if (attaqueAResoudre && declaration?.degatsAppliques == false) {
+            // Attaque à jet de toucher déjà lancée : le MJ peut fixer lui-même les dégâts.
+            val montantModifiable = declaration.resultats != null && declaration.cibleNom != null &&
+                declaration.attaque?.let { it.zone || it.bonusToucher == null } == false
+            var autreMontant by remember(combattant.id) { mutableStateOf(false) }
+            Row {
+                if (montantModifiable) TextButton(onClick = { autreMontant = true }) { Text("Autre montant") }
+                TextButton(onClick = { CombatSession.ignorerAttaque(combattant.id) }) { Text("Ne pas appliquer") }
+            }
+            if (autreMontant) {
+                var saisie by remember { mutableStateOf(declaration.resultats?.sumOf { it.degats }?.toString().orEmpty()) }
+                AlertDialog(
+                    onDismissRequest = { autreMontant = false },
+                    title = { Text("Dégâts à ${declaration.cibleNom}") },
+                    text = {
+                        OutlinedTextField(
+                            value = saisie,
+                            onValueChange = { saisie = it.filter(Char::isDigit).take(3) },
+                            label = { Text("Dégâts") },
+                            singleLine = true,
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            CombatSession.appliquerJets(combattant.id, saisie.toIntOrNull() ?: 0)
+                            autreMontant = false
+                        }) { Text("Appliquer") }
+                    },
+                    dismissButton = { TextButton(onClick = { autreMontant = false }) { Text("Annuler") } },
+                )
+            }
         }
     }
 }
@@ -283,9 +380,8 @@ private fun ZoneJetDialog(
     val debout = combattants.filter { !it.horsCombat }
     val cibles = ciblesDeclarees.mapNotNull { id -> debout.firstOrNull { it.id == id } } +
         debout.filter { it.id !in ciblesDeclarees }.sortedBy { it.estMonstre == auteur.estMonstre }
-    // Cibles déjà traitées pendant cette fenêtre : texte du résultat.
-    var traitees by remember(jet.id) { mutableStateOf(mapOf<String, String>()) }
-    val moitie = montant / 2
+    var choisies by remember(jet.id) { mutableStateOf(ciblesDeclarees.filter { id -> debout.any { it.id == id } }.toSet()) }
+    val js = com.jc2.jdrcompagnon.feature_combat.domain.model.Sauvegardes.duResume(CombatSession.etat.value?.declarations?.get(auteur.id)?.detail)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("${auteur.nom} — ${jet.libelle} : $montant dégâts") },
@@ -294,39 +390,36 @@ private fun ZoneJetDialog(
                 modifier = Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Text("Échec au JS = $montant, réussite = $moitie.", style = MaterialTheme.typography.bodySmall)
+                Text(
+                    if (js != null) "Chaque créature cochée fait son JS ${js.caracteristique ?: ""} DD ${js.dd}, lancé par l'application : " +
+                        "échec = $montant, réussite = ${if (js.moitieSiReussi) montant / 2 else 0}."
+                    else "Le sort n'impose pas de JS : chaque créature cochée subit $montant dégâts.",
+                    style = MaterialTheme.typography.bodySmall
+                )
                 cibles.forEach { c ->
                     val visee = c.id in ciblesDeclarees
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().clickable { choisies = if (c.id in choisies) choisies - c.id else choisies + c.id }
+                    ) {
+                        androidx.compose.material3.Checkbox(checked = c.id in choisies, onCheckedChange = null)
                         Column(modifier = Modifier.weight(1f)) {
                             Text(c.nom, fontWeight = if (visee) FontWeight.Bold else FontWeight.Normal)
                             Text(
-                                traitees[c.id] ?: if (visee) "dans la zone" else "hors zone annoncée",
+                                if (visee) "dans la zone" else "hors zone annoncée",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = if (traitees[c.id] != null) Color(0xFFFFD778) else MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                        }
-                        if (c.id !in traitees) {
-                            OutlinedButton(onClick = {
-                                CombatSession.appliquerPv(c.id, montant)
-                                CombatSession.noter("${auteur.nom} — ${jet.libelle} : ${c.nom} rate son JS, $montant dégâts")
-                                traitees = traitees + (c.id to "✓ $montant dégâts")
-                            }) { Text("Échec $montant") }
-                            TextButton(onClick = {
-                                CombatSession.appliquerPv(c.id, moitie)
-                                CombatSession.noter("${auteur.nom} — ${jet.libelle} : ${c.nom} réussit son JS, $moitie dégâts")
-                                traitees = traitees + (c.id to "✓ $moitie dégâts")
-                            }) { Text("Réussite $moitie") }
                         }
                     }
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                CombatSession.marquerJetTraite(jet.id)
+            TextButton(enabled = choisies.isNotEmpty(), onClick = {
+                CombatSession.appliquerJetZone(jet.id, cibles.map { it.id }.filter { it in choisies })
                 onDismiss()
-            }) { Text("Terminer") }
+            }) { Text(if (js != null) "Lancer les JS et appliquer" else "Appliquer") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Fermer") } }
     )
@@ -356,8 +449,8 @@ private fun MenuOptions(options: List<Pair<String, () -> Unit>>) {
 }
 
 /**
- * Le MJ fixe l'action d'un combattant : PNJ ou PJ sans joueur connecté pendant la déclaration, ou
- * n'importe qui pendant la résolution quand la situation a changé (cible tombée, chemin bloqué…).
+ * Le MJ fixe l'action d'un combattant pendant son tour : PNJ ou PJ joué à la table (sort, objet,
+ * déplacement…), ou n'importe qui quand la situation a changé (cible tombée, chemin bloqué…).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -385,7 +478,7 @@ internal fun DeclarationMjDialog(combattant: Combattant, etat: CombatEnCours, on
         }
         chargementArmes = false
     }
-    val attaquesFiche = combattant.attaques.filter { it.type != TypeAttaqueMonstre.AUTRE }
+    val attaquesFiche = combattant.attaquesAutorisees.filter { it.type != TypeAttaqueMonstre.AUTRE }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -488,8 +581,7 @@ internal fun DeclarationMjDialog(combattant: Combattant, etat: CombatEnCours, on
                         deplacements = deplacements,
                         desengage = desengage,
                     )
-                    if (etat.phase == PhaseCombat.DECLARATION) CombatSession.declarer(declaration)
-                    else CombatSession.modifierDeclaration(declaration)
+                    CombatSession.modifierDeclaration(declaration)
                     onDismiss()
                 }
             ) { Text("Valider") }
@@ -600,11 +692,7 @@ internal fun ResolutionMonstreDialog(monstre: Combattant, declaration: Declarati
                         // Zone connue (« cône de 9 m ») : créatures prises d'après les distances, alliés
                         // du monstre compris pour une sphère ; sinon tous les adversaires debout.
                         val zone = attaque.zoneEffet?.takeIf { attaque.zone }
-                        val touchees = when {
-                            zone != null -> etat.dansLaZone(zone, monstre.id, cibleId)
-                            attaque.zone -> cibles
-                            else -> cibles.filter { it.id == cibleId }
-                        }
+                        val touchees = CombatSession.ciblesAttaqueSauvegarde(etat, monstre.id, cibleId)
                         zone?.let {
                             Text(
                                 "${it.libelle} : ${touchees.size} créature(s) dans la zone d'après les distances.",
@@ -613,29 +701,22 @@ internal fun ResolutionMonstreDialog(monstre: Combattant, declaration: Declarati
                             )
                         }
                         touchees.forEach { c ->
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(c.nom)
+                            val bonus = com.jc2.jdrcompagnon.feature_combat.domain.model.Sauvegardes.bonus(c, attaque.sauvegarde)
+                            Text(
+                                c.nom + (attaque.dd?.let { " · JS ${if (bonus >= 0) "+$bonus" else "$bonus"}" } ?: "") +
                                     // Paralysé, Étourdi… : JS de Force/Dextérité ratés d'office.
-                                    if (Etats.echecAutomatiqueJs(c.conditions, attaque.sauvegarde)) {
-                                        Text(
-                                            "Échec automatique (${Etats.developper(c.conditions).first { Etats.echecAutomatiqueJs(listOf(it), attaque.sauvegarde) }.label})",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.error
-                                        )
-                                    }
-                                }
-                                OutlinedButton(onClick = {
-                                    CombatSession.appliquerPv(c.id, total)
-                                    CombatSession.noter("${monstre.nom} — ${attaque.nom} : ${c.nom} rate son JS, $total dégâts")
-                                    attaque.conditions.forEach { CombatSession.appliquerCondition(c.id, it.condition, "${monstre.nom} — ${attaque.nom}") }
-                                }) { Text("Échec $total") }
-                                TextButton(onClick = {
-                                    CombatSession.appliquerPv(c.id, total / 2)
-                                    CombatSession.noter("${monstre.nom} — ${attaque.nom} : ${c.nom} réussit son JS, ${total / 2} dégâts")
-                                }) { Text("Réussite ${total / 2}") }
-                            }
+                                    if (Etats.echecAutomatiqueJs(c.conditions, attaque.sauvegarde)) " · échec automatique" else "",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
                         }
+                        Button(
+                            enabled = touchees.isNotEmpty() && !declaration.degatsAppliques,
+                            onClick = {
+                                CombatSession.resoudreAttaqueSauvegarde(monstre.id, cibleId, total)
+                                onDismiss()
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text(if (attaque.dd != null) "Lancer les JS et appliquer" else "Appliquer $total à chacun") }
                     } else if (cible != null) {
                         Button(
                             onClick = {
@@ -709,7 +790,7 @@ internal fun PositionsDialog(monstre: Combattant, etat: CombatEnCours, onDismiss
                         "Contact = 1,50 m (allonge d'une attaque au corps à corps, grille de 1,50 m). " +
                             "Vitesse de ${monstre.nom} : ${formatMetres(monstre.vitesse)} par tour, le double en se précipitant. " +
                             "Non placés : 9 m entre adversaires, 3 m entre alliés. Les zones d'effet (sphère, cône…) " +
-                            "touchent les créatures selon ces distances. Pendant la déclaration, l'IA revoit sa décision à chaque changement.",
+                            "touchent les créatures selon ces distances. Une IA qui a déjà décidé revoit sa décision à chaque changement.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -737,16 +818,15 @@ internal fun texteResultat(r: ResultatAttaque, attaque: AttaqueMonstre? = null):
     val formule = attaque?.formuleDegats?.let { " ($it)" } ?: ""
     if (r.d20 == null) {
         val js = attaque?.dd?.let { " · JS ${attaque.sauvegarde ?: ""} DD $it".replace("  ", " ") } ?: ""
-        return "Dégâts ${r.degatsLances}$formule$js"
+        return "${r.degatsLances} dégâts$formule$js"
     }
-    val bonus = attaque?.bonusToucher?.let { " ${if (it >= 0) "+$it" else "$it"}" } ?: ""
-    val verdict = when {
-        r.critique -> "CRITIQUE"
-        r.touche -> "touché"
-        else -> "raté"
+    val bonus = attaque?.bonusToucher?.let { if (it >= 0) " + $it" else " − ${-it}" } ?: ""
+    // Avantage/désavantage dû aux états : « dé 15, avantage (écarté 8) ».
+    val mode = r.d20Ecarte?.let { ", ${r.mode.label} (écarté $it)" } ?: ""
+    val jet = "toucher ${r.totalToucher} (dé ${r.d20}$bonus$mode)"
+    return when {
+        r.critique -> "CRITIQUE · ${r.degats} dégâts$formule — $jet"
+        r.touche -> "TOUCHÉ · ${r.degats} dégâts$formule — $jet"
+        else -> "RATÉ — $jet"
     }
-    // Avantage/désavantage dû aux états : « d20 15 (avantage, écarté 8) ».
-    val mode = r.d20Ecarte?.let { ", ${r.mode.label}, écarté $it" } ?: ""
-    return "Toucher ${r.totalToucher} (d20 ${r.d20}$mode$bonus) $verdict · Dégâts ${r.degatsLances}$formule" +
-        if (!r.touche) ", non appliqués" else ""
 }

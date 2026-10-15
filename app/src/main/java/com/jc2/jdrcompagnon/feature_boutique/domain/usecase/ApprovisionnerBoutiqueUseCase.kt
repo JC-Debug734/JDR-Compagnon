@@ -38,7 +38,7 @@ class ApprovisionnerBoutiqueUseCase(
     ): List<ArticleEnVente> {
         val candidats = equipementSource.getEquipementsDisponibles(monde)
             .filter { filtres.types.isEmpty() || it.type in filtres.types }
-            .filter { filtres.prixMaxEnPo == null || it.coutBaseEnPo <= filtres.prixMaxEnPo }
+            .filter { filtres.prixMaxEnPo == null || it.coutBaseEnPc <= filtres.prixMaxEnPo * com.jc2.jdrcompagnon.ui.Monnaie.PC_PAR_PO }
             .let { pool ->
                 pool.echantillonnerSansRemise(
                     n = pool.size,
@@ -48,18 +48,19 @@ class ApprovisionnerBoutiqueUseCase(
             }
 
         val articlesChoisis = mutableListOf<ArticleEnVente>()
-        var budgetRestant = budgetEnPo
+        // Budget saisi en po, coûts SRD en pièces de cuivre.
+        var budgetRestant = budgetEnPo * com.jc2.jdrcompagnon.ui.Monnaie.PC_PAR_PO
 
         for (equipement in candidats) {
             if (articlesChoisis.size >= filtres.nombreArticlesMax) break
-            if (equipement.coutBaseEnPo > budgetRestant) continue
+            if (equipement.coutBaseEnPc > budgetRestant) continue
 
             articlesChoisis += ArticleEnVente(
                 equipement = equipement,
-                prixApplique = calculerPrixArticle(equipement.coutBaseEnPo, standing),
+                prixEnPc = calculerPrixArticle(equipement.coutBaseEnPc, standing),
                 quantiteStock = random.nextInt(1, 4)
             )
-            budgetRestant -= equipement.coutBaseEnPo
+            budgetRestant -= equipement.coutBaseEnPc
         }
 
         return articlesChoisis

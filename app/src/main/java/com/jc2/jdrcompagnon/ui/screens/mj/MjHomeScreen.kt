@@ -38,6 +38,10 @@ data class MjTool(
     val id: String,
     val label: String,
     val icon: ImageVector,
+    // Icône illustrée (assets/dnd/icone/outils/), à la place de [icon] quand le fichier existe.
+    val image: String? = null,
+    // L'illustration porte déjà le nom de l'outil (bandeau) : pas de libellé en dessous.
+    val nomDansImage: Boolean = false,
 )
 
 // Couleur unique appliquée à toutes les icônes d'outils du tableau de bord ("icônes
@@ -54,11 +58,17 @@ fun MjHomeScreen(
     onOpenScenarios: () -> Unit = {},
     onOpenCampaigns: () -> Unit,
     onOpenCampaign: (String) -> Unit = {},
+    // Carnet du MJ du monde (préparation de séance, secrets, fils), indépendant des campagnes.
+    onOpenPreparation: () -> Unit = {},
+    onOpenFactions: () -> Unit = {},
     onOpenGroups: () -> Unit,
     onOpenBoutiques: () -> Unit,
+    onOpenVillesOutil: () -> Unit = {},
     onOpenEnvironnements: () -> Unit = {},
     onOpenTableAleatoire: () -> Unit = {},
     onOpenEpreuves: () -> Unit = {},
+    onOpenComportement: () -> Unit = {},
+    onOpenBoss: () -> Unit = {},
     onOpenEvenements: () -> Unit = {},
     onOpenCombatActions: () -> Unit = {},
     onOpenMusic: () -> Unit,
@@ -72,19 +82,24 @@ fun MjHomeScreen(
     // "Bibliothèque" et "Connexion/Partie" ne sont pas repris ici : déjà accessibles
     // depuis la barre du bas globale (AppBottomBar), un outil dédié ici ferait doublon.
     val tools = listOf(
-        MjTool("characters", "FICHES", Icons.Default.People),
-        MjTool("scenarios", "SCÉNARIOS", Icons.AutoMirrored.Filled.MenuBook),
-        MjTool("campaigns", "CAMPAGNES", Icons.Default.Checklist),
-        MjTool("groups", "GROUPES", Icons.Default.Group),
-        MjTool("boutiques", "BOUTIQUES", Icons.Default.Storefront),
-        MjTool("environnements", "ENVIRONNEMENTS", Icons.Default.Terrain),
-        MjTool("table_aleatoire", "TABLE ALÉATOIRE", Icons.Default.Casino),
-        MjTool("epreuves", "ÉPREUVES", Icons.Default.Hiking),
-        MjTool("evenements", "ÉVÉNEMENTS", Icons.Default.AutoStories),
-        MjTool("combat_actions", "ACTIONS DE COMBAT", Icons.Default.Shield),
-        MjTool("music", "MUSIQUE", Icons.Default.MusicNote),
-        MjTool("time", "HORLOGE", Icons.Default.Schedule),
-        MjTool("import", "IMPORT", Icons.Default.UploadFile),
+        MjTool("characters", "FICHES", Icons.Default.People, IconesOutils.FICHES, nomDansImage = true),
+        MjTool("scenarios", "SCÉNARIOS", Icons.AutoMirrored.Filled.MenuBook, IconesOutils.SCENARIOS, nomDansImage = true),
+        MjTool("campaigns", "CAMPAGNES", Icons.Default.Checklist, IconesOutils.CAMPAGNES, nomDansImage = true),
+        MjTool("preparation", "PRÉPARATION", Icons.Default.EventNote),
+        MjTool("factions", "FACTIONS", Icons.Default.Flag),
+        MjTool("groups", "GROUPES", Icons.Default.Group, IconesOutils.GROUPES, nomDansImage = true),
+        MjTool("boutiques", "BOUTIQUES", Icons.Default.Storefront, IconesOutils.BOUTIQUES, nomDansImage = true),
+        MjTool("villes", "VILLES", Icons.Default.LocationCity, IconesOutils.VILLES, nomDansImage = true),
+        MjTool("environnements", "ENVIRONNEMENTS", Icons.Default.Terrain, IconesOutils.ENVIRONNEMENTS, nomDansImage = true),
+        MjTool("table_aleatoire", "TABLE ALÉATOIRE", Icons.Default.Casino, IconesOutils.TABLE_ALEATOIRE, nomDansImage = true),
+        MjTool("epreuves", "ÉPREUVES", Icons.Default.Hiking, IconesOutils.EPREUVES, nomDansImage = true),
+        MjTool("evenements", "ÉVÉNEMENTS", Icons.Default.AutoStories, IconesOutils.EVENEMENTS, nomDansImage = true),
+        MjTool("combat_actions", "ACTIONS DE COMBAT", Icons.Default.Shield, IconesOutils.COMBAT_ACTIONS, nomDansImage = true),
+        MjTool("comportement", "COMPORTEMENT", Icons.Default.Psychology, IconesOutils.COMPORTEMENT, nomDansImage = true),
+        MjTool("boss", "BOSS", Icons.Default.Whatshot, IconesOutils.BOSS, nomDansImage = true),
+        MjTool("music", "MUSIQUE", Icons.Default.MusicNote, IconesOutils.MUSIQUE, nomDansImage = true),
+        MjTool("time", "HORLOGE", Icons.Default.Schedule, IconesOutils.HORLOGE, nomDansImage = true),
+        MjTool("import", "IMPORT", Icons.Default.UploadFile, IconesOutils.IMPORT, nomDansImage = true),
     )
 
     // rememberSaveable : restauré au retour d'un autre écran (lien, combat, fiche...) — avec un
@@ -147,13 +162,18 @@ fun MjHomeScreen(
             "characters" -> onViewCharacters()
             "scenarios" -> onOpenScenarios()
             "campaigns" -> onOpenCampaigns()
+            "preparation" -> onOpenPreparation()
+            "factions" -> onOpenFactions()
             "groups" -> onOpenGroups()
             "boutiques" -> onOpenBoutiques()
+            "villes" -> onOpenVillesOutil()
             "environnements" -> onOpenEnvironnements()
             "table_aleatoire" -> onOpenTableAleatoire()
             "epreuves" -> onOpenEpreuves()
             "evenements" -> onOpenEvenements()
             "combat_actions" -> onOpenCombatActions()
+            "comportement" -> onOpenComportement()
+            "boss" -> onOpenBoss()
             "music" -> onOpenMusic()
             "time" -> onOpenClock()
             "import" -> onOpenImport()
@@ -324,23 +344,31 @@ fun MjHomeScreen(
                     }
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    tools.chunked(2).forEach { rowTools ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            rowTools.forEach { tool ->
-                                DashboardToolCard(
-                                    tool = tool,
-                                    modifier = Modifier.weight(1f),
-                                    onClick = { handleToolClick(tool.id) }
-                                )
-                            }
-                            if (rowTools.size < 2) {
-                                Spacer(modifier = Modifier.weight(1f))
+                    // Grille d'outils : nombre de colonnes selon la largeur de l'écran (2 sur un
+                    // téléphone, davantage sur tablette) et cases toutes de la même taille, quelle
+                    // que soit la longueur du nom de l'outil.
+                    androidx.compose.foundation.layout.BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                        val colonnes = (maxWidth / 150.dp).toInt().coerceIn(2, 6)
+                        Column {
+                            tools.chunked(colonnes).forEach { rowTools ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    rowTools.forEach { tool ->
+                                        DashboardToolCard(
+                                            tool = tool,
+                                            modifier = Modifier.weight(1f).height(ToolCardHeight),
+                                            onClick = { handleToolClick(tool.id) }
+                                        )
+                                    }
+                                    repeat(colonnes - rowTools.size) {
+                                        Spacer(modifier = Modifier.weight(1f))
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
                             }
                         }
-                        Spacer(modifier = Modifier.height(12.dp))
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -465,6 +493,31 @@ private fun CampagneInfo(icon: androidx.compose.ui.graphics.vector.ImageVector, 
     }
 }
 
+// Hauteur commune de toutes les cases d'outils : de quoi loger l'icône illustrée (avec son
+// bandeau de nom) ou l'icône et un nom sur deux lignes.
+private val ToolCardHeight = 150.dp
+
+/** Icônes illustrées des outils MJ (assets/dnd/icone/outils/). */
+private object IconesOutils {
+    private const val DOSSIER = "dnd/icone/outils/"
+    const val FICHES = DOSSIER + "fiches.png"
+    const val SCENARIOS = DOSSIER + "scenarios.png"
+    const val CAMPAGNES = DOSSIER + "campagnes.png"
+    const val GROUPES = DOSSIER + "groupes.png"
+    const val BOUTIQUES = DOSSIER + "boutiques.png"
+    const val VILLES = DOSSIER + "villes.png"
+    const val ENVIRONNEMENTS = DOSSIER + "environnements.png"
+    const val TABLE_ALEATOIRE = DOSSIER + "table_aleatoire.png"
+    const val EPREUVES = DOSSIER + "epreuves.png"
+    const val EVENEMENTS = DOSSIER + "evenements.png"
+    const val COMBAT_ACTIONS = DOSSIER + "combat_actions.png"
+    const val COMPORTEMENT = DOSSIER + "comportement.png"
+    const val BOSS = DOSSIER + "boss.png"
+    const val MUSIQUE = DOSSIER + "musique.png"
+    const val HORLOGE = DOSSIER + "horloge.png"
+    const val IMPORT = DOSSIER + "import.png"
+}
+
 @Composable
 private fun DashboardToolCard(
     tool: MjTool,
@@ -479,18 +532,35 @@ private fun DashboardToolCard(
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
         onClick = onClick,
     ) {
+        // Hauteur fixe (cf. ToolCardHeight) : icône et nom centrés, nom sur deux lignes au plus.
         Column(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            Icon(tool.icon, contentDescription = null, tint = ToolIconColor, modifier = Modifier.size(28.dp))
-            Spacer(modifier = Modifier.height(10.dp))
+            val illustration = com.jc2.jdrcompagnon.ui.components.rememberIconeAsset(tool.image)
+            if (illustration != null) {
+                // Icône illustrée ; si elle porte son nom (bandeau), elle occupe toute la case.
+                Image(
+                    bitmap = illustration,
+                    contentDescription = tool.label,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                )
+                if (tool.nomDansImage) return@Column
+                Spacer(modifier = Modifier.height(4.dp))
+            } else {
+                Icon(tool.icon, contentDescription = null, tint = ToolIconColor, modifier = Modifier.size(28.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+            }
             Text(
                 text = tool.label,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
-                color = Color.White
+                color = Color.White,
+                maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
             )
         }
     }

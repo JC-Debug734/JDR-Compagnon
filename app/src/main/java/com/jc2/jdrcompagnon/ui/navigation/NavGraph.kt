@@ -141,15 +141,27 @@ fun JdrNavGraph() {
             }
         }
     }
-    // Combat en réseau : le joueur est amené sur son écran de combat à chaque ouverture d'une
-    // phase de déclaration (début du combat, puis chaque nouveau round) pour choisir son action.
+    // Combat en réseau : le joueur est amené sur son écran de combat quand vient son tour (à
+    // chaque round) pour choisir son action.
     val combatJoueur by NetworkSessionManager.combatEnCours.collectAsState()
     val cleDeclaration = combatJoueur
-        ?.takeIf { it.phase == PhaseCombat.DECLARATION.name && it.monCombattantId != null }
+        ?.takeIf { it.phase == PhaseCombat.EN_COURS.name && it.monCombattantId != null && it.actifId == it.monCombattantId }
         ?.let { "${it.id}-${it.round}" }
     LaunchedEffect(cleDeclaration) {
         if (cleDeclaration != null && networkRole == SessionRole.PLAYER) {
             navController.navigate(Route.CombatJoueur.path) { launchSingleTop = true }
+        }
+    }
+    // Partie en réseau : quand le MJ ouvre une carte de campagne en mode exploration, le joueur y
+    // est amené automatiquement (une seule carte à la fois dans la pile).
+    val carteOuverteMj by NetworkSessionManager.carteOuverteJoueur.collectAsState()
+    LaunchedEffect(carteOuverteMj) {
+        val carte = carteOuverteMj
+        if (carte != null && networkRole == SessionRole.PLAYER) {
+            navController.navigate(Route.CarteCampagne.creer(carte.campagneId, carte.carteId)) {
+                popUpTo(Route.CarteCampagne.path) { inclusive = true }
+                launchSingleTop = true
+            }
         }
     }
     // Tiroir latéral global : câblé une seule fois ici (comme AppBottomBar et
@@ -281,8 +293,32 @@ fun JdrNavGraph() {
                             launchSingleTop = true
                         }
                     },
+                    onOpenGroupe = { groupId ->
+                        drawerScope.launch { drawerState.close() }
+                        navController.navigate(Route.GroupDetail.path.replace("{groupId}", groupId)) {
+                            launchSingleTop = true
+                        }
+                    },
                     onOpenEtat = { nom ->
                         navController.navigate(Route.SrdSectionDetail.path.replace("{kind}", "etat").replace("{entryName}", android.net.Uri.encode(nom)))
+                    },
+                    onOpenCombatEnCours = {
+                        drawerScope.launch { drawerState.close() }
+                        navController.navigate(Route.CombatEnCours.path) {
+                            launchSingleTop = true
+                        }
+                    },
+                    onOpenEpreuveEnCours = {
+                        drawerScope.launch { drawerState.close() }
+                        navController.navigate(Route.EpreuveResolution.path) {
+                            launchSingleTop = true
+                        }
+                    },
+                    navigationAgenda = navigationAgenda(navController),
+                    onOpenPreparation = {
+                        navController.navigate(Route.PreparationSeance.path) {
+                            launchSingleTop = true
+                        }
                     },
                     onCloseDrawer = { drawerScope.launch { drawerState.close() } },
                 )
@@ -390,7 +426,7 @@ fun JdrNavGraph() {
             }
 
             composable(Route.LanTools.path) {
-                LanToolsScreen()
+                LanToolsScreen(onOpenMenu = { drawerScope.launch { drawerState.open() } })
             }
 
             composable(Route.LanJoin.path) {
@@ -418,6 +454,16 @@ fun JdrNavGraph() {
                             launchSingleTop = true
                         }
                     },
+                    onOpenPreparation = {
+                        navController.navigate(Route.PreparationSeance.path) {
+                            launchSingleTop = true
+                        }
+                    },
+                    onOpenFactions = {
+                        navController.navigate(Route.Factions.path) {
+                            launchSingleTop = true
+                        }
+                    },
                     onOpenCampaign = { campaignId ->
                         navController.navigate(Route.CampaignOverview.path.replace("{campaignId}", campaignId)) {
                             launchSingleTop = true
@@ -430,6 +476,11 @@ fun JdrNavGraph() {
                     },
                     onOpenBoutiques = {
                         navController.navigate(Route.Boutiques.path) {
+                            launchSingleTop = true
+                        }
+                    },
+                    onOpenVillesOutil = {
+                        navController.navigate(Route.VillesOutil.path) {
                             launchSingleTop = true
                         }
                     },
@@ -450,6 +501,16 @@ fun JdrNavGraph() {
                     },
                     onOpenEpreuves = {
                         navController.navigate(Route.Epreuves.path) {
+                            launchSingleTop = true
+                        }
+                    },
+                    onOpenComportement = {
+                        navController.navigate(Route.Comportement.path) {
+                            launchSingleTop = true
+                        }
+                    },
+                    onOpenBoss = {
+                        navController.navigate(Route.Boss.path) {
                             launchSingleTop = true
                         }
                     },
@@ -494,7 +555,8 @@ fun JdrNavGraph() {
                     startInHostMode = true,
                     groupId = groupId,
                     campaignTitle = campaignTitle,
-                    onExit = { navController.popBackStack() }
+                    onExit = { navController.popBackStack() },
+                    onOpenMenu = { drawerScope.launch { drawerState.open() } },
                 )
             }
 
@@ -573,17 +635,37 @@ fun JdrNavGraph() {
             }
 
             composable(
-                route = "${Route.CharacterSheet.path}/{characterId}?isMj={isMj}",
+                route = "${Route.CharacterSheet.path}/{characterId}?isMj={isMj}&complet={complet}",
                 arguments = listOf(
                     navArgument("characterId") { type = NavType.StringType },
-                    navArgument("isMj") { type = NavType.BoolType; defaultValue = false }
+                    navArgument("isMj") { type = NavType.BoolType; defaultValue = false },
+                    // PNJ vu par le MJ : fiche PNJ d'une page, sauf demande de la fiche complète.
+                    navArgument("complet") { type = NavType.BoolType; defaultValue = false }
                 )
             ) { backStackEntry ->
                 val characterId = backStackEntry.arguments?.getString("characterId") ?: ""
                 val isMj = backStackEntry.arguments?.getBoolean("isMj") ?: false
+                val complet = backStackEntry.arguments?.getBoolean("complet") ?: false
                 val characters by GameState.characters.collectAsState()
                 val character = characters.firstOrNull { it.id == characterId }
-                character?.let {
+                val ouvrirScenario: (String) -> Unit = { scenarioId ->
+                    GameState.setLastScenarioId(scenarioId)
+                    navController.navigate(Route.ScenarioReader.path.replace("{scenarioId}", scenarioId)) {
+                        launchSingleTop = true
+                    }
+                }
+                if (isMj && !complet && character?.type == "PNJ") {
+                    com.jc2.jdrcompagnon.ui.screens.mj.PnjSheetScreen(
+                        characterId = character.id,
+                        onBack = { navController.popBackStack() },
+                        onEdit = { navController.navigate("${Route.CharacterEdit.path}/${character.id}") },
+                        onOpenFicheComplete = { navController.navigate("${Route.CharacterSheet.path}/${character.id}?isMj=true&complet=true") },
+                        onOpenFaction = { id -> navController.navigate(Route.FactionDetail.path.replace("{factionId}", id)) },
+                        onOpenScenario = ouvrirScenario,
+                        onOpenCampaign = { id -> navController.navigate(Route.CampaignOverview.path.replace("{campaignId}", id)) },
+                        onOpenPreparation = { navController.navigate(Route.PreparationSeance.path) { launchSingleTop = true } },
+                    )
+                } else character?.let {
                     CharacterSheetScreen(
                         character = it,
                         isMjMode = isMj,
@@ -594,6 +676,14 @@ fun JdrNavGraph() {
                         onChooseCharacter = {
                             navController.navigate(Route.CharacterSelection.path + "?isMj=false")
                         },
+                        onOpenScenario = { scenarioId ->
+                            GameState.setLastScenarioId(scenarioId)
+                            navController.navigate(Route.ScenarioReader.path.replace("{scenarioId}", scenarioId)) {
+                                launchSingleTop = true
+                            }
+                        },
+                        onOpenCampaign = { id -> navController.navigate(Route.CampaignOverview.path.replace("{campaignId}", id)) },
+                        onOpenPreparation = { navController.navigate(Route.PreparationSeance.path) { launchSingleTop = true } },
                         onOpenMenu = { drawerScope.launch { drawerState.open() } },
                     )
                 }
@@ -606,7 +696,17 @@ fun JdrNavGraph() {
                 val characterId = backStackEntry.arguments?.getString("characterId") ?: ""
                 val characters by GameState.characters.collectAsState()
                 val character = characters.firstOrNull { it.id == characterId }
-                character?.let {
+                // PNJ : éditeur simplifié sur une page (pas la fiche complète de PJ).
+                if (character?.type == "PNJ") {
+                    com.jc2.jdrcompagnon.ui.screens.mj.PnjEditScreen(
+                        character = character,
+                        onSave = { updated ->
+                            GameState.updateCharacter(updated)
+                            navController.popBackStack()
+                        },
+                        onCancel = { navController.popBackStack() },
+                    )
+                } else character?.let {
                     CharacterEditScreen(
                         character = it,
                         onSave = { updated ->
@@ -742,6 +842,7 @@ fun JdrNavGraph() {
                 LibraryScreen(
                     currentWorld = currentWorld,
                     onBack = { navController.popBackStack() },
+                    onOpenMenu = { drawerScope.launch { drawerState.open() } },
                     initialTab = initialTab,
                     onMonsterClick = { name: String -> navController.navigate(Route.BestiaryDetail.path.replace("{monsterName}", name)) },
                     onSpellClick = { name: String -> navController.navigate(Route.SpellDetail.path.replace("{spellName}", name)) },
@@ -755,6 +856,7 @@ fun JdrNavGraph() {
                     onRuleClick = { name: String -> navController.navigate(Route.SrdSectionDetail.path.replace("{kind}", "regle").replace("{entryName}", android.net.Uri.encode(name))) },
                     onGlossaryClick = { name: String -> navController.navigate(Route.SrdSectionDetail.path.replace("{kind}", "glossaire").replace("{entryName}", android.net.Uri.encode(name))) },
                     onEtatClick = { name: String -> navController.navigate(Route.SrdSectionDetail.path.replace("{kind}", "etat").replace("{entryName}", android.net.Uri.encode(name))) },
+                    onMontureClick = { name: String -> navController.navigate(Route.SrdSectionDetail.path.replace("{kind}", "monture").replace("{entryName}", android.net.Uri.encode(name))) },
                 )
             }
 
@@ -964,6 +1066,16 @@ fun JdrNavGraph() {
             }
 
             composable(Route.CombatActions.path) {
+                com.jc2.jdrcompagnon.feature_combat.ui.ReglagesCombatScreen(
+                    onOpenMenu = { drawerScope.launch { drawerState.open() } },
+                    onOpenReference = { navController.navigate(Route.CombatReference.path) { launchSingleTop = true } },
+                    onOpenComportements = { navController.navigate(Route.Comportement.path) { launchSingleTop = true } },
+                    onOpenBoss = { navController.navigate(Route.Boss.path) { launchSingleTop = true } },
+                    onOpenCombatEnCours = { navController.navigate(Route.CombatEnCours.path) { launchSingleTop = true } },
+                )
+            }
+
+            composable(Route.CombatReference.path) {
                 CombatActionsScreen(
                     onBack = { navController.popBackStack() },
                     onOpenMenu = { drawerScope.launch { drawerState.open() } },
@@ -1032,6 +1144,33 @@ fun JdrNavGraph() {
                 )
             }
 
+            composable(route = Route.Factions.path) {
+                com.jc2.jdrcompagnon.feature_faction.ui.FactionsScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenFaction = { id -> navController.navigate(Route.FactionDetail.path.replace("{factionId}", id)) },
+                )
+            }
+
+            composable(
+                route = Route.FactionDetail.path,
+                arguments = listOf(navArgument("factionId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val factionId = backStackEntry.arguments?.getString("factionId") ?: return@composable
+                com.jc2.jdrcompagnon.feature_faction.ui.FactionDetailScreen(
+                    factionId = factionId,
+                    onBack = { navController.popBackStack() },
+                    onOpenPnj = { id -> navController.navigate("${Route.CharacterSheet.path}/$id?isMj=true") },
+                    onOpenFaction = { id -> navController.navigate(Route.FactionDetail.path.replace("{factionId}", id)) },
+                )
+            }
+
+            composable(route = Route.PreparationSeance.path) {
+                com.jc2.jdrcompagnon.feature_preparation.ui.PreparationSeanceScreen(
+                    onBack = { navController.popBackStack() },
+                    navigation = navigationAgenda(navController),
+                )
+            }
+
             composable(
                 route = Route.CampaignEditor.path,
                 arguments = listOf(navArgument("campaignId") { type = NavType.StringType; nullable = true })
@@ -1087,15 +1226,25 @@ fun JdrNavGraph() {
                 )
             }
 
+            composable(Route.Comportement.path) {
+                com.jc2.jdrcompagnon.feature_combat.ui.ComportementsScreen(
+                    onOpenMenu = { drawerScope.launch { drawerState.open() } },
+                )
+            }
+
+            composable(Route.Boss.path) {
+                com.jc2.jdrcompagnon.feature_combat.ui.BossScreen(
+                    onOpenMenu = { drawerScope.launch { drawerState.open() } },
+                    onOuvrirCombat = { navController.navigate(Route.CombatEnCours.path) { launchSingleTop = true } },
+                )
+            }
+
             composable(Route.Epreuves.path) {
                 val epreuveListViewModel: com.jc2.jdrcompagnon.feature_epreuve.presentation.EpreuveListViewModel =
                     viewModel(factory = com.jc2.jdrcompagnon.di.EpreuveListViewModelFactory())
                 com.jc2.jdrcompagnon.feature_epreuve.ui.EpreuveListScreen(
                     viewModel = epreuveListViewModel,
                     worldId = currentWorld?.id ?: "donjon_et_dragon",
-                    onOuvrirResolution = {
-                        navController.navigate(Route.EpreuveResolution.path) { launchSingleTop = true }
-                    },
                     onOpenMenu = { drawerScope.launch { drawerState.open() } },
                 )
             }
@@ -1103,6 +1252,17 @@ fun JdrNavGraph() {
             composable(Route.EpreuveResolution.path) {
                 com.jc2.jdrcompagnon.feature_epreuve.ui.EpreuveResolutionScreen(
                     onBack = { navController.popBackStack() },
+                    onOpenMenu = { drawerScope.launch { drawerState.open() } },
+                )
+            }
+
+            composable(Route.VillesOutil.path) {
+                com.jc2.jdrcompagnon.feature_carte.ui.VillesOutilScreen(
+                    onOpenVille = { campagneId, villeId ->
+                        navController.navigate(
+                            Route.VilleDetail.path.replace("{campagneId}", campagneId).replace("{villeId}", villeId)
+                        )
+                    },
                     onOpenMenu = { drawerScope.launch { drawerState.open() } },
                 )
             }
@@ -1247,6 +1407,10 @@ fun JdrNavGraph() {
             )
         }
 
+        // Menu flottant 📌 des éléments « partout » du scénario en lecture : déplaçable sur tout
+        // l'écran, barres du haut et du bas comprises.
+        com.jc2.jdrcompagnon.ui.screens.mj.scenario.MenuFlottantPartoutHote()
+
         // Écran d'exploration (brouillard de la page table), par-dessus tout le reste, barre du
         // bas comprise, depuis n'importe quel écran qui l'ouvre.
         com.jc2.jdrcompagnon.feature_exploration.ExplorationOverlay()
@@ -1283,3 +1447,18 @@ private fun navigateToInternalLink(navController: androidx.navigation.NavControl
     }
     route?.let { navController.navigate(it) { launchSingleTop = true } }
 }
+/** Ouverture des entrées de l'agenda de séance (préparation, aide de séance du menu latéral). */
+private fun navigationAgenda(navController: androidx.navigation.NavController) =
+    com.jc2.jdrcompagnon.feature_preparation.ui.NavigationAgenda(
+        ouvrirScenario = { scenarioId ->
+            GameState.setLastScenarioId(scenarioId)
+            navController.navigate(Route.ScenarioReader.path.replace("{scenarioId}", scenarioId)) { launchSingleTop = true }
+        },
+        ouvrirPnj = { id -> navController.navigate("${Route.CharacterSheet.path}/$id?isMj=true") },
+        ouvrirEnvironnement = { id -> navController.navigate(Route.EnvironnementDetail.path.replace("{environnementId}", id)) },
+        ouvrirVille = { campagneId, villeId ->
+            navController.navigate(Route.VilleDetail.path.replace("{campagneId}", campagneId).replace("{villeId}", villeId))
+        },
+        ouvrirBoutique = { id -> navController.navigate(Route.BoutiqueDetail.path.replace("{boutiqueId}", id)) },
+        ouvrirCombat = { navController.navigate(Route.CombatEnCours.path) { launchSingleTop = true } },
+    )

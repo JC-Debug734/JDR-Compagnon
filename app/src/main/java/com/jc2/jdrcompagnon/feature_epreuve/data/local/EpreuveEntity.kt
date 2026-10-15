@@ -22,4 +22,9 @@ data class EpreuveEntity(
     val musicTrackId: String? = null,
     // Ajoutée en version 23 (AppDatabase.MIGRATION_22_23) : nom de DifficulteEpreuve, null = réussites fixes.
     val difficulte: String? = null,
+    // Ajoutées en version 33 (AppDatabase.MIGRATION_32_33) : échecs qui font perdre l'épreuve et issues.
+    val echecsMax: Int = 3,
+    val issueReussite: String = "",
+    val issueEchec: String = "",
+    val combatEchec: String = "",
 )

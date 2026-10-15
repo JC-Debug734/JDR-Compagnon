@@ -80,6 +80,10 @@ fun EpreuveEditorDialog(
     var nom by remember { mutableStateOf(base.nom) }
     var description by remember { mutableStateOf(base.description) }
     var reussites by remember { mutableIntStateOf(base.reussitesRequises) }
+    var echecs by remember { mutableIntStateOf(base.echecsMax) }
+    var issueReussite by remember { mutableStateOf(base.issueReussite) }
+    var issueEchec by remember { mutableStateOf(base.issueEchec) }
+    var combatEchec by remember { mutableStateOf(base.combatEchec) }
     var difficulte by remember { mutableStateOf(base.difficulte) }
     var image by remember { mutableStateOf(base.imageFileName) }
     val copiesEdition = remember { mutableStateListOf<String>() }
@@ -160,14 +164,55 @@ fun EpreuveEditorDialog(
                             Icon(Icons.Default.Add, contentDescription = "Plus")
                         }
                     }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Échecs qui font perdre l'épreuve", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                        IconButton(onClick = { echecs = (echecs - 1).coerceAtLeast(ReglesEpreuve.ECHECS_MIN) }) {
+                            Icon(Icons.Default.Remove, contentDescription = "Moins d'échecs")
+                        }
+                        Text("$echecs", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        IconButton(onClick = { echecs = (echecs + 1).coerceAtMost(ReglesEpreuve.ECHECS_MAX) }) {
+                            Icon(Icons.Default.Add, contentDescription = "Plus d'échecs")
+                        }
+                    }
                 } else {
                     Text(
-                        "Adaptée au groupe au lancement : ${ReglesEpreuve.reussitesPour(choisie, 4)} réussites pour 4 joueurs " +
-                            "(${ReglesEpreuve.reussitesPour(choisie, 3)} pour 3, ${ReglesEpreuve.reussitesPour(choisie, 5)} pour 5), " +
+                        "Adaptée au groupe au lancement : ${ReglesEpreuve.reussitesPour(choisie, 4)} réussites avant " +
+                            "${ReglesEpreuve.echecsPour(choisie, 4)} échecs pour 4 joueurs " +
+                            "(${ReglesEpreuve.reussitesPour(choisie, 3)}/${ReglesEpreuve.echecsPour(choisie, 3)} pour 3, " +
+                            "${ReglesEpreuve.reussitesPour(choisie, 5)}/${ReglesEpreuve.echecsPour(choisie, 5)} pour 5), " +
                             "DD ${ReglesEpreuve.ddPour(choisie, 1)} au niveau 1, ${ReglesEpreuve.ddPour(choisie, 10)} au niveau 10.",
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
+
+                Text("Issues", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                Text(
+                    "Les tentatives sont des esquives, discussions, manœuvres... jamais un combat : " +
+                        "seule la perte de l'épreuve peut se terminer en combat.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                OutlinedTextField(
+                    value = issueReussite,
+                    onValueChange = { issueReussite = it },
+                    label = { Text("En cas de réussite") },
+                    minLines = 2,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = issueEchec,
+                    onValueChange = { issueEchec = it },
+                    label = { Text("En cas d'échec (trop d'échecs)") },
+                    minLines = 2,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = combatEchec,
+                    onValueChange = { combatEchec = it },
+                    label = { Text("Combat final en cas d'échec (facultatif)") },
+                    placeholder = { Text("Kraken x1, Sahuagin x4") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
 
                 Text("Image affichée sur la table", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                 val apercu = rememberImageEpreuve(image, echantillonnage = 2)
@@ -222,7 +267,8 @@ fun EpreuveEditorDialog(
 
                 Text("Complications en cas d'échec", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                 Text(
-                    "Chaque échec en tire une au hasard. Elles doivent toujours desservir le groupe.\n" +
+                    "Chaque échec (sauf celui qui fait perdre l'épreuve) en tire une au hasard. Elles desservent " +
+                        "toujours le groupe sans jamais lancer de combat.\n" +
                         "Valeurs adaptées au niveau du groupe : {DD} (ou {DD+2}), {attaque}, {degats}, " +
                         "{degats_leger}, {degats_lourd}, {po}. Ex : « JS de Constitution DD {DD} ou {degats} dégâts de froid ».",
                     style = MaterialTheme.typography.bodySmall,
@@ -271,7 +317,11 @@ fun EpreuveEditorDialog(
                         nom = nom.trim(),
                         description = description.trim(),
                         reussitesRequises = reussites,
+                        echecsMax = echecs,
                         difficulte = difficulte,
+                        issueReussite = issueReussite.trim(),
+                        issueEchec = issueEchec.trim(),
+                        combatEchec = combatEchec.trim(),
                         imageFileName = image,
                         musicTrackId = musique,
                         complications = complications

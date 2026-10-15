@@ -25,8 +25,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
@@ -35,9 +40,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -58,7 +60,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -71,7 +75,9 @@ import com.jc2.jdrcompagnon.ui.CharacterProgression
 import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.NaheulbeukCharacter
 import com.jc2.jdrcompagnon.ui.WorldState
+import com.jc2.jdrcompagnon.ui.components.rememberCharacterPortraitPainter
 import com.jc2.jdrcompagnon.ui.screens.mj.PnjProfileDialog
+import com.jc2.jdrcompagnon.ui.theme.ForcedDarkPalette
 
 // ─────────────────────────────────────────────────────────────
 // Sélection de personnage : routeur (CharacterSelectionScreen)
@@ -132,14 +138,18 @@ fun CharacterSelectionScreen(
 }
 
 /**
- * Les 4 types de fiches filtrables par le MJ. "Monstre" regroupe aussi les anciennes fiches
- * "Créature" / "Familier".
+ * Les 3 dossiers de fiches du MJ. "Monstre" regroupe aussi les anciennes fiches
+ * "Créature" / "Familier" et "Boss" (les boss ont désormais leur propre outil, BOSS).
  */
-private val sheetTypeFilters = listOf("Tous", "PJ", "PNJ", "Monstre", "Boss")
+private val sheetFolders = listOf(
+    "PJ" to "Personnages joueurs",
+    "PNJ" to "Personnages non-joueurs",
+    "Monstre" to "Créatures et monstres",
+)
 
-private fun matchesTypeFilter(character: Character, filter: String): Boolean = when (filter) {
-    "Tous" -> true
-    "Monstre" -> character.type in setOf("Monstre", "Créature", "Familier")
+private fun matchesTypeFilter(character: Character, filter: String?): Boolean = when (filter) {
+    null -> true
+    "Monstre" -> character.type in setOf("Monstre", "Créature", "Familier", "Boss")
     else -> character.type == filter
 }
 
@@ -160,10 +170,18 @@ fun CharacterListWithSearchScreen(
 ) {
     val context = LocalContext.current
     var searchQuery by remember { mutableStateOf("") }
-    var selectedTypeFilter by rememberSaveable { mutableStateOf("Tous") }
+    // MJ : dossier ouvert (PJ, PNJ, Monstre) ; null = vue des dossiers.
+    var dossierOuvert by rememberSaveable { mutableStateOf<String?>(null) }
+    BackHandler(enabled = showTypeFilters && dossierOuvert != null) {
+        dossierOuvert = null
+        searchQuery = ""
+    }
     var showChoixCreation by remember { mutableStateOf(false) }
     var showPnjProfiles by remember { mutableStateOf(false) }
     var erreurImport by remember { mutableStateOf<String?>(null) }
+    val toutesLesFiches by GameState.characters.collectAsState()
+    val nombreDoublons = remember(toutesLesFiches) { GameState.doublonsPersonnages().size }
+    var confirmerDoublons by remember { mutableStateOf(false) }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -184,13 +202,24 @@ fun CharacterListWithSearchScreen(
         }
     }
 
-    val filteredCharacters = remember(searchQuery, selectedTypeFilter, characters) {
+    val filteredCharacters = remember(searchQuery, dossierOuvert, characters) {
         characters.filter { character ->
             val matchesSearch = searchQuery.isBlank() ||
                     character.name.contains(searchQuery, ignoreCase = true) ||
                     character.characterClass.contains(searchQuery, ignoreCase = true) ||
                     character.race.contains(searchQuery, ignoreCase = true)
-            matchesSearch && matchesTypeFilter(character, selectedTypeFilter)
+            matchesSearch && matchesTypeFilter(character, dossierOuvert)
+        }
+    }
+    // Vue des dossiers : à la racine, sauf pendant une recherche (résultats de tous les dossiers).
+    val afficherDossiers = showTypeFilters && dossierOuvert == null && searchQuery.isBlank()
+
+    // « + » dans un dossier : crée directement une fiche de ce type.
+    fun creerDansDossier(type: String) {
+        when (type) {
+            "PJ" -> onCreateWizard()
+            "PNJ" -> showPnjProfiles = true
+            else -> onCreateQuick(type)
         }
     }
 
@@ -199,7 +228,7 @@ fun CharacterListWithSearchScreen(
                 TopAppBar(
                     title = {
                         Text(
-                            "Personnages",
+                            dossierOuvert?.let { "Fiches · $it" } ?: "Personnages",
                             style = MaterialTheme.typography.titleLarge.copy(
                                 fontWeight = FontWeight.Black
                             ),
@@ -207,23 +236,35 @@ fun CharacterListWithSearchScreen(
                         )
                     },
                     navigationIcon = {
-                        IconButton(onClick = onOpenMenu) {
-                            Icon(Icons.Default.Menu, contentDescription = "Menu")
+                        if (showTypeFilters && dossierOuvert != null) {
+                            IconButton(onClick = { dossierOuvert = null; searchQuery = "" }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour aux dossiers", tint = Color.White)
+                            }
+                        } else {
+                            IconButton(onClick = onOpenMenu) {
+                                Icon(Icons.Default.Menu, contentDescription = "Menu")
+                            }
+                        }
+                    },
+                    actions = {
+                        // Fiches en double (même paquet importé plusieurs fois) : nettoyage proposé au MJ.
+                        if (showCreateButton && nombreDoublons > 0) {
+                            IconButton(onClick = { confirmerDoublons = true }) {
+                                Icon(Icons.Default.CleaningServices, contentDescription = "Supprimer les doublons", tint = Color.White)
+                            }
+                        }
+                        if (showCreateButton) {
+                            IconButton(onClick = {
+                                dossierOuvert?.let { creerDansDossier(it) } ?: run { showChoixCreation = true }
+                            }) {
+                                Icon(Icons.Default.Add, contentDescription = "Nouveau personnage", tint = ForcedDarkPalette.AccentGold)
+                            }
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = Color.Transparent
                     )
                 )
-            },
-            floatingActionButton = {
-                if (showCreateButton) {
-                    ExtendedFloatingActionButton(
-                        onClick = { showChoixCreation = true },
-                        icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                        text = { Text("Nouveau") }
-                    )
-                }
             },
             containerColor = Color.Transparent
         ) { innerPadding ->
@@ -243,27 +284,25 @@ fun CharacterListWithSearchScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Filtres rapides par type de fiche (MJ uniquement, toujours visibles), avec
-                // le nombre de fiches de chaque type.
-                if (showTypeFilters) {
+                // MJ : les 4 dossiers de fiches, avec le nombre de fiches de chacun.
+                if (afficherDossiers) {
                     FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        maxItemsInEachRow = 2
                     ) {
-                        sheetTypeFilters.forEach { type ->
-                            val count = characters.count { matchesTypeFilter(it, type) }
-                            FilterChip(
-                                selected = selectedTypeFilter == type,
-                                onClick = { selectedTypeFilter = type },
-                                label = { Text("$type ($count)") },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
+                        sheetFolders.forEach { (type, description) ->
+                            SheetFolderCard(
+                                type = type,
+                                description = description,
+                                count = characters.count { matchesTypeFilter(it, type) },
+                                onClick = { dossierOuvert = type },
+                                modifier = Modifier.weight(1f)
                             )
                         }
                     }
+                    return@Column
                 }
 
                 // Compteur de résultats
@@ -277,11 +316,8 @@ fun CharacterListWithSearchScreen(
                 // Liste des personnages
                 if (filteredCharacters.isEmpty()) {
                     EmptyCharacterList(
-                        hasSearch = searchQuery.isNotBlank() || selectedTypeFilter != "Tous",
-                        onClearFilters = {
-                            searchQuery = ""
-                            selectedTypeFilter = "Tous"
-                        }
+                        hasSearch = searchQuery.isNotBlank(),
+                        onClearFilters = { searchQuery = "" }
                     )
                 } else {
                     LazyColumn(
@@ -299,6 +335,26 @@ fun CharacterListWithSearchScreen(
             }
         }
 
+    if (confirmerDoublons) {
+        AlertDialog(
+            onDismissRequest = { confirmerDoublons = false },
+            title = { Text("Supprimer les doublons") },
+            text = {
+                Text(
+                    "$nombreDoublons fiche(s) sont des copies exactes d'une autre fiche (même univers, même nom, " +
+                        "même contenu). Elles seront supprimées avec leurs fichiers ; la première de chaque série est gardée."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    GameState.supprimerDoublonsPersonnages()
+                    confirmerDoublons = false
+                }) { Text("Supprimer", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { confirmerDoublons = false }) { Text("Annuler") } }
+        )
+    }
+
     if (showChoixCreation) {
         AlertDialog(
             onDismissRequest = { showChoixCreation = false },
@@ -313,9 +369,6 @@ fun CharacterListWithSearchScreen(
                     }
                     SheetTypeChoice("Monstre", "Créature ou monstre") {
                         showChoixCreation = false; onCreateQuick("Monstre")
-                    }
-                    SheetTypeChoice("Boss", "Boss ou antagoniste") {
-                        showChoixCreation = false; onCreateQuick("Boss")
                     }
                     if (erreurImport != null) {
                         Spacer(modifier = Modifier.height(8.dp))
@@ -370,6 +423,57 @@ private fun SheetTypeChoice(type: String, description: String, onClick: () -> Un
     }
 }
 
+/** Couleur associée à un type de fiche (badge, bordure, dossier). */
+@Composable
+private fun sheetTypeColor(type: String): Color = when (type) {
+    "PNJ" -> MaterialTheme.colorScheme.secondary
+    "Monstre" -> MaterialTheme.colorScheme.error
+    "Boss" -> Color(0xFF9C27B0)
+    "Créature" -> MaterialTheme.colorScheme.tertiary
+    "Familier" -> Color(0xFF00BCD4)
+    else -> MaterialTheme.colorScheme.primary
+}
+
+/** Dossier de fiches (outil FICHES du MJ) : un clic l'ouvre et liste les fiches de ce type. */
+@Composable
+private fun SheetFolderCard(
+    type: String,
+    description: String,
+    count: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val couleur = sheetTypeColor(type)
+    Card(
+        modifier = modifier.clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f)),
+        border = BorderStroke(1.dp, couleur.copy(alpha = 0.5f)),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 20.dp, horizontal = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(Icons.Default.Folder, contentDescription = null, tint = couleur, modifier = Modifier.size(56.dp))
+            Spacer(Modifier.height(6.dp))
+            Text(type, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = Color.White)
+            Text(
+                description,
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.8f),
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "$count fiche${if (count > 1) "s" else ""}",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = couleur
+            )
+        }
+    }
+}
+
 @Composable
 fun SearchBar(
     query: String,
@@ -413,16 +517,8 @@ fun EnhancedCharacterListItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val typeColors = mapOf(
-        "PJ" to MaterialTheme.colorScheme.primary,
-        "PNJ" to MaterialTheme.colorScheme.secondary,
-        "Monstre" to MaterialTheme.colorScheme.error,
-        "Boss" to Color(0xFF9C27B0),
-        "Créature" to MaterialTheme.colorScheme.tertiary,
-        "Familier" to Color(0xFF00BCD4)
-    )
-
-    val typeColor = typeColors[character.type] ?: MaterialTheme.colorScheme.primary
+    val typeColor = sheetTypeColor(character.type)
+    val portrait = rememberCharacterPortraitPainter(character.portrait)
     val hpPercent = character.currentHitPoints.toFloat() / character.maxHitPoints.coerceAtLeast(1)
 
     Card(
@@ -440,8 +536,14 @@ fun EnhancedCharacterListItem(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Avatar avec initiales
-                Surface(
+                // Portrait du personnage, ou à défaut avatar avec initiales
+                if (portrait != null) Image(
+                    painter = portrait,
+                    contentDescription = character.name,
+                    contentScale = ContentScale.Crop,
+                    alignment = Alignment.TopCenter,
+                    modifier = Modifier.size(48.dp).clip(CircleShape)
+                ) else Surface(
                     shape = CircleShape,
                     color = typeColor.copy(alpha = 0.15f),
                     modifier = Modifier.size(48.dp)

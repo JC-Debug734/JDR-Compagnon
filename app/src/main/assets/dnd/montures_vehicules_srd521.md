@@ -1,10 +1,8 @@
 # Montures et Véhicules — SRD 5.2.1
 
-Ce fichier recense les montures, animaux, harnachements, véhicules tractés et véhicules de grande taille du SRD 5.2.1.
+## Caractéristiques
 
----
-
-## Montures et autres animaux
+### Montures et autres animaux
 
 | Animal | Capacité de charge | Prix |
 |---|---|---|
@@ -17,11 +15,20 @@ Ce fichier recense les montures, animaux, harnachements, véhicules tractés et 
 | Mule | 210 kg | 8 po |
 | Poney | 112,5 kg | 30 po |
 
-**Montures et cargaison.** Une bête qui tire un véhicule (calèche, charrette, char, traîneau, chariot) peut déplacer jusqu'à 5 fois sa capacité de charge de base, poids du véhicule compris. Plusieurs animaux tirant le même véhicule additionnent leur capacité de charge.
+Pour tracter un véhicule, voir la règle « Montures et cargaison ».
 
----
+### Profils des montures courantes
 
-## Harnachement et véhicules tractés
+| Monture | CA | Pv | Vitesse | FP |
+|---|---|---|---|---|
+| Cheval de selle | 11 | 13 (2d10+2) | 18 m | 1/4 |
+| Cheval de trait | 10 | 15 (2d10+4) | 12 m | 1/4 |
+| Chèvre | 10 | 4 (1d8) | 12 m, escalade 9 m | 0 |
+| Chèvre géante | 11 | 19 (3d10+3) | 12 m, escalade 9 m | 1/2 |
+
+*Profils complets dans le Bestiaire.*
+
+### Harnachement et véhicules tractés
 
 | Objet | Poids | Prix |
 |---|---|---|
@@ -36,13 +43,9 @@ Ce fichier recense les montures, animaux, harnachements, véhicules tractés et 
 | Selle militaire | 15 kg | 20 po |
 | Traîneau | 150 kg | 20 po |
 
-**Barde (armure de monture).** Toute armure de la table Armures est disponible en version Barde : prix ×4, poids ×2 par rapport à l'équivalent standard.
+Effets des selles et des bardes : voir les règles « Selles » et « Barde ».
 
-**Selles.** La selle inclut mors, bride, rênes et équipement nécessaire. La selle militaire donne l'Avantage aux tests de caractéristique pour rester en selle. La selle exotique est requise pour une monture aquatique ou volante.
-
----
-
-## Véhicules aériens et bateaux
+### Véhicules aériens et bateaux
 
 | Véhicule | Vitesse | Équipage | Passagers | Cargaison (tonnes) | CA | Pv | Seuil de dégâts | Prix |
 |---|---|---|---|---|---|---|---|---|
@@ -54,17 +57,7 @@ Ce fichier recense les montures, animaux, harnachements, véhicules tractés et 
 | Galère | 6 km/h | 80 | — | 150 | 15 | 500 | 20 | 30 000 po |
 | Navire de guerre | 3,75 km/h | 60 | 60 | 200 | 15 | 500 | 20 | 25 000 po |
 
-**Vitesse.** Un navire à voile contre un vent fort se déplace à moitié vitesse. Par calme plat, la propulsion se fait à la rame (barges et barques uniquement). En aval, ajoutez la vitesse du courant (généralement 4,5 km/h). Remonter le courant nécessite d'être halé par des animaux de trait depuis la berge. Une barque peut être portée et pèse 50 kg.
-
-**Équipage.** Tout navire plus imposant qu'une barge/barque nécessite un équipage d'employés qualifiés (effectif minimum indiqué dans la table).
-
-**Passagers.** Nombre de passagers de taille P/M logeables en hamac. Un navire à cabines privées transporte 5 fois moins de passagers. Prix indicatif : 5 pa/jour en hamac, 2 po/jour en petite cabine privée.
-
-**Réparation.** 1 jour et 20 po par point de vie réparé (à quai). Durée et coût réduits de moitié dans un chantier naval bien équipé (grande ville).
-
----
-
-## Allure de voyage
+### Allures de voyage
 
 | Allure | Par minute | Par heure | Par jour |
 |---|---|---|---|
@@ -72,21 +65,42 @@ Ce fichier recense les montures, animaux, harnachements, véhicules tractés et 
 | Normale | 90 m | 4,5 km | 36 km |
 | Lente | 60 m | 3 km | 27 km |
 
-- **Rapide** : Désavantage aux tests de Sagesse (Perception ou Survie) et Dextérité (Discrétion).
+Effets de chaque allure : voir la règle « Allure de voyage ».
+
+## Règles
+
+### Montures et cargaison
+
+Une bête qui tire un véhicule (calèche, charrette, char, traîneau, chariot) peut déplacer jusqu'à **5 fois sa capacité de charge** de base, poids du véhicule compris. Plusieurs animaux tirant le même véhicule additionnent leur capacité de charge.
+
+### Selles
+
+La selle inclut mors, bride, rênes et l'équipement nécessaire.
+
+- **Selle militaire** : Avantage aux tests de caractéristique pour rester en selle.
+- **Selle exotique** : requise pour chevaucher une monture aquatique ou volante.
+
+### Barde
+
+La barde est une armure de monture. Toute armure de la table Armures existe en version barde : **prix ×4, poids ×2** par rapport à l'équivalent standard.
+
+### Allure de voyage
+
+- **Rapide** : Désavantage aux tests de Sagesse (Perception ou Survie) et de Dextérité (Discrétion).
 - **Normale** : Désavantage aux tests de Dextérité (Discrétion).
 - **Lente** : Avantage aux tests de Sagesse (Perception ou Survie).
-- À dos de monture, un groupe peut couvrir le double de la distance horaire pendant 1 heure, après quoi les montures doivent prendre un Repos court ou long avant de reprendre cette allure soutenue.
-- Les véhicules terrestres (chariot, calèche...) imposent l'allure normale. À bord d'un bateau, c'est l'embarcation qui détermine la vitesse ; les passagers ne choisissent pas leur allure.
+- **À dos de monture**, un groupe peut couvrir le double de la distance horaire pendant 1 heure ; les montures doivent ensuite prendre un Repos court ou long avant de reprendre cette allure soutenue.
+- Les **véhicules terrestres** (chariot, calèche...) imposent l'allure normale. À bord d'un bateau, c'est l'embarcation qui détermine la vitesse : les passagers ne choisissent pas leur allure.
 
----
+### Vitesse des bateaux
 
-## Profils succincts des montures courantes
+Un navire à voile contre un vent fort se déplace à moitié vitesse. Par calme plat, la propulsion se fait à la rame (barges et barques uniquement). En aval, ajoutez la vitesse du courant (généralement 4,5 km/h). Remonter le courant nécessite d'être halé par des animaux de trait depuis la berge. Une barque peut être portée et pèse 50 kg.
 
-*(Pour les profils complets, se référer au bestiaire.)*
+### Équipage et passagers
 
-| Monture | CA | Pv | Vitesse | FP |
-|---|---|---|---|---|
-| Cheval de selle | 11 | 13 (2d10+2) | 18 m | 1/4 |
-| Cheval de trait | 10 | 15 (2d10+4) | 12 m | 1/4 |
-| Chèvre | 10 | 4 (1d8) | 12 m, escalade 9 m | 0 |
-| Chèvre géante | 11 | 19 (3d10+3) | 12 m, escalade 9 m | 1/2 |
+- **Équipage** : tout navire plus imposant qu'une barge ou une barque nécessite un équipage d'employés qualifiés (effectif minimum indiqué dans la table des véhicules).
+- **Passagers** : nombre de passagers de taille P ou M logeables en hamac. Un navire à cabines privées transporte 5 fois moins de passagers. Prix indicatif : 5 pa/jour en hamac, 2 po/jour en petite cabine privée.
+
+### Réparation des véhicules
+
+1 jour et 20 po par point de vie réparé (à quai). Durée et coût réduits de moitié dans un chantier naval bien équipé (grande ville).

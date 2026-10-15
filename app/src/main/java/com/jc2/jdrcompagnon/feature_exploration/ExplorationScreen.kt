@@ -258,10 +258,6 @@ private fun ExplorationContent(onClose: () -> Unit) {
             modifier = Modifier.weight(1f).fillMaxWidth()
         )
 
-        if (edition == null && e.lieux.isNotEmpty()) {
-            BarreLieux(lieux = e.lieux, onBasculer = { ExplorationSession.basculerLieu(context, it.id) })
-        }
-
         BarreZones(
             e = e,
             enEdition = edition != null,
@@ -457,48 +453,6 @@ private fun BarreZones(
                 Icon(Icons.Default.Add, contentDescription = null, tint = Color.White)
                 Spacer(Modifier.width(4.dp))
                 Text("Zone", color = Color.White)
-            }
-        }
-    }
-}
-
-/**
- * Lieux de la carte de campagne : un appui montre le lieu aux joueurs sur la table (doré, œil
- * ouvert) ou le leur cache.
- */
-@Composable
-private fun BarreLieux(lieux: List<LieuExploration>, onBasculer: (LieuExploration) -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color(0xFF14141E))
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text("Lieux", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.labelMedium)
-        lieux.forEach { lieu ->
-            Surface(
-                onClick = { onBasculer(lieu) },
-                shape = RoundedCornerShape(20.dp),
-                color = if (lieu.visible) ForcedDarkPalette.AccentGold else Color.White.copy(alpha = 0.08f),
-                border = BorderStroke(1.dp, if (lieu.visible) ForcedDarkPalette.AccentGold else Color.White.copy(alpha = 0.4f)),
-            ) {
-                Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        if (lieu.visible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                        contentDescription = if (lieu.visible) "Visible des joueurs" else "Caché aux joueurs",
-                        tint = if (lieu.visible) ForcedDarkPalette.Background else Color.White,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        lieu.emoji + " " + lieu.nom,
-                        color = if (lieu.visible) ForcedDarkPalette.Background else Color.White,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
             }
         }
     }

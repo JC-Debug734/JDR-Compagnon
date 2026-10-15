@@ -72,6 +72,8 @@ data class NetworkMessage(
     val combatJet: JetCombatData? = null,
     // TYPE_QUESTS_STATE : quêtes de la campagne rendues visibles aux joueurs par le MJ.
     val quests: List<QuestJoueurData>? = null,
+    // TYPE_QUEST_ACCEPT : quête acceptée par le joueur.
+    val questId: String? = null,
     // TYPE_GROUP_INFO : vue joueur complète du groupe actif (lieu, position, montures, inventaire...).
     val groupe: GroupeJoueurData? = null,
     // TYPE_CAMPAIGN_STATE : campagne sélectionnée, ses cartes et ses lieux révélés (null = aucune).
@@ -80,6 +82,8 @@ data class NetworkMessage(
     val carteImage: CarteImageData? = null,
     // TYPE_CITY_IMAGE : image d'une ville révélée (envoyée à part, seulement quand elle change).
     val villeImage: VilleImageData? = null,
+    // TYPE_STORY_IMAGE : image de l'histoire personnelle d'un personnage (fiche dans characterId).
+    val imageHistoire: ImageHistoireData? = null,
     // TYPE_REST_OFFER : texte de la proposition de repos long du MJ.
     val reposMessage: String? = null,
     // TYPE_SERVICE_USED : boutique et service utilisés (le personnage est dans characterId).
@@ -92,6 +96,29 @@ data class NetworkMessage(
     val montureId: String? = null,
     val objetNom: String? = null,
     val versMonture: Boolean? = null,
+    // TYPE_MAP_OPENED : carte de campagne ouverte par le MJ en mode exploration (null = aucune).
+    val carteOuverte: CarteOuverteData? = null,
+    // TYPE_MAP_TRACE : tracé en cours sur une carte de campagne (null = aucun).
+    val trace: TraceCarteData? = null,
+    // TYPE_SHARED_IMPORTS : imports partagés par le MJ, et adresse de sa page table d'où les télécharger.
+    val imports: List<ImportPartageData>? = null,
+    val urlTable: String? = null,
+    // TYPE_CONTENT_MISSING : éléments introuvables chez le joueur, et ce qu'il vient de récupérer
+    // (nom du personnage ou de l'objet).
+    val manquants: List<String>? = null,
+    val sujetManquant: String? = null,
+    // TYPE_CITY_POSITION (joueur → MJ) : lieu de la ville où se rend le joueur (null = hors ville).
+    val positionVille: PositionVilleData? = null,
+    // TYPE_CITY_POSITIONS (MJ → tous) : lieu de chaque joueur connecté qui visite une ville.
+    val positionsVille: List<PositionVilleData>? = null,
+    // TYPE_SHOP_TRADE : boutique, objet (objetNom) et sens (true = achat, false = vente) ;
+    // TYPE_SHOP_TRADE_RESULT : `accepted` + compte rendu de la transaction.
+    val commerceBoutiqueId: String? = null,
+    val commerceAchat: Boolean? = null,
+    val commerceMessage: String? = null,
+    // TYPE_SHOP_INVITE : boutique où le MJ invite les joueurs (lecture de scénario) ; `accepted` =
+    // true pour une nouvelle invitation, false pour une simple mise à jour (stock, caisse...).
+    val boutiqueInvitation: BoutiqueJoueurData? = null,
 ) {
     companion object {
         /** MJ → Joueur : envoie un personnage complet (envoi ponctuel). */
@@ -124,6 +151,18 @@ data class NetworkMessage(
 
         /** MJ → Joueur : le MJ a accepté ou refusé la proposition. */
         const val TYPE_CHARACTER_PROPOSAL_RESULT = "character_proposal_result"
+
+        /**
+         * MJ → Joueurs : imports (livres) que le MJ partage, à la connexion et à chaque
+         * changement de sa sélection. Le joueur est invité à télécharger ceux qu'il n'a pas.
+         */
+        const val TYPE_SHARED_IMPORTS = "shared_imports"
+
+        /**
+         * Joueur → MJ : un personnage ou un objet récupéré référence du contenu (classe,
+         * sous-classe, sort, objet...) absent de la bibliothèque du joueur.
+         */
+        const val TYPE_CONTENT_MISSING = "content_missing"
 
         /**
          * MJ → Joueur : état complet de l'horloge de scénario (activée, défilement auto,
@@ -231,8 +270,30 @@ data class NetworkMessage(
         /** MJ → Joueur(s) : image de fond d'une carte, à la connexion et quand elle change. */
         const val TYPE_MAP_IMAGE = "map_image"
 
+        /**
+         * MJ → Joueurs (diffusion) : carte de campagne que le MJ a ouverte en mode exploration, à
+         * chaque changement et à la connexion ; l'appareil du joueur l'affiche automatiquement.
+         * `carteOuverte` null = le MJ l'a quittée.
+         */
+        const val TYPE_MAP_OPENED = "map_opened"
+
+        /**
+         * Tracé sur une carte de campagne (voir TraceCarteSession) — Joueur → MJ : le joueur trace ;
+         * MJ → Joueurs (diffusion) : tracé du MJ ou d'un joueur, à chaque changement et à la connexion.
+         */
+        const val TYPE_MAP_TRACE = "map_trace"
+
         /** MJ → Joueur(s) : image d'une ville révélée, à la connexion et quand elle change. */
         const val TYPE_CITY_IMAGE = "city_image"
+
+        /**
+         * Dans les deux sens : une fiche reçue référence dans son histoire personnelle des images
+         * absentes de l'appareil ; leurs noms sont dans `manquants`, la fiche dans `characterId`.
+         */
+        const val TYPE_STORY_IMAGES_REQUEST = "story_images_request"
+
+        /** Réponse à TYPE_STORY_IMAGES_REQUEST : une image d'histoire par message (`imageHistoire`). */
+        const val TYPE_STORY_IMAGE = "story_image"
 
         /** MJ → Joueurs (diffusion) : le groupe s'arrête pour un repos long, chacun peut le prendre. */
         const val TYPE_REST_OFFER = "rest_offer"
@@ -242,6 +303,12 @@ data class NetworkMessage(
          * trouve le groupe ; le MJ décompte la place utilisée et en est averti.
          */
         const val TYPE_SERVICE_USED = "service_used"
+
+        /** Joueur → MJ : le personnage [characterId] accepte la quête [questId] (panneau de quêtes). */
+        const val TYPE_QUEST_ACCEPT = "quest_accept"
+
+        /** Joueur → MJ : le personnage [characterId] abandonne la quête [questId] (écran Quêtes). */
+        const val TYPE_QUEST_ABANDON = "quest_abandon"
 
         /**
          * MJ → Joueurs (diffusion) : voyage partagé (route tracée sur la carte, vitesse, qui est
@@ -257,6 +324,32 @@ data class NetworkMessage(
          * monture du groupe. Le MJ fait les deux changements (fiche et groupe), puis les rediffuse.
          */
         const val TYPE_MOUNT_BAGGAGE = "mount_baggage"
+
+        /** Joueur → MJ : lieu de la ville où il se rend (positionVille), à chaque déplacement et à la connexion. */
+        const val TYPE_CITY_POSITION = "city_position"
+
+        /**
+         * MJ → Joueurs (diffusion) : où se trouve chaque joueur dans la ville, à chaque déplacement,
+         * connexion ou déconnexion — chacun voit où vont les autres.
+         */
+        const val TYPE_CITY_POSITIONS = "city_positions"
+
+        /**
+         * Joueur → MJ : acheter (commerceAchat = true) ou vendre un objet (objetNom) dans une boutique
+         * du lieu. Le MJ vérifie le stock, la bourse et la caisse, applique (fiche et boutique), puis
+         * répond par TYPE_SHOP_TRADE_RESULT ; fiche et boutique repartent par leurs diffusions habituelles.
+         */
+        const val TYPE_SHOP_TRADE = "shop_trade"
+
+        /** MJ → Joueur : transaction acceptée ou refusée (accepted), avec son compte rendu (commerceMessage). */
+        const val TYPE_SHOP_TRADE_RESULT = "shop_trade_result"
+
+        /**
+         * MJ → Joueurs : invitation à afficher l'écran d'une boutique (lien #boutique: d'un scénario),
+         * même hors d'une ville révélée. Renvoyé (accepted = false) à chaque changement de la
+         * boutique pour tenir à jour stock et caisse ; le commerce passe ensuite par TYPE_SHOP_TRADE.
+         */
+        const val TYPE_SHOP_INVITE = "shop_invite"
     }
 }
 
@@ -285,7 +378,19 @@ data class GroupeJoueurData(
 )
 
 @Serializable
-data class MembreJoueurData(val id: String, val name: String, val type: String, val speed: Int, val location: String = "", val detail: String = "")
+data class MembreJoueurData(
+    val id: String,
+    val name: String,
+    val type: String,
+    val speed: Int,
+    val location: String = "",
+    val detail: String = "",
+    // Points de vie (null pour un joueur sans fiche) et état (à terre, états, épuisement).
+    val pv: Int? = null,
+    val pvMax: Int? = null,
+    val pvTemp: Int = 0,
+    val etat: String = "",
+)
 
 @Serializable
 data class MontureJoueurData(
@@ -298,6 +403,9 @@ data class MontureJoueurData(
     // Identifiant de la monture (Mount.id) et contenu de ses sacoches.
     val id: String = "",
     val bagages: List<String> = emptyList(),
+    val pv: Int? = null,
+    val pvMax: Int? = null,
+    val etat: String = "",
 )
 
 @Serializable
@@ -323,15 +431,58 @@ data class CampagneJoueurData(
     val lieux: List<LieuJoueurData> = emptyList(),
     // Villes révélées qui ont une image : id de la ville → signature de l'image (voir VilleImageStore).
     val imagesVilles: Map<String, String> = emptyMap(),
+    // Réglages d'affichage des lieux révélés, choisis par le MJ (taille d'icône, nom montré ou caché) : id → réglage.
+    val affichageLieux: Map<String, AffichageLieuData> = emptyMap(),
+    // Noms des lieux montrés (true) ou cachés sur chaque carte (réglage de la grille du MJ) : id de carte → montrés.
+    val nomsCartes: Map<String, Boolean> = emptyMap(),
 )
+
+/** Affichage d'un lieu sur la carte (voir ReglagePoint) : [positionTexte] = nom de PositionTexte. */
+@Serializable
+data class AffichageLieuData(val taille: Float = 1f, val afficherTexte: Boolean = true, val positionTexte: String = "BAS")
+
+/**
+ * Tracé sur une carte de campagne (mode exploration) : [etapes] en fractions de la carte, [termine]
+ * après « Fin de tracé » (toutes les vues cadrent alors le trajet), [auteur] = qui l'a tracé.
+ * Aucune étape = tracé effacé.
+ */
+@Serializable
+data class TraceCarteData(
+    val campagneId: String,
+    val carteId: String,
+    val etapes: List<EtapeVoyageData> = emptyList(),
+    val termine: Boolean = false,
+    val auteur: String = "",
+) {
+    /** Même carte, mêmes étapes, même état (l'auteur ne compte pas). */
+    fun memeTrace(autre: TraceCarteData?): Boolean =
+        autre != null && carteId == autre.carteId && etapes == autre.etapes && termine == autre.termine
+}
 
 /** Image d'une ville (JPEG en base64), [signature] identifiant la version envoyée. */
 @Serializable
 data class VilleImageData(val villeId: String, val signature: String, val base64: String)
 
+/** Image de l'histoire personnelle d'un personnage, sous son nom de fichier (référencé dans le .md). */
+@Serializable
+data class ImageHistoireData(val nom: String, val base64: String)
+
 /** Lieu à visiter d'une ville révélée (LieuNotable), vu par les joueurs. */
 @Serializable
-data class LieuJoueurData(val id: String, val villeId: String, val nom: String, val description: String = "")
+data class LieuJoueurData(
+    val id: String,
+    val villeId: String,
+    val nom: String,
+    val description: String = "",
+    // Fonction du lieu (nom de FonctionLieu) et ses réglages, voir LieuNotable.
+    val fonction: String = "AUCUNE",
+    val chancePourcent: Int = 50,
+    val prixPc: Int = 0,
+    val texte: String = "",
+    val queteIds: List<String> = emptyList(),
+    val dd: Int = 12,
+    val valeur: Int = 0,
+)
 
 /**
  * Voyage préparé sur une carte de campagne (voir VoyageSession) : route ([etapes], en fractions de
@@ -373,7 +524,10 @@ data class EtapeVoyageData(val pointId: String? = null, val fx: Float, val fy: F
 @Serializable
 data class ArretVoyageData(val numero: Int, val fx: Float, val fy: Float, val km: Double)
 
-/** Boutique d'une ville révélée, vue par les joueurs : ses services actifs seulement. */
+/**
+ * Boutique d'une ville révélée, vue par les joueurs : services actifs, articles en vente (prix et
+ * stock) et argent dont dispose le marchand pour racheter des objets.
+ */
 @Serializable
 data class BoutiqueJoueurData(
     val id: String,
@@ -382,15 +536,44 @@ data class BoutiqueJoueurData(
     val type: String,
     val marchand: String,
     val services: List<ServiceJoueurData> = emptyList(),
+    val articles: List<ArticleJoueurData> = emptyList(),
+    // Caisse du marchand, en pièces de cuivre (non affichée aux joueurs).
+    val argentPc: Int = 0,
+    // Trait de caractère du marchand (« bourru mais honnête »...), affiché à l'écran de commerce.
+    val traitMarchand: String = "",
+    // Enseigne de la boutique (Boutique.image) : seule une enseigne fournie avec l'app ("enseigne:<clé>")
+    // s'affiche chez un autre joueur ; une image de l'appareil du MJ n'existe que chez lui.
+    val image: String? = null,
+)
+
+/** Article en vente dans une boutique : [prixPc] en pièces de cuivre (cf. Monnaie), [stock] 0 = épuisé. */
+@Serializable
+data class ArticleJoueurData(val nom: String, val type: String = "", val prixPc: Int, val stock: Int)
+
+/**
+ * Lieu d'une ville où se trouve un joueur : [lieuId] null = entrée de la ville (voir VisiteVille) ;
+ * [joueur] et [personnage] sont renseignés par le MJ avant la diffusion.
+ */
+@Serializable
+data class PositionVilleData(
+    val villeId: String,
+    val lieuId: String? = null,
+    val lieuNom: String = "",
+    val joueur: String = "",
+    val personnage: String = "",
+    // Connexion du joueur (renseignée par le MJ) : rattache la position au personnage qu'il incarne.
+    val clientId: String = "",
 )
 
 @Serializable
 data class ServiceJoueurData(
     val nom: String,
     val description: String = "",
-    val prixEnPo: Int,
+    val prixEnPc: Int, // pièces de cuivre (cf. Monnaie)
     // null = illimité.
     val quantiteDisponible: Int? = null,
+    // Effet réel du service (nom de EffetService, déjà déduit du nom par le MJ).
+    val effet: String = "AUCUN",
 )
 
 @Serializable
@@ -405,6 +588,10 @@ data class CarteJoueurData(
     // Signature de l'image de fond (null = pas d'image) : l'image n'est renvoyée que si elle change.
     val imageSignature: String? = null,
 )
+
+/** Carte de campagne ouverte par le MJ (voir TYPE_MAP_OPENED). */
+@Serializable
+data class CarteOuverteData(val campagneId: String, val carteId: String)
 
 @Serializable
 data class CarteImageData(val carteId: String, val signature: String, val base64: String)
@@ -423,6 +610,10 @@ data class QuestJoueurData(
     val status: String,
     val giverName: String? = null,
     val rewards: List<String> = emptyList(),
+    // Personnages qui ont accepté la quête.
+    val accepteePar: List<String> = emptyList(),
+    // Personnages qui ont abandonné la quête.
+    val abandonneePar: List<String> = emptyList(),
 )
 
 /**
@@ -439,7 +630,10 @@ data class EpreuveJoueurData(
     val progres: Int,
     val progresMax: Int,
     // Libellé de l'issue une fois l'épreuve terminée, null tant qu'elle est en cours.
-    val issue: String? = null
+    val issue: String? = null,
+    // Échecs subis sur échecs tolérés (0 = non suivi, hôte d'une ancienne version).
+    val echecs: Int = 0,
+    val echecsMax: Int = 0,
 )
 
 /**
@@ -454,6 +648,19 @@ data class CharacterSummary(
     val race: String,
     val characterClass: String,
     val level: Int
+)
+
+/**
+ * Un import (livre de la bibliothèque) partagé par le MJ. [empreinte] : empreinte de son texte,
+ * pour reconnaître le même livre chez le joueur quel que soit son nom ; [taille] en octets.
+ */
+@Serializable
+data class ImportPartageData(
+    val id: String,
+    val nom: String,
+    val worldId: String,
+    val empreinte: String,
+    val taille: Long = 0,
 )
 
 /** Instance Json partagée pour l'encodage/décodage des messages réseau. */

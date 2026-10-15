@@ -23,19 +23,17 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jc2.jdrcompagnon.feature_combat.domain.model.ProfilCombatMonstre
-import com.jc2.jdrcompagnon.feature_combat.domain.model.ProfilDeduit
+import com.jc2.jdrcompagnon.feature_combat.domain.model.Comportement
+import com.jc2.jdrcompagnon.feature_combat.domain.model.Comportements
+import com.jc2.jdrcompagnon.feature_combat.presentation.CombatSession
+import androidx.compose.runtime.collectAsState
 import com.jc2.jdrcompagnon.feature_combat.domain.model.ProfilIA
 import com.jc2.jdrcompagnon.ui.Character
 import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.theme.ForcedDarkPalette
 
-/** Profil IA d'un personnage (PNJ) : celui choisi sur sa fiche, sinon déduit de sa classe et de ses armes. */
-internal suspend fun profilPersonnage(context: android.content.Context, perso: Character): ProfilDeduit {
-    perso.profilIA?.let { nom -> runCatching { ProfilIA.valueOf(nom) }.getOrNull() }?.let {
-        return ProfilDeduit(it, "Choisi par le MJ sur la fiche")
-    }
-    return ProfilIA.analyserPersonnage(perso.characterClass, attaquesDuPersonnage(context, perso))
-}
+/** Comportement IA d'un personnage : celui choisi sur sa fiche, sinon celui de sa classe (grille de comportement). */
+internal fun comportementPersonnage(perso: Character): Comportement = CombatSession.comportementParDefaut(perso)
 
 @Composable
 private fun CarteComportement(titre: String, contenu: @Composable () -> Unit) {
@@ -51,33 +49,32 @@ private fun CarteComportement(titre: String, contenu: @Composable () -> Unit) {
 }
 
 /**
- * Comportement IA de combat d'un PNJ, sur sa fiche (MJ uniquement) : profil automatique d'après
- * la classe et les armes, ou profil choisi, repris à chaque entrée en combat.
+ * Comportement IA de combat d'un personnage, sur sa fiche (MJ uniquement) : automatique d'après
+ * sa classe (grille de comportement), ou comportement choisi, repris à chaque entrée en combat.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ComportementIaPnjCard(character: Character) {
-    val context = LocalContext.current
-    var auto by remember(character.characterClass, character.equippedSlots, character.equippedItems) { mutableStateOf<ProfilDeduit?>(null) }
-    LaunchedEffect(character.characterClass, character.equippedSlots, character.equippedItems) {
-        auto = ProfilIA.analyserPersonnage(character.characterClass, attaquesDuPersonnage(context, character))
-    }
-    val choisi = character.profilIA?.let { runCatching { ProfilIA.valueOf(it) }.getOrNull() }
-    val actif = choisi ?: auto?.profil
-    // Seul le nom du profil retenu est affiché, pas sa description.
-    CarteComportement("🧠 Comportement en combat (IA)" + (actif?.let { " : ${it.label}" } ?: "")) {
+    val tous by Comportements.tous.collectAsState()
+    val grille by Comportements.grille.collectAsState()
+    val auto = remember(character.characterClass, tous, grille) { Comportements.pourClasse(character.characterClass) }
+    val choisi = Comportements.parId(character.profilIA)
+    val actif = choisi ?: auto
+    // Seul le nom du comportement retenu est affiché, pas sa description.
+    CarteComportement("🧠 Comportement en combat (IA) : ${actif.nom}") {
         Text(
-            "Visible du MJ uniquement. Utilisé quand ce PNJ est ennemi, ou allié confié à l'IA.",
+            "Visible du MJ uniquement. Utilisé en combat quand aucun joueur n'incarne ce personnage. " +
+                "Automatique : selon sa classe (grille de l'outil COMPORTEMENT).",
             style = MaterialTheme.typography.bodySmall,
         )
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             FilterChip(
                 selected = choisi == null,
                 onClick = { GameState.setProfilIA(character.id, null) },
-                label = { Text("Automatique" + (auto?.let { " (${it.profil.label})" } ?: "")) },
+                label = { Text("Automatique (${auto.nom})") },
             )
-            ProfilIA.entries.forEach { p ->
-                FilterChip(selected = choisi == p, onClick = { GameState.setProfilIA(character.id, p.name) }, label = { Text(p.label) })
+            tous.forEach { c ->
+                FilterChip(selected = choisi?.id == c.id, onClick = { GameState.setProfilIA(character.id, c.id) }, label = { Text(c.nom) })
             }
         }
     }

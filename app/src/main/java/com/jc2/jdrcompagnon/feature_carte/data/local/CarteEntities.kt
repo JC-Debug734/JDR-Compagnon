@@ -28,7 +28,9 @@ data class PointInteretEntity(
     val visibleJoueurs: Boolean = false,
     // Événements de la bibliothèque (feature_evenement) rattachés à ce lieu (version 18), ids
     // séparés par des virgules comme boutiqueIds ; vide = aucun.
-    val evenementIds: String = ""
+    val evenementIds: String = "",
+    // Ajoutée en version 28 de la base (AppDatabase.MIGRATION_27_28).
+    val embleme: String? = null
 )
 
 /**
@@ -76,5 +78,16 @@ data class LieuNotableEntity(
     @PrimaryKey val id: String,
     val villeId: String,
     val nom: String,
-    val description: String
+    val description: String,
+    // Fonction du lieu (nom de FonctionLieu) et ses réglages, depuis la version 30.
+    val fonction: String = "AUCUNE",
+    val chancePourcent: Int = 50,
+    val prixPc: Int = 0,
+    val texte: String = "",
+    // Ids de quêtes séparés par des virgules.
+    val queteIds: String = "",
+    val visibleJoueurs: Boolean = true,
+    // Depuis la version 31.
+    val dd: Int = 12,
+    val valeur: Int = 0,
 )

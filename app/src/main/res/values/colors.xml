@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#722F37</color>
+    <!-- Bleu nuit de la barre du bas (IconesAsset.FondIcones) : fond de fenêtre et barre de navigation. -->
+    <color name="bleu_barre_du_bas">#111D30</color>
 </resources>

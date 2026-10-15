@@ -1,5 +1,6 @@
 package com.jc2.jdrcompagnon.feature_boutique.ui
 
+import com.jc2.jdrcompagnon.ui.Monnaie
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,6 +18,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Casino
+import androidx.compose.material.icons.filled.Category
+import kotlinx.coroutines.launch
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Paid
@@ -48,7 +51,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.jc2.jdrcompagnon.feature_boutique.data.BoutiqueImageStore
 import com.jc2.jdrcompagnon.feature_boutique.domain.model.EquipementReference
+import com.jc2.jdrcompagnon.ui.components.VignetteSelecteur
 import com.jc2.jdrcompagnon.feature_boutique.domain.model.TypeBoutique
 import com.jc2.jdrcompagnon.feature_boutique.presentation.BoutiqueDetailUiState
 import com.jc2.jdrcompagnon.feature_boutique.presentation.BoutiqueDetailViewModel
@@ -72,6 +77,10 @@ fun BoutiqueDetailScreen(
     var afficherApprovisionnement by remember { mutableStateOf(false) }
     var afficherConfirmationVisite by remember { mutableStateOf(false) }
     var equipementsDisponibles by remember { mutableStateOf<List<EquipementReference>>(emptyList()) }
+    // Catégorie à ajouter en entier à l'inventaire (appui sur une catégorie) ; "" = à choisir.
+    var categorieAAjouter by remember { mutableStateOf<String?>(null) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var messageInvitation by remember { mutableStateOf<String?>(null) }
 
     val titre = (uiState as? BoutiqueDetailUiState.Success)?.boutique?.nom?.uppercase() ?: "BOUTIQUE"
 
@@ -119,7 +128,26 @@ fun BoutiqueDetailScreen(
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+                    CollapsibleSectionCard(ownerKey, "Enseigne") {
+                        VignetteSelecteur(
+                            catalogue = BoutiqueImageStore,
+                            image = boutique.image,
+                            titreGalerie = "Enseignes",
+                            onChanger = { viewModel.onChangerImage(boutique, it) }
+                        )
+                    }
                     CollapsibleSectionCard(ownerKey, "Marchand") {
+                        // Vendeur ambulant : le MJ le fait apparaître devant les joueurs connectés, où qu'ils soient.
+                        if (boutique.type == TypeBoutique.VENDEUR_AMBULANT) {
+                            androidx.compose.material3.Button(onClick = {
+                                scope.launch {
+                                    messageInvitation = if (com.jc2.jdrcompagnon.network.NetworkSessionManager.inviterBoutique(boutique.id))
+                                        "Le vendeur se présente aux joueurs connectés."
+                                    else "Aucune partie en réseau : invitation impossible."
+                                }
+                            }) { Text("🛒 Faire venir auprès des joueurs") }
+                            messageInvitation?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = TexteSecondaire) }
+                        }
                         Text(boutique.marchand.nom, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
                         Text(
                             "${boutique.type.label} · ${boutique.standing.label}",
@@ -142,7 +170,7 @@ fun BoutiqueDetailScreen(
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Default.Paid, contentDescription = null)
                             Text(
-                                "Argent disponible : ${boutique.argentDisponibleEnPo} po",
+                                "Argent disponible : ${Monnaie.libelle(boutique.argentDisponibleEnPc, zero = "0 po")}",
                                 style = MaterialTheme.typography.titleMedium,
                                 modifier = Modifier.weight(1f).padding(start = 8.dp)
                             )
@@ -184,13 +212,16 @@ fun BoutiqueDetailScreen(
                     }
                     }
 
-                    if (boutique.type == TypeBoutique.MARCHAND) {
+                    if (boutique.type.vendDesObjets) {
                         CollapsibleSectionCard(
                             ownerKey,
                             "Inventaire",
                             headerActions = {
                                 IconButton(onClick = { afficherApprovisionnement = true }) {
                                     Icon(Icons.Default.Sync, contentDescription = "Réapprovisionner")
+                                }
+                                IconButton(onClick = { categorieAAjouter = "" }) {
+                                    Icon(Icons.Default.Category, contentDescription = "Ajouter toute une catégorie")
                                 }
                                 IconButton(onClick = { afficherAjoutArticle = true }) {
                                     Icon(Icons.Default.Add, contentDescription = "Ajouter un article précis")
@@ -200,12 +231,28 @@ fun BoutiqueDetailScreen(
                         if (boutique.inventaire.isEmpty()) {
                             Text("Aucun article", color = TexteSecondaire)
                         }
-                        boutique.inventaire.forEachIndexed { index, article ->
+                        // Articles groupés par catégorie ; appui sur une catégorie : y ajouter tous les équipements.
+                        val parCategorie = boutique.inventaire.withIndex().groupBy { it.value.equipement.type.ifBlank { "Divers" } }.toSortedMap()
+                        parCategorie.forEach { (categorie, articles) ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().clickable { categorieAAjouter = categorie }.padding(top = 8.dp, bottom = 2.dp)
+                        ) {
+                            Text(
+                                "$categorie (${articles.size})",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = com.jc2.jdrcompagnon.ui.theme.ForcedDarkPalette.AccentGold,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Icon(Icons.Default.Add, contentDescription = "Ajouter tous les équipements « $categorie »", tint = com.jc2.jdrcompagnon.ui.theme.ForcedDarkPalette.AccentGold)
+                        }
+                        articles.forEach { (index, article) ->
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(article.equipement.nom)
                                     Text(
-                                        "${article.prixApplique} po · x${article.quantiteStock}",
+                                        "${Monnaie.libelle(article.prixEnPc)} · x${article.quantiteStock}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = TexteSecondaire
                                     )
@@ -223,6 +270,7 @@ fun BoutiqueDetailScreen(
                                     Icon(Icons.Default.Delete, contentDescription = "Retirer ${article.equipement.nom}", tint = MaterialTheme.colorScheme.error)
                                 }
                             }
+                        }
                         }
                         }
                     }
@@ -257,9 +305,9 @@ fun BoutiqueDetailScreen(
                                     Text(service.description, style = MaterialTheme.typography.bodySmall, color = couleur)
                                     Text(
                                         if (service.quantiteDisponible != null)
-                                            "${service.prixEnPo} po · ${service.quantiteDisponible} places"
+                                            "${Monnaie.libelle(service.prixEnPc)} · ${service.quantiteDisponible} places"
                                         else
-                                            "${service.prixEnPo} po",
+                                            Monnaie.libelle(service.prixEnPc),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = couleur
                                     )
@@ -314,11 +362,24 @@ fun BoutiqueDetailScreen(
                 if (afficherAjoutArticle) {
                     AjouterArticleDialog(
                         equipementsDisponibles = equipementsDisponibles,
-                        prixSuggere = { equipement -> viewModel.prixSuggere(equipement.coutBaseEnPo, boutique) },
+                        prixSuggere = { equipement -> viewModel.prixSuggere(equipement.coutBaseEnPc, boutique) },
                         onDismiss = { afficherAjoutArticle = false },
                         onConfirmer = { equipement, prix, quantite, toujoursDisponible ->
                             viewModel.onAjouterArticle(boutique, equipement, prix, quantite, toujoursDisponible)
                             afficherAjoutArticle = false
+                        }
+                    )
+                }
+
+                categorieAAjouter?.let { categorie ->
+                    AjouterCategorieDialog(
+                        equipementsDisponibles = equipementsDisponibles,
+                        categorieInitiale = categorie.ifBlank { null },
+                        dejaEnVente = boutique.inventaire.map { it.equipement.nom }.toSet(),
+                        onDismiss = { categorieAAjouter = null },
+                        onConfirmer = { equipements, quantite ->
+                            viewModel.onAjouterEquipements(boutique, equipements, quantite)
+                            categorieAAjouter = null
                         }
                     )
                 }
@@ -341,7 +402,7 @@ fun BoutiqueDetailScreen(
                         title = { Text("Nouvelle visite") },
                         text = {
                             Text(
-                                if (boutique.type == TypeBoutique.MARCHAND)
+                                if (boutique.type.vendDesObjets)
                                     "Le stock va être renouvelé (les articles marqués « toujours disponibles » sont conservés) et l'argent disponible va être réinitialisé. Continuer ?"
                                 else
                                     "Les services générés vont être renouvelés (ceux que vous avez ajoutés ou paramétrés sont conservés) et l'argent disponible va être réinitialisé. Continuer ?"

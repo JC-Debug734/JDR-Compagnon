@@ -11,7 +11,10 @@ class LierBoutiqueAVilleUseCase(
     private val carteRepository: CarteRepository
 ) {
     suspend operator fun invoke(ville: PointInteret, boutique: Boutique) {
-        boutiqueRepository.sauvegarderBoutique(boutique.copy(villeId = ville.id))
+        // La boutique suit la campagne de sa ville (liste des boutiques filtrée par campagne).
+        boutiqueRepository.sauvegarderBoutique(
+            boutique.copy(villeId = ville.id, campagneId = ville.campagneId.takeUnless { it == PointInteret.SANS_CAMPAGNE })
+        )
         if (boutique.id !in ville.boutiqueIds) {
             carteRepository.sauvegarderPoint(ville.copy(boutiqueIds = ville.boutiqueIds + boutique.id))
         }

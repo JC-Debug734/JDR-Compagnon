@@ -180,18 +180,19 @@ class EtatsTest {
 
     @Test
     fun `un joueur paralyse recoit Aucune action et ne peut pas en declarer`() {
-        CombatSession.demarrer("Test", listOf(pj("Aldric", setOf(ConditionCombat.PARALYSE)), pj("Brune"), monstre("Loup")))
+        CombatSession.demarrer("Test", listOf(pj("Aldric", setOf(ConditionCombat.PARALYSE)).copy(initiative = 20), pj("Brune"), monstre("Loup")))
         CombatSession.commencer()
         var etat = CombatSession.etat.value!!
+        assertEquals("Aldric", etat.actif?.id)
         assertEquals("Aucune action", etat.declarations["Aldric"]?.libelle)
         CombatSession.declarer(DeclarationAction("Aldric", "Attaquer : Épée", actionId = "attaquer"))
         etat = CombatSession.etat.value!!
         assertEquals("Aucune action", etat.declarations["Aldric"]?.libelle)
-        // Libéré pendant la déclaration : il peut de nouveau choisir.
+        // Libéré pendant son tour : il peut de nouveau choisir.
         CombatSession.basculerCondition("Aldric", ConditionCombat.PARALYSE)
         etat = CombatSession.etat.value!!
         assertNull(etat.declarations["Aldric"])
-        assertEquals(PhaseCombat.DECLARATION, etat.phase)
+        assertEquals(PhaseCombat.EN_COURS, etat.phase)
     }
 
     @Test

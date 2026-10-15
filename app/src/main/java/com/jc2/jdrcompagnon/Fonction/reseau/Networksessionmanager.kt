@@ -115,6 +115,43 @@ object NetworkSessionManager {
         }
     }
 
+    // ── Carte de campagne ouverte par le MJ en mode exploration (TYPE_MAP_OPENED) ──
+
+    // Côté MJ : renseignée par l'écran de carte (CarteCampagneScreen) tant qu'il est en exploration.
+    private val _carteOuverteMj = MutableStateFlow<CarteOuverteData?>(null)
+
+    // Côté joueur : dernière carte ouverte par le MJ ; NavGraph y amène le joueur.
+    private val _carteOuverteJoueur = MutableStateFlow<CarteOuverteData?>(null)
+    val carteOuverteJoueur: StateFlow<CarteOuverteData?> = _carteOuverteJoueur.asStateFlow()
+
+    /** MJ : carte affichée en mode exploration (null = quittée), diffusée aux joueurs connectés. */
+    fun signalerCarteOuverte(carte: CarteOuverteData?) {
+        if (_carteOuverteMj.value == carte) return
+        _carteOuverteMj.value = carte
+        if (_role.value == SessionRole.HOST) {
+            gameServer?.sendToAll(networkJson.encodeToString(NetworkMessage(type = NetworkMessage.TYPE_MAP_OPENED, carteOuverte = carte)))
+        }
+    }
+
+    /**
+     * MJ : l'écran de [carte] se ferme (ou quitte l'exploration). Sans effet si une autre carte a
+     * déjà été signalée entre-temps (changement de carte : le nouvel écran s'affiche avant que
+     * l'ancien ne disparaisse).
+     */
+    fun quitterCarteOuverte(carte: CarteOuverteData) {
+        if (_carteOuverteMj.value == carte) signalerCarteOuverte(null)
+    }
+
+    private fun sendCarteOuverteTo(clientId: String) {
+        val carte = _carteOuverteMj.value ?: return
+        gameServer?.sendToClient(clientId, networkJson.encodeToString(NetworkMessage(type = NetworkMessage.TYPE_MAP_OPENED, carteOuverte = carte)))
+    }
+
+    private fun sendTraceTo(clientId: String) {
+        val data = com.jc2.jdrcompagnon.feature_carte.presentation.TraceCarteSession.etat.value ?: return
+        gameServer?.sendToClient(clientId, networkJson.encodeToString(NetworkMessage(type = NetworkMessage.TYPE_MAP_TRACE, trace = data)))
+    }
+
     private fun sendVoyageStateTo(clientId: String) {
         val data = com.jc2.jdrcompagnon.feature_carte.presentation.VoyageSession.etat.value ?: return
         gameServer?.sendToClient(clientId, networkJson.encodeToString(NetworkMessage(type = NetworkMessage.TYPE_VOYAGE_STATE, voyage = data)))
@@ -177,7 +214,9 @@ object NetworkSessionManager {
                 com.jc2.jdrcompagnon.feature_carte.data.CarteGrillePrefs.version,
                 // Image de ville ajoutée/retirée : simple fichier, à surveiller en plus de la base.
                 com.jc2.jdrcompagnon.feature_carte.data.VilleImageStore.version,
-            ) { id, campagnes, _, _ ->
+                // Réglage d'affichage d'un lieu (nom caché, taille d'icône) : rediffusé aux joueurs.
+                com.jc2.jdrcompagnon.feature_carte.data.CartePointPrefs.version,
+            ) { id, campagnes, _, _, _ ->
                 campagnes.firstOrNull { it.id == id }
             }
                 .flatMapLatest { campagne ->
@@ -244,7 +283,9 @@ object NetworkSessionManager {
         competences = emptyList(),
         progres = reussites.coerceAtMost(epreuve.reussitesRequises),
         progresMax = epreuve.reussitesRequises,
-        issue = if (terminee) (if (reussie) "Réussite" else "Épreuve arrêtée") else null
+        issue = if (terminee) (if (reussie) "Réussite" else if (echouee) "Échec" else "Épreuve arrêtée") else null,
+        echecs = echecs.coerceAtMost(epreuve.echecsMax),
+        echecsMax = epreuve.echecsMax,
     )
 
     private fun sendEpreuveStateTo(clientId: String) {
@@ -276,6 +317,81 @@ object NetworkSessionManager {
         synchronized(socket) {
             PrintWriter(socket.getOutputStream(), true).println(line)
         }
+    }
+
+    // ── Images de l'histoire personnelle (voir PersonnageFichiers) ──
+    // Envoyées à part et seulement à la demande : une fiche reçue dont l'histoire cite des
+    // images absentes de l'appareil les réclame à l'expéditeur (MJ ou joueur), qui les envoie une
+    // par une. Une fiche resynchronisée ne renvoie donc jamais des images déjà présentes.
+
+    // "idFiche/nomImage" déjà demandés et pas encore reçus : pas de seconde demande en attendant.
+    private val imagesHistoireDemandees = java.util.Collections.synchronizedSet(HashSet<String>())
+
+    private fun demanderImagesHistoire(context: Context?, character: Character, envoyer: (NetworkMessage) -> Unit) {
+        if (context == null || character.histoirePersonnelle.isBlank()) return
+        scope.launch {
+            val manquants = runCatching {
+                com.jc2.jdrcompagnon.ui.PersonnageFichiers.imagesManquantes(context, character)
+            }.getOrDefault(emptyList()).filter { imagesHistoireDemandees.add("${character.id}/$it") }
+            if (manquants.isEmpty()) return@launch
+            runCatching {
+                envoyer(NetworkMessage(type = NetworkMessage.TYPE_STORY_IMAGES_REQUEST, characterId = character.id, manquants = manquants))
+            }.onFailure { manquants.forEach { imagesHistoireDemandees.remove("${character.id}/$it") } }
+        }
+    }
+
+    private fun envoyerImagesHistoire(context: Context?, message: NetworkMessage, envoyer: (NetworkMessage) -> Unit) {
+        if (context == null) return
+        val characterId = message.characterId ?: return
+        val character = GameState.characters.value.find { it.id == characterId } ?: return
+        scope.launch {
+            message.manquants.orEmpty().forEach { nom ->
+                val fichier = com.jc2.jdrcompagnon.ui.PersonnageFichiers.fichierImage(context, character, nom) ?: return@forEach
+                val octets = runCatching { imageAllegee(fichier) }.getOrNull() ?: return@forEach
+                val base64 = android.util.Base64.encodeToString(octets, android.util.Base64.NO_WRAP)
+                runCatching {
+                    envoyer(NetworkMessage(type = NetworkMessage.TYPE_STORY_IMAGE, characterId = characterId, imageHistoire = ImageHistoireData(nom, base64)))
+                }
+            }
+        }
+    }
+
+    /** Au-delà de 1,5 Mo, l'image est réduite (2048 px max, JPEG) pour ne pas bloquer la connexion. */
+    private fun imageAllegee(fichier: java.io.File): ByteArray {
+        val octets = fichier.readBytes()
+        if (octets.size <= 1_500_000) return octets
+        val bornes = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        android.graphics.BitmapFactory.decodeByteArray(octets, 0, octets.size, bornes)
+        var sample = 1
+        while (maxOf(bornes.outWidth, bornes.outHeight) / (sample * 2) >= 2048) sample *= 2
+        val bitmap = android.graphics.BitmapFactory.decodeByteArray(octets, 0, octets.size, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
+            ?: return octets
+        return java.io.ByteArrayOutputStream().use { out ->
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, out)
+            out.toByteArray()
+        }
+    }
+
+    private fun recevoirImageHistoire(context: Context?, message: NetworkMessage) {
+        if (context == null) return
+        val characterId = message.characterId ?: return
+        val image = message.imageHistoire ?: return
+        val character = GameState.characters.value.find { it.id == characterId } ?: return
+        imagesHistoireDemandees.remove("$characterId/${image.nom}")
+        scope.launch {
+            val octets = runCatching { android.util.Base64.decode(image.base64, android.util.Base64.DEFAULT) }.getOrNull() ?: return@launch
+            runCatching { com.jc2.jdrcompagnon.ui.PersonnageFichiers.enregistrerImage(context, character, image.nom, octets) }
+        }
+    }
+
+    /** Côté MJ : fiche reçue d'un joueur, ses images d'histoire manquantes lui sont demandées. */
+    private fun demanderImagesAuJoueur(clientId: String, character: Character) =
+        demanderImagesHistoire(hostContext, character) { gameServer?.sendToClient(clientId, networkJson.encodeToString(it)) }
+
+    /** Côté joueur : fiche reçue du MJ, ses images d'histoire manquantes lui sont demandées. */
+    private fun demanderImagesAuMj(socket: Socket?, character: Character) {
+        val s = socket ?: return
+        demanderImagesHistoire(playerContext, character) { writeToHost(s, it) }
     }
 
     /** Pousse la fiche d'un personnage vers le MJ (côté joueur), sans attendre sa demande. */
@@ -314,6 +430,25 @@ object NetworkSessionManager {
         }
         scope.launch {
             _connectedClients.collect { if (_role.value == SessionRole.HOST) voyage.reverifier() }
+        }
+
+        // Tracé sur une carte de campagne : celui du MJ part à tous les joueurs, celui d'un joueur
+        // part au MJ (qui le rediffuse). Côté MJ, la page table suit tous les tracés.
+        val trace = com.jc2.jdrcompagnon.feature_carte.presentation.TraceCarteSession
+        trace.diffuseur = { data ->
+            val message = NetworkMessage(type = NetworkMessage.TYPE_MAP_TRACE, trace = data)
+            when (_role.value) {
+                SessionRole.HOST -> gameServer?.sendToAll(networkJson.encodeToString(message))
+                SessionRole.PLAYER -> currentSocket?.let { socket ->
+                    scope.launch { runCatching { writeToHost(socket, message) } }
+                }
+                else -> Unit
+            }
+        }
+        scope.launch {
+            trace.etat.collect { data ->
+                if (_role.value != SessionRole.PLAYER) com.jc2.jdrcompagnon.feature_carte.ui.CarteTable.majTrace(data)
+            }
         }
     }
 
@@ -366,6 +501,8 @@ object NetworkSessionManager {
         stopEverythingInternal()
         _activeGroupId.value = groupId
         _claimedCharacters.value = emptyMap()
+        reservationsEnAttenteDeRetour.clear()
+        nomsClients.clear()
         _pendingProposals.value = emptyMap()
         val appContext = context.applicationContext
         val server = GameServer(
@@ -375,6 +512,8 @@ object NetworkSessionManager {
         )
         server.onMessageReceived = { fromClientId, message -> handleHostIncomingMessage(fromClientId, message) }
         server.onClientConnected = { client ->
+            // D'abord : un joueur qui revient récupère son personnage (et sa place en combat).
+            restaurerReservations(client)
             sendAvailableCharacters(client.id)
             sendTimeStateTo(client.id)
             sendEpreuveStateTo(client.id)
@@ -382,6 +521,11 @@ object NetworkSessionManager {
             sendQuestsStateTo(client.id)
             sendCampaignStateTo(client.id)
             sendVoyageStateTo(client.id)
+            sendCarteOuverteTo(client.id)
+            sendTraceTo(client.id)
+            sendPositionsVilleTo(client.id)
+            sendBoutiqueInviteeTo(client.id)
+            sendSharedImportsTo(client.id)
             reattachProposalsToReconnectedClient(client)
             sendProposalStatesTo(client.id)
             lastCombatSentToClient.remove(client.id)
@@ -391,6 +535,7 @@ object NetworkSessionManager {
         server.onClientDisconnected = { clientId ->
             handlePlayerLeftDiscussion(clientId, characterName = null, disconnected = true)
             releaseCharactersHeldBy(clientId)
+            if (positionsVilleParClient.remove(clientId) != null) diffuserPositionsVille()
             lastCombatSentToClient.remove(clientId)
         }
         gameServer = server
@@ -421,15 +566,75 @@ object NetworkSessionManager {
             combine(CombatSession.etat, _claimedCharacters, _sentCharacterByClient, _connectedClients) { _, _, _, clients -> clients }
                 .collect { clients -> clients.forEach { sendCombatStateTo(it.id) } }
         }
+        // Personnages joués par les joueurs : ils déclarent eux-mêmes en combat, l'IA pilote les autres.
+        CombatSession.personnagesJoues = ::personnagesJoues
+        joueursWatcherJob?.cancel()
+        joueursWatcherJob = scope.launch {
+            combine(_claimedCharacters, _sentCharacterByClient, CombatSession.etat) { _, _, combat -> combat?.id }
+                .collect { CombatSession.marquerJoues(personnagesJoues()) }
+        }
+        startEtatsWatcher()
         startWebServer(appContext)
         LanConnectionService.ensureStarted(appContext, "Partie hébergée sur le réseau local")
     }
 
-    /** Démarre la page d'affichage table (photos/documents), en plus du serveur de partie. */
+    // ── Imports partagés avec les joueurs (voir ImportsPartages) ──
+
+    private fun mondeMj(): String = GameState.currentWorldId() ?: "donjon_et_dragon"
+
+    private fun sharedImportsMessage(context: Context): NetworkMessage = NetworkMessage(
+        type = NetworkMessage.TYPE_SHARED_IMPORTS,
+        imports = runCatching { ImportsPartages.descriptifs(context, mondeMj()) }.getOrDefault(emptyList()),
+        urlTable = _webServerUrl.value,
+    )
+
+    private fun sendSharedImportsTo(clientId: String) {
+        val context = hostContext ?: return
+        scope.launch { gameServer?.sendToClient(clientId, networkJson.encodeToString(sharedImportsMessage(context))) }
+    }
+
+    /** Le MJ a changé les imports partagés : les joueurs connectés reçoivent la nouvelle liste. */
+    fun importsPartagesModifies() {
+        val context = hostContext ?: return
+        scope.launch { gameServer?.sendToAll(networkJson.encodeToString(sharedImportsMessage(context))) }
+    }
+
+    /** Contenu introuvable chez un joueur pour ce qu'il vient de récupérer (TYPE_CONTENT_MISSING). */
+    data class AlerteContenuManquant(val joueur: String, val sujet: String, val manquants: List<String>)
+
+    private val _alertesContenuManquant = MutableStateFlow<List<AlerteContenuManquant>>(emptyList())
+    val alertesContenuManquant: StateFlow<List<AlerteContenuManquant>> = _alertesContenuManquant.asStateFlow()
+
+    fun dismissAlerteContenuManquant(alerte: AlerteContenuManquant) {
+        _alertesContenuManquant.value = _alertesContenuManquant.value - alerte
+    }
+
+    // ── Port de la page d'affichage table : fixe d'une session à l'autre, réglable par le MJ ──
+    const val PORT_TABLE_DEFAUT = 8080
+    val PLAGE_PORTS = 1024..65535
+    private const val PREFS_RESEAU = "reseau_local"
+    private const val CLE_PORT_TABLE = "port_table"
+
+    fun portTable(context: Context): Int =
+        context.getSharedPreferences(PREFS_RESEAU, Context.MODE_PRIVATE)
+            .getInt(CLE_PORT_TABLE, PORT_TABLE_DEFAUT).takeIf { it in PLAGE_PORTS } ?: PORT_TABLE_DEFAUT
+
+    /** Choisi par le MJ avant de démarrer le serveur ; ignoré s'il est hors de [PLAGE_PORTS]. */
+    fun setPortTable(context: Context, port: Int) {
+        if (port !in PLAGE_PORTS) return
+        context.getSharedPreferences(PREFS_RESEAU, Context.MODE_PRIVATE).edit().putInt(CLE_PORT_TABLE, port).apply()
+    }
+
+    /**
+     * Démarre la page d'affichage table (photos/documents), en plus du serveur de partie, sur le
+     * port choisi ([portTable]) ; sur un port libre attribué par l'OS si celui-ci est déjà pris.
+     */
     private fun startWebServer(appContext: Context) {
-        val server = MjWebServer(appContext)
+        val server = runCatching {
+            MjWebServer(appContext, portTable(appContext)).also { it.start(fi.iki.elonen.NanoHTTPD.SOCKET_READ_TIMEOUT, true) }
+        }.getOrElse { MjWebServer(appContext) }
         try {
-            server.start(fi.iki.elonen.NanoHTTPD.SOCKET_READ_TIMEOUT, true)
+            if (!server.isAlive) server.start(fi.iki.elonen.NanoHTTPD.SOCKET_READ_TIMEOUT, true)
             webServer = server
             val ip = getLocalIpAddress() ?: "0.0.0.0"
             _webServerUrl.value = "http://$ip:${server.listeningPort}"
@@ -487,6 +692,9 @@ object NetworkSessionManager {
     private var tableExploration: MjWebServer.ExplorationInfo? = null
 
     /** Carte d'exploration et cases révélées sur la page d'affichage table (null = retirée). */
+    /** Carte (exploration ou carte de campagne) actuellement envoyée à la page table, null = aucune. */
+    val explorationSurTable: MjWebServer.ExplorationInfo? get() = tableExploration
+
     fun updateTableExploration(info: MjWebServer.ExplorationInfo?) {
         tableExploration = info
         webServer?.updateExploration(info)
@@ -684,14 +892,22 @@ object NetworkSessionManager {
     fun sendLootOfferToGroup(groupId: String, itemName: String): String {
         val group = GameState.mjGroups.value.find { it.id == groupId }
         val offerId = java.util.UUID.randomUUID().toString()
-        val targetClientIds = _claimedCharacters.value
-            .filterKeys { characterId -> group?.memberIds?.contains(characterId) == true }
-            .values
-            .toSet()
+        val targetClientIds = joueursDuGroupe(group?.memberIds.orEmpty()).keys
         _activeLootOffers.value = _activeLootOffers.value + (offerId to LootOfferTracking(itemName, targetClientIds))
         val message = NetworkMessage(type = NetworkMessage.TYPE_LOOT_OFFER, lootOfferId = offerId, itemName = itemName)
         targetClientIds.forEach { clientId -> gameServer?.sendToClient(clientId, networkJson.encodeToString(message)) }
         return offerId
+    }
+
+    /**
+     * Joueurs connectés qui incarnent un membre de [memberIds] (clientId → characterId) : personnage
+     * réservé par le joueur, ou envoyé par le MJ à un joueur encore connecté.
+     */
+    fun joueursDuGroupe(memberIds: Collection<String>): Map<String, String> {
+        val connectes = _connectedClients.value.map { it.id }.toSet()
+        val envoyes = _sentCharacterByClient.value.filterKeys { it in connectes }
+        val reserves = _claimedCharacters.value.entries.associate { (characterId, clientId) -> clientId to characterId }
+        return (envoyes + reserves).filterValues { it in memberIds }
     }
 
     /** Ferme une offre de butin (bouton "Fermer" du MJ, ou automatique quand tous ont répondu). */
@@ -885,6 +1101,7 @@ object NetworkSessionManager {
     fun acceptProposal(clientId: String) {
         val character = _pendingProposals.value[clientId] ?: return
         GameState.upsertCharacterFromNetwork(character)
+        demanderImagesAuJoueur(clientId, character)
         _claimedCharacters.value = _claimedCharacters.value + (character.id to clientId)
         _pendingProposals.value = _pendingProposals.value - clientId
         gameServer?.sendToClient(
@@ -962,8 +1179,42 @@ object NetworkSessionManager {
             .map { CharacterSummary(it.id, it.name, it.race, it.characterClass, it.level) }
     }
 
+    // Pseudo de chaque client (par id de connexion), et personnages réservés par un joueur qui vient
+    // de se déconnecter (par pseudo) : rendus automatiquement à sa reconnexion, sous son nouvel id.
+    private val nomsClients = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val reservationsEnAttenteDeRetour = java.util.concurrent.ConcurrentHashMap<String, Set<String>>()
+
+    /**
+     * Un joueur se reconnecte (nouvel id client) : il retrouve les personnages qu'il avait réservés —
+     * libérés à sa déconnexion, ou encore rattachés à son ancienne connexion pas encore détectée
+     * comme coupée. Sans cela il n'incarnait plus son personnage (combat compris) après une coupure.
+     */
+    /**
+     * Personnages incarnés par un joueur : réservés, envoyés par le MJ, ou réservés par un joueur
+     * momentanément déconnecté (il va revenir). Vide hors hébergement.
+     */
+    fun personnagesJoues(): Set<String> {
+        if (_role.value != SessionRole.HOST) return emptySet()
+        return _claimedCharacters.value.keys + _sentCharacterByClient.value.values + reservationsEnAttenteDeRetour.values.flatten()
+    }
+
+    private fun restaurerReservations(client: ConnectedClient) {
+        nomsClients[client.id] = client.displayName
+        val enAttente = reservationsEnAttenteDeRetour.remove(client.displayName).orEmpty()
+        val tenusParAncienneConnexion = _claimedCharacters.value
+            .filter { (_, holder) -> holder != client.id && nomsClients[holder] == client.displayName }.keys
+        val aRendre = (enAttente.filter { it !in _claimedCharacters.value } + tenusParAncienneConnexion).toSet()
+        if (aRendre.isEmpty()) return
+        _claimedCharacters.value = _claimedCharacters.value + aRendre.associateWith { client.id }
+        broadcastAvailableCharacters()
+    }
+
     private fun releaseCharactersHeldBy(clientId: String) {
         val hadClaim = _claimedCharacters.value.any { it.value == clientId }
+        nomsClients[clientId]?.let { nom ->
+            val tenus = _claimedCharacters.value.filterValues { it == clientId }.keys
+            if (tenus.isNotEmpty()) reservationsEnAttenteDeRetour[nom] = reservationsEnAttenteDeRetour[nom].orEmpty() + tenus
+        }
         _claimedCharacters.value = _claimedCharacters.value.filterValues { it != clientId }
         _pendingProposals.value = _pendingProposals.value - clientId
         lastCharacterSentToClient.remove(clientId)
@@ -972,6 +1223,47 @@ object NetworkSessionManager {
 
     // ── Combat (côté MJ) ──
     private var combatWatcherJob: Job? = null
+    private var joueursWatcherJob: Job? = null
+
+    // États des joueurs (fiche et combat) : chaque état nouvellement appliqué à un PJ est annoncé
+    // sur la page d'affichage table, avec son illustration (MjWebServer.annoncerEtat).
+    private var etatsWatcherJob: Job? = null
+
+    private fun startEtatsWatcher() {
+        etatsWatcherJob?.cancel()
+        etatsWatcherJob = scope.launch {
+            var precedent: Map<String, Set<com.jc2.jdrcompagnon.feature_combat.domain.model.ConditionCombat>>? = null
+            combine(GameState.characters, CombatSession.etat) { persos, combat -> etatsDesJoueurs(persos, combat?.combattants.orEmpty()) }
+                .distinctUntilChanged()
+                .collect { actuel ->
+                    // Premier relevé : états déjà présents au lancement de la partie, pas annoncés.
+                    precedent?.let { avant ->
+                        actuel.forEach { (nom, etats) ->
+                            (etats - avant[nom].orEmpty()).forEach { webServer?.annoncerEtat(nom, it.label) }
+                        }
+                    }
+                    precedent = actuel
+                }
+        }
+    }
+
+    /**
+     * États de chaque personnage joueur (par nom) : ceux de sa fiche (champ condition) et, en combat,
+     * ceux de son combattant — Concentration exclue (ce n'est pas un état des règles).
+     */
+    internal fun etatsDesJoueurs(
+        persos: List<Character>,
+        combattants: List<Combattant>,
+    ): Map<String, Set<com.jc2.jdrcompagnon.feature_combat.domain.model.ConditionCombat>> {
+        val pj = persos.filter { it.type == "PJ" }
+        val parId = pj.associateBy { it.id }
+        val resultat = pj.associate { it.name to com.jc2.jdrcompagnon.feature_combat.domain.model.Etats.lire(it.condition).toMutableSet() }
+        combattants.filter { !it.estMonstre }.forEach { c ->
+            val nom = c.characterId?.let { parId[it]?.name } ?: c.nom.takeIf { it in resultat }
+            nom?.let { resultat.getValue(it).addAll(c.conditions) }
+        }
+        return resultat.mapValues { (_, etats) -> etats - com.jc2.jdrcompagnon.feature_combat.domain.model.ConditionCombat.CONCENTRATION }
+    }
 
     // Dernière vue de combat envoyée à chaque client (ligne JSON), pour ne renvoyer que les changements.
     private val lastCombatSentToClient = java.util.concurrent.ConcurrentHashMap<String, String>()
@@ -1028,7 +1320,8 @@ object NetworkSessionManager {
                         cibleId = d.cibleId,
                         cibleNom = d.cibleNom,
                         detail = d.detail,
-                        deplacements = deplacements,
+                        deplacements = if (d.zoneVisee != null) emptyMap() else deplacements,
+                        zoneVisee = d.zoneVisee?.coerceIn(0, com.jc2.jdrcompagnon.feature_combat.domain.model.Terrain.derniere),
                         desengage = desengage,
                         attaquesJoueur = d.attaques,
                         ciblesZone = ciblesZone,
@@ -1052,6 +1345,8 @@ object NetworkSessionManager {
                         desDegats = j.desDegats,
                         totalDegats = j.totalDegats,
                         cibleId = j.cibleId,
+                        arme = j.arme,
+                        typeDegats = j.typeDegats,
                     )
                 )
             }
@@ -1096,8 +1391,13 @@ object NetworkSessionManager {
                 message.character?.let {
                     lastCharacterSentToClient[fromClientId] = it
                     GameState.upsertCharacterFromNetwork(it)
+                    demanderImagesAuJoueur(fromClientId, it)
                 }
             }
+            NetworkMessage.TYPE_STORY_IMAGES_REQUEST -> envoyerImagesHistoire(hostContext, message) {
+                gameServer?.sendToClient(fromClientId, networkJson.encodeToString(it))
+            }
+            NetworkMessage.TYPE_STORY_IMAGE -> recevoirImageHistoire(hostContext, message)
             NetworkMessage.TYPE_CHARACTER_CLAIM_REQUEST -> {
                 val characterId = message.characterId ?: return
                 val alreadyClaimed = _claimedCharacters.value.containsKey(characterId)
@@ -1119,6 +1419,17 @@ object NetworkSessionManager {
                         networkJson.encodeToString(NetworkMessage(type = NetworkMessage.TYPE_CHARACTER_CLAIM_RESPONSE, accepted = false))
                     )
                 }
+            }
+            NetworkMessage.TYPE_CONTENT_MISSING -> {
+                val manquants = message.manquants.orEmpty().takeIf { it.isNotEmpty() } ?: return
+                val alerte = AlerteContenuManquant(
+                    joueur = nomsClients[fromClientId] ?: "Un joueur",
+                    sujet = message.sujetManquant.orEmpty(),
+                    manquants = manquants,
+                )
+                _alertesContenuManquant.value = _alertesContenuManquant.value.filterNot {
+                    it.joueur == alerte.joueur && it.sujet == alerte.sujet
+                } + alerte
             }
             NetworkMessage.TYPE_CHARACTER_PROPOSAL -> {
                 message.character?.let { proposed ->
@@ -1147,6 +1458,13 @@ object NetworkSessionManager {
                 if (message.versMonture == true) GameState.rangerSurMonture(groupe.id, montureId, characterId, objet)
                 else GameState.reprendreDeMonture(groupe.id, montureId, characterId, objet)
             }
+            NetworkMessage.TYPE_MAP_TRACE -> {
+                // Tracé d'un joueur : il devient le tracé de tous (MJ, table, autres joueurs).
+                val nom = _connectedClients.value.firstOrNull { it.id == fromClientId }?.displayName ?: "Un joueur"
+                val data = message.trace?.copy(auteur = nom)
+                com.jc2.jdrcompagnon.feature_carte.presentation.TraceCarteSession.recevoir(data)
+                gameServer?.sendToAll(networkJson.encodeToString(NetworkMessage(type = NetworkMessage.TYPE_MAP_TRACE, trace = data)))
+            }
             NetworkMessage.TYPE_VOYAGE_PRET -> {
                 val nom = _connectedClients.value.firstOrNull { it.id == fromClientId }?.displayName ?: return
                 val session = com.jc2.jdrcompagnon.feature_carte.presentation.VoyageSession
@@ -1156,6 +1474,38 @@ object NetworkSessionManager {
                     session.proposer(route, par = nom, pretNom = nom, mjPret = false)
                 } else {
                     session.marquerPret(nom)
+                }
+            }
+            NetworkMessage.TYPE_CITY_POSITION -> recevoirPositionVille(fromClientId, message.positionVille)
+            NetworkMessage.TYPE_SHOP_TRADE -> recevoirCommerce(fromClientId, message)
+            NetworkMessage.TYPE_QUEST_ACCEPT -> {
+                val questId = message.questId ?: return
+                val nomPerso = GameState.characters.value.firstOrNull { it.id == message.characterId }?.name
+                    ?: nomsClients[fromClientId] ?: "Un joueur"
+                val titre = GameState.mjCampaigns.value.flatMap { it.quests }.firstOrNull { it.id == questId }?.title ?: return
+                scope.launch {
+                    kotlinx.coroutines.withContext(Dispatchers.Main) {
+                        // Inscription (rediffusée aux joueurs avec les quêtes) puis avis au MJ.
+                        GameState.accepterQuete(questId, nomPerso)
+                        hostContext?.let {
+                            android.widget.Toast.makeText(it, "$nomPerso accepte la quête « $titre »", android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+            }
+            NetworkMessage.TYPE_QUEST_ABANDON -> {
+                val questId = message.questId ?: return
+                val nomPerso = GameState.characters.value.firstOrNull { it.id == message.characterId }?.name
+                    ?: nomsClients[fromClientId] ?: return
+                val titre = GameState.mjCampaigns.value.flatMap { it.quests }.firstOrNull { it.id == questId }?.title ?: return
+                scope.launch {
+                    kotlinx.coroutines.withContext(Dispatchers.Main) {
+                        // Retrait (rediffusé aux joueurs avec les quêtes) puis avis au MJ.
+                        GameState.abandonnerQuete(questId, nomPerso)
+                        hostContext?.let {
+                            android.widget.Toast.makeText(it, "$nomPerso abandonne la quête « $titre »", android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    }
                 }
             }
             NetworkMessage.TYPE_SERVICE_USED -> {
@@ -1180,6 +1530,7 @@ object NetworkSessionManager {
                 val offer = _activeLootOffers.value[offerId] ?: return
                 if (message.accepted == true) {
                     val characterId = _claimedCharacters.value.entries.find { it.value == fromClientId }?.key
+                        ?: _sentCharacterByClient.value[fromClientId]
                     characterId?.let { GameState.addItemToBackpack(it, offer.itemName) }
                 }
                 val responded = offer.respondedClientIds + fromClientId
@@ -1194,8 +1545,12 @@ object NetworkSessionManager {
 
     fun stopHosting(context: Context) {
         clientsWatcherJob?.cancel()
+        oublierBoutiqueInviteeMj()
+        _alertesContenuManquant.value = emptyList()
+        etatsWatcherJob?.cancel()
         groupInfoWatcherJob?.cancel()
         combatWatcherJob?.cancel()
+        joueursWatcherJob?.cancel()
         lastCombatSentToClient.clear()
         gameServer?.stop()
         gameServer = null
@@ -1207,11 +1562,15 @@ object NetworkSessionManager {
         _sentCharacterByClient.value = emptyMap()
         lastCharacterSentToClient.clear()
         _claimedCharacters.value = emptyMap()
+        reservationsEnAttenteDeRetour.clear()
+        nomsClients.clear()
         _pendingProposals.value = emptyMap()
         _activeLootOffers.value = emptyMap()
         _activeGroupProposals.value = emptyMap()
         _socialRequests.value = emptyList()
         _discussionNotices.value = emptyList()
+        positionsVilleParClient.clear()
+        _positionsVille.value = emptyList()
         if (_role.value == SessionRole.HOST) _role.value = SessionRole.NONE
         LanConnectionService.stopIfIdle(context.applicationContext)
     }
@@ -1354,12 +1713,13 @@ object NetworkSessionManager {
         attaques: List<String> = emptyList(),
         ciblesZone: List<String> = emptyList(),
         zone: String? = null,
+        zoneVisee: Int? = null,
     ) {
         val combat = _combatEnCours.value ?: return
         val socket = currentSocket ?: return
         val declaration = DeclarationJoueurData(
             combat.id, combat.round, libelle, actionId, cibleId, cibleNom, detail?.takeIf { it.isNotBlank() },
-            deplacementCibleId.takeIf { distanceVisee != null }, distanceVisee, attaques, ciblesZone, zone,
+            deplacementCibleId.takeIf { distanceVisee != null }, distanceVisee, attaques, ciblesZone, zone, zoneVisee,
         )
         // Affichage immédiat, confirmé par le prochain TYPE_COMBAT_STATE du MJ.
         _combatEnCours.value = combat.copy(maDeclaration = declaration)
@@ -1380,11 +1740,14 @@ object NetworkSessionManager {
         bonusDegats: Int = 0,
         // Cible propre à ce jet (Imposition des mains…), sinon celle de la déclaration.
         cibleId: String? = null,
+        // Arme (ou sort) et type de dégâts du jet, pour que le MJ applique résistances et bonus.
+        arme: String? = null,
+        typeDegats: String? = null,
     ): Boolean {
         val combat = _combatEnCours.value ?: return false
         val socket = currentSocket ?: return false
         val totalDegats = formuleDegats?.let { (desDegats.sum() + bonusDegats).coerceAtLeast(0) }
-        val jet = JetCombatData(combat.id, libelle, formule, des, bonus, des.sum() + bonus, manuel, formuleDegats, desDegats, totalDegats, cibleId)
+        val jet = JetCombatData(combat.id, libelle, formule, des, bonus, des.sum() + bonus, manuel, formuleDegats, desDegats, totalDegats, cibleId, arme, typeDegats)
         val message = NetworkMessage(type = NetworkMessage.TYPE_COMBAT_ROLL, combatJet = jet)
         scope.launch { runCatching { writeToHost(socket, message) } }
         return true
@@ -1512,9 +1875,34 @@ object NetworkSessionManager {
     }
 
     /**
-     * Joueur : signale au MJ qu'un personnage a utilisé (et déjà payé, cf. ServicesLieuDialog) un
+     * Joueur : signale au MJ qu'un personnage a utilisé (et déjà payé, cf. CommerceLieuDialog) un
      * service d'une boutique du lieu. Sans connexion, rien n'est envoyé.
      */
+    /**
+     * Le joueur accepte une quête du panneau de quêtes : envoyée au MJ en partie réseau (qui
+     * l'inscrit et rediffuse les quêtes), sinon inscrite directement sur cet appareil.
+     */
+    fun accepterQuete(questId: String, characterId: String, nomPersonnage: String) {
+        val socket = currentSocket
+        if (_role.value == SessionRole.PLAYER && socket != null) {
+            val message = NetworkMessage(type = NetworkMessage.TYPE_QUEST_ACCEPT, questId = questId, characterId = characterId)
+            scope.launch { runCatching { writeToHost(socket, message) } }
+        } else {
+            GameState.accepterQuete(questId, nomPersonnage)
+        }
+    }
+
+    /** Le joueur abandonne une quête acceptée : envoyé au MJ en partie réseau, sinon retiré sur cet appareil. */
+    fun abandonnerQuete(questId: String, characterId: String, nomPersonnage: String) {
+        val socket = currentSocket
+        if (_role.value == SessionRole.PLAYER && socket != null) {
+            val message = NetworkMessage(type = NetworkMessage.TYPE_QUEST_ABANDON, questId = questId, characterId = characterId)
+            scope.launch { runCatching { writeToHost(socket, message) } }
+        } else {
+            GameState.abandonnerQuete(questId, nomPersonnage)
+        }
+    }
+
     fun signalerServiceUtilise(characterId: String, boutiqueId: String, serviceNom: String) {
         val socket = currentSocket ?: return
         val message = NetworkMessage(
@@ -1524,6 +1912,217 @@ object NetworkSessionManager {
             serviceNom = serviceNom,
         )
         scope.launch { runCatching { writeToHost(socket, message) } }
+    }
+
+    // ── Visite d'une ville : où se trouve chaque joueur (TYPE_CITY_POSITION(S)) ──
+
+    // Joueur : lieu de la ville où il se trouve (null = hors ville), renvoyé au MJ à chaque
+    // changement et à chaque (re)connexion.
+    private val _maPositionVille = MutableStateFlow<PositionVilleData?>(null)
+
+    // Joueur : positions de tous les joueurs reçues du MJ ; MJ : positions de ses joueurs connectés.
+    private val _positionsVille = MutableStateFlow<List<PositionVilleData>>(emptyList())
+    val positionsVille: StateFlow<List<PositionVilleData>> = _positionsVille.asStateFlow()
+
+    // MJ : position de chaque client connecté qui visite une ville.
+    private val positionsVilleParClient = java.util.concurrent.ConcurrentHashMap<String, PositionVilleData>()
+
+    init {
+        scope.launch {
+            // Personnage incarné aussi : le MJ affiche son nom à côté du pseudo.
+            combine(_playerState, _maPositionVille, _claimedCharacterId) { etat, position, _ -> etat to position }
+                .collect { (etat, position) ->
+                    val socket = currentSocket
+                    if (_role.value == SessionRole.PLAYER && etat == PlayerConnectionState.CONNECTED && socket != null) {
+                        runCatching { writeToHost(socket, NetworkMessage(type = NetworkMessage.TYPE_CITY_POSITION, positionVille = position)) }
+                    }
+                }
+        }
+    }
+
+    init {
+        // MJ : un joueur qui réclame (ou rend) un personnage après avoir signalé sa position :
+        // le nom du personnage affiché à côté de sa position suit.
+        scope.launch {
+            _claimedCharacters.collect {
+                if (_role.value == SessionRole.HOST && positionsVilleParClient.isNotEmpty()) diffuserPositionsVille()
+            }
+        }
+    }
+
+    /** Joueur : il se rend dans un lieu de la ville ([position] null = il a quitté la ville). */
+    fun signalerPositionVille(position: PositionVilleData?) {
+        _maPositionVille.value = position
+    }
+
+    /** Positions avec le personnage incarné par chaque joueur lu au moment de l'envoi (réclamation tardive comprise). */
+    private fun positionsAJour(): List<PositionVilleData> = positionsVilleParClient.map { (clientId, p) ->
+        val personnage = characterIdOfClient(clientId)?.let { id -> GameState.characters.value.firstOrNull { it.id == id }?.name }
+        p.copy(clientId = clientId, personnage = personnage ?: p.personnage)
+    }
+
+    private fun positionsVilleMessage() =
+        NetworkMessage(type = NetworkMessage.TYPE_CITY_POSITIONS, positionsVille = positionsAJour())
+
+    private fun diffuserPositionsVille() {
+        _positionsVille.value = positionsAJour()
+        gameServer?.sendToAll(networkJson.encodeToString(positionsVilleMessage()))
+    }
+
+    private fun sendPositionsVilleTo(clientId: String) {
+        gameServer?.sendToClient(clientId, networkJson.encodeToString(positionsVilleMessage()))
+    }
+
+    /** MJ : un joueur a changé de lieu ; son pseudo et son personnage sont ajoutés avant diffusion. */
+    private fun recevoirPositionVille(fromClientId: String, position: PositionVilleData?) {
+        if (position == null) {
+            positionsVilleParClient.remove(fromClientId)
+        } else {
+            val joueur = nomsClients[fromClientId]
+                ?: _connectedClients.value.firstOrNull { it.id == fromClientId }?.displayName ?: "Un joueur"
+            val personnage = characterIdOfClient(fromClientId)
+                ?.let { id -> GameState.characters.value.firstOrNull { it.id == id }?.name }.orEmpty()
+            positionsVilleParClient[fromClientId] = position.copy(joueur = joueur, personnage = personnage, clientId = fromClientId)
+        }
+        diffuserPositionsVille()
+    }
+
+    // ── Commerce dans une boutique du lieu (TYPE_SHOP_TRADE) ──
+
+    /** Compte rendu de la dernière transaction (achat ou vente), affiché par l'écran de commerce. */
+    data class ResultatCommerce(val accepte: Boolean, val message: String)
+
+    private val _resultatCommerce = MutableStateFlow<ResultatCommerce?>(null)
+    val resultatCommerce: StateFlow<ResultatCommerce?> = _resultatCommerce.asStateFlow()
+
+    fun effacerResultatCommerce() {
+        _resultatCommerce.value = null
+    }
+
+    /**
+     * Acheter ([achat]) ou vendre [objet] dans une boutique. Connecté à une partie, c'est le MJ qui
+     * vérifie et applique (stock, caisse, fiche) puis répond ; sinon, la transaction est faite sur
+     * l'appareil. Le résultat arrive dans [resultatCommerce].
+     */
+    fun commercer(characterId: String, boutiqueId: String, objet: String, achat: Boolean) {
+        val socket = currentSocket
+        if (_role.value == SessionRole.PLAYER && socket != null) {
+            val message = NetworkMessage(
+                type = NetworkMessage.TYPE_SHOP_TRADE,
+                characterId = characterId,
+                commerceBoutiqueId = boutiqueId,
+                objetNom = objet,
+                commerceAchat = achat,
+            )
+            scope.launch {
+                runCatching { writeToHost(socket, message) }
+                    .onFailure { _resultatCommerce.value = ResultatCommerce(false, "Le MJ est injoignable, réessayez.") }
+            }
+        } else {
+            scope.launch {
+                val r = appliquerCommerce(boutiqueId, characterId, objet, achat)
+                _resultatCommerce.value = ResultatCommerce(r.accepte, r.message)
+            }
+        }
+    }
+
+    private suspend fun appliquerCommerce(boutiqueId: String, characterId: String, objet: String, achat: Boolean) =
+        if (achat) com.jc2.jdrcompagnon.feature_boutique.domain.usecase.CommerceBoutiqueUseCase.acheter(boutiqueId, characterId, objet)
+        else com.jc2.jdrcompagnon.feature_boutique.domain.usecase.CommerceBoutiqueUseCase.vendre(boutiqueId, characterId, objet)
+
+    /** MJ : transaction demandée par un joueur, pour le personnage qu'il incarne seulement. */
+    private fun recevoirCommerce(fromClientId: String, message: NetworkMessage) {
+        val boutiqueId = message.commerceBoutiqueId ?: return
+        val objet = message.objetNom ?: return
+        val characterId = message.characterId ?: return
+        val incarne = _claimedCharacters.value[characterId] == fromClientId ||
+            _sentCharacterByClient.value[fromClientId] == characterId
+        if (!incarne) return
+        scope.launch {
+            val r = appliquerCommerce(boutiqueId, characterId, objet, message.commerceAchat == true)
+            gameServer?.sendToClient(
+                fromClientId,
+                networkJson.encodeToString(
+                    NetworkMessage(type = NetworkMessage.TYPE_SHOP_TRADE_RESULT, accepted = r.accepte, commerceMessage = r.message)
+                ),
+            )
+            val context = hostContext ?: return@launch
+            if (r.accepte) {
+                kotlinx.coroutines.withContext(Dispatchers.Main) {
+                    android.widget.Toast.makeText(context, r.message, android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    // ── Invitation dans une boutique (TYPE_SHOP_INVITE) ──
+
+    // MJ : dernière boutique où les joueurs ont été invités, suivie pour leur renvoyer stock et caisse.
+    private var boutiqueInviteeJob: Job? = null
+    private var boutiqueInvitee: BoutiqueJoueurData? = null
+
+    /**
+     * MJ : invite tous les joueurs connectés à afficher l'écran de la boutique [boutiqueId] (lien
+     * #boutique: de la lecture de scénario). Retourne false sans partie hébergée ou si la boutique
+     * n'existe plus. Ses changements (achats, ventes, services) sont ensuite renvoyés en mise à jour.
+     */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    suspend fun inviterBoutique(boutiqueId: String): Boolean {
+        if (_role.value != SessionRole.HOST || gameServer == null) return false
+        val repo = com.jc2.jdrcompagnon.di.BoutiqueDependencies.repository
+        val boutique = repo.getBoutique(boutiqueId) ?: return false
+        val data = com.jc2.jdrcompagnon.feature_carte.data.CarteSyncReseau.boutiqueJoueur(boutique)
+        boutiqueInvitee = data
+        gameServer?.sendToAll(networkJson.encodeToString(NetworkMessage(type = NetworkMessage.TYPE_SHOP_INVITE, boutiqueInvitation = data, accepted = true)))
+        boutiqueInviteeJob?.cancel()
+        boutiqueInviteeJob = scope.launch {
+            repo.observerToutesLesBoutiques()
+                .map { liste -> liste.firstOrNull { it.id == boutiqueId }?.let { com.jc2.jdrcompagnon.feature_carte.data.CarteSyncReseau.boutiqueJoueur(it) } }
+                .filterNotNull()
+                .distinctUntilChanged()
+                .collect { maj ->
+                    if (maj == boutiqueInvitee) return@collect
+                    boutiqueInvitee = maj
+                    gameServer?.sendToAll(networkJson.encodeToString(NetworkMessage(type = NetworkMessage.TYPE_SHOP_INVITE, boutiqueInvitation = maj, accepted = false)))
+                }
+        }
+        return true
+    }
+
+    /** Joueur (re)connecté : données à jour de la boutique invitée, sans nouvelle invitation. */
+    private fun sendBoutiqueInviteeTo(clientId: String) {
+        val data = boutiqueInvitee ?: return
+        gameServer?.sendToClient(clientId, networkJson.encodeToString(NetworkMessage(type = NetworkMessage.TYPE_SHOP_INVITE, boutiqueInvitation = data, accepted = false)))
+    }
+
+    private fun oublierBoutiqueInviteeMj() {
+        boutiqueInviteeJob?.cancel()
+        boutiqueInviteeJob = null
+        boutiqueInvitee = null
+    }
+
+    // Joueur : boutique où le MJ l'a invité (données tenues à jour), et invitation encore sans réponse.
+    private val _boutiqueInvitation = MutableStateFlow<BoutiqueJoueurData?>(null)
+    val boutiqueInvitation: StateFlow<BoutiqueJoueurData?> = _boutiqueInvitation.asStateFlow()
+    private val _invitationBoutiqueEnAttente = MutableStateFlow(false)
+    val invitationBoutiqueEnAttente: StateFlow<Boolean> = _invitationBoutiqueEnAttente.asStateFlow()
+
+    private fun recevoirInvitationBoutique(message: NetworkMessage) {
+        val data = message.boutiqueInvitation ?: return
+        // Une mise à jour d'une autre boutique que celle affichée ne la remplace pas.
+        if (message.accepted != true && _boutiqueInvitation.value?.id != data.id && _boutiqueInvitation.value != null) return
+        _boutiqueInvitation.value = data
+        if (message.accepted == true) _invitationBoutiqueEnAttente.value = true
+    }
+
+    /** Joueur : invitation acceptée ou refusée (l'écran de la boutique est alors ouvert, ou non). */
+    fun repondreInvitationBoutique() {
+        _invitationBoutiqueEnAttente.value = false
+    }
+
+    private fun oublierInvitationBoutique() {
+        _boutiqueInvitation.value = null
+        _invitationBoutiqueEnAttente.value = false
     }
 
     /** Proposition de groupe affichée dans l'overlay dès sa réception, jusqu'à décision du joueur. */
@@ -1574,6 +2173,7 @@ object NetworkSessionManager {
         val conflict = _pendingCharacterVersionConflict.value ?: return
         GameState.upsertCharacterFromNetwork(conflict.remote)
         _claimedCharacterId.value = conflict.remote.id
+        demanderImagesAuMj(currentSocket, conflict.remote)
         _pendingCharacterVersionConflict.value = null
     }
 
@@ -1582,6 +2182,76 @@ object NetworkSessionManager {
         val conflict = _pendingCharacterVersionConflict.value ?: return
         proposeCharacter(conflict.local)
         _pendingCharacterVersionConflict.value = null
+    }
+
+    // ── Imports partagés par le MJ (voir ImportsPartages) et contenu manquant ──
+
+    private var urlTableMj: String? = null
+    private var importsMj: List<ImportPartageData> = emptyList()
+
+    // Imports du MJ absents de la bibliothèque du joueur : il est invité à les télécharger.
+    private val _importsManquants = MutableStateFlow<List<ImportsPartages.ImportManquant>>(emptyList())
+    internal val importsManquants: StateFlow<List<ImportsPartages.ImportManquant>> = _importsManquants.asStateFlow()
+
+    // « Plus tard » : l'invitation ne revient qu'au prochain envoi de la liste par le MJ.
+    private val _importsMasques = MutableStateFlow(false)
+    val importsMasques: StateFlow<Boolean> = _importsMasques.asStateFlow()
+
+    fun masquerImportsManquants() { _importsMasques.value = true }
+
+    /** Téléchargement en cours (import en cours de téléchargement), ou erreurs du dernier. */
+    data class TelechargementImports(val enCours: String? = null, val erreurs: List<String> = emptyList())
+
+    private val _telechargementImports = MutableStateFlow<TelechargementImports?>(null)
+    val telechargementImports: StateFlow<TelechargementImports?> = _telechargementImports.asStateFlow()
+
+    fun fermerTelechargementImports() { _telechargementImports.value = null }
+
+    /** Télécharge depuis la page table du MJ tous les imports manquants, images comprises. */
+    fun telechargerImportsManquants() {
+        val context = playerContext ?: return
+        val aTelecharger = _importsManquants.value
+        scope.launch {
+            val url = urlTableMj
+            val erreurs = mutableListOf<String>()
+            if (url == null) {
+                erreurs += "La page table du MJ est indisponible : téléchargement impossible."
+            } else {
+                aTelecharger.forEach { manquant ->
+                    _telechargementImports.value = TelechargementImports(enCours = manquant.import.nom)
+                    runCatching { ImportsPartages.telecharger(context, url, manquant) }
+                        .onFailure { erreurs += "${manquant.import.nom} : ${it.message ?: it.javaClass.simpleName}" }
+                }
+            }
+            _importsManquants.value = runCatching { ImportsPartages.manquants(context, importsMj) }.getOrDefault(emptyList())
+            _telechargementImports.value = TelechargementImports(erreurs = erreurs)
+        }
+    }
+
+    // Contenu introuvable pour ce que le joueur vient de récupérer (aussi signalé au MJ).
+    private val _contenuManquant = MutableStateFlow<AlerteContenuManquant?>(null)
+    val contenuManquant: StateFlow<AlerteContenuManquant?> = _contenuManquant.asStateFlow()
+
+    fun dismissContenuManquant() { _contenuManquant.value = null }
+
+    // Derniers manques signalés par sujet : la fiche est renvoyée à chaque modification, le MJ
+    // n'est prévenu qu'une fois par manque.
+    private val manquantsSignales = java.util.concurrent.ConcurrentHashMap<String, Set<String>>()
+
+    private fun verifierContenu(socket: Socket, character: Character) {
+        val context = playerContext ?: return
+        scope.launch {
+            val manquants = runCatching { VerificationContenu.manquantsPersonnage(context, character) }.getOrDefault(emptyList())
+            val dejaSignales = manquantsSignales[character.id].orEmpty()
+            manquantsSignales[character.id] = manquants.toSet()
+            if (manquants.isNotEmpty() && !dejaSignales.containsAll(manquants)) signalerContenuManquant(socket, character.name, manquants)
+        }
+    }
+
+    private fun signalerContenuManquant(socket: Socket, sujet: String, manquants: List<String>) {
+        _contenuManquant.value = AlerteContenuManquant(joueur = _nomJoueurReseau.value.orEmpty(), sujet = sujet, manquants = manquants)
+        val message = NetworkMessage(type = NetworkMessage.TYPE_CONTENT_MISSING, manquants = manquants, sujetManquant = sujet)
+        runCatching { writeToHost(socket, message) }
     }
 
     /** Instance partagée de découverte, créée à la demande. */
@@ -1606,9 +2276,18 @@ object NetworkSessionManager {
         _networkQuests.value = null
         _networkCampagne.value = null
         com.jc2.jdrcompagnon.feature_carte.data.CarteSyncReseau.oublierBoutiquesReseau()
+        oublierInvitationBoutique()
+        _positionsVille.value = emptyList()
+        _resultatCommerce.value = null
         _pendingRestOffer.value = null
         recevoirVoyage(null)
         _activeProposalState.value = emptyMap()
+        urlTableMj = null
+        importsMj = emptyList()
+        _importsManquants.value = emptyList()
+        _telechargementImports.value = null
+        _contenuManquant.value = null
+        manquantsSignales.clear()
         reconnectJob?.cancel()
         readJob?.cancel()
         _playerState.value = PlayerConnectionState.CONNECTING
@@ -1696,7 +2375,20 @@ object NetworkSessionManager {
     private fun handlePlayerIncomingMessage(socket: Socket, message: NetworkMessage) {
         when (message.type) {
             NetworkMessage.TYPE_CHARACTER_PUSH -> {
-                message.character?.let { GameState.upsertCharacterFromNetwork(it) }
+                message.character?.let {
+                    GameState.upsertCharacterFromNetwork(it)
+                    verifierContenu(socket, it)
+                    demanderImagesAuMj(socket, it)
+                }
+            }
+            NetworkMessage.TYPE_STORY_IMAGES_REQUEST -> envoyerImagesHistoire(playerContext, message) { writeToHost(socket, it) }
+            NetworkMessage.TYPE_STORY_IMAGE -> recevoirImageHistoire(playerContext, message)
+            NetworkMessage.TYPE_SHARED_IMPORTS -> {
+                val context = playerContext ?: return
+                urlTableMj = message.urlTable
+                importsMj = message.imports.orEmpty()
+                _importsManquants.value = runCatching { ImportsPartages.manquants(context, importsMj) }.getOrDefault(emptyList())
+                _importsMasques.value = false
             }
             NetworkMessage.TYPE_AVAILABLE_CHARACTERS -> {
                 _availableCharacters.value = message.characters ?: emptyList()
@@ -1704,8 +2396,12 @@ object NetworkSessionManager {
             NetworkMessage.TYPE_CHARACTER_CLAIM_RESPONSE -> {
                 if (message.accepted == true && message.character != null) {
                     val remote = message.character
+                    verifierContenu(socket, remote)
                     val local = GameState.characters.value.find { it.id == remote.id }
-                    if (local != null && local != remote) {
+                    if (local != null && remote.id == _claimedCharacterId.value) {
+                        // Reconnexion : c'est déjà son personnage, sa fiche locale (à jour) est renvoyée au MJ.
+                        sendCharacterUpdateToHost(local)
+                    } else if (local != null && local != remote) {
                         // Le joueur avait gardé une version locale (édition hors-ligne) différente
                         // de celle du MJ : on ne l'écrase pas silencieusement, cf. point 4 du plan.
                         _pendingCharacterVersionConflict.value = CharacterVersionConflict(
@@ -1716,6 +2412,7 @@ object NetworkSessionManager {
                     } else {
                         GameState.upsertCharacterFromNetwork(remote)
                         _claimedCharacterId.value = remote.id
+                        demanderImagesAuMj(socket, remote)
                     }
                 }
                 // Si refusé : le joueur reste sur la liste, mise à jour via le prochain TYPE_AVAILABLE_CHARACTERS.
@@ -1728,6 +2425,7 @@ object NetworkSessionManager {
                     // Version locale refusée après un conflit : on adopte celle du MJ jointe au refus.
                     GameState.upsertCharacterFromNetwork(message.character)
                     _claimedCharacterId.value = message.character.id
+                    demanderImagesAuMj(socket, message.character)
                 }
                 pendingProposalCharacterId = null
             }
@@ -1773,6 +2471,12 @@ object NetworkSessionManager {
                 val itemName = message.itemName ?: return
                 val characterId = _claimedCharacterId.value ?: return
                 GameState.addItemToBackpack(characterId, itemName)
+                val context = playerContext ?: return
+                val monde = GameState.characters.value.find { it.id == characterId }?.worldId
+                scope.launch {
+                    val manquants = runCatching { VerificationContenu.manquantsObjet(context, itemName, monde) }.getOrDefault(emptyList())
+                    if (manquants.isNotEmpty()) signalerContenuManquant(socket, itemName, manquants)
+                }
             }
             NetworkMessage.TYPE_LOOT_OFFER -> {
                 val offerId = message.lootOfferId ?: return
@@ -1845,7 +2549,13 @@ object NetworkSessionManager {
                 val context = playerContext ?: return
                 scope.launch { com.jc2.jdrcompagnon.feature_carte.data.CarteSyncReseau.appliquerImageVille(context, image) }
             }
+            NetworkMessage.TYPE_CITY_POSITIONS -> _positionsVille.value = message.positionsVille.orEmpty()
+            NetworkMessage.TYPE_SHOP_INVITE -> recevoirInvitationBoutique(message)
+            NetworkMessage.TYPE_SHOP_TRADE_RESULT -> _resultatCommerce.value =
+                ResultatCommerce(message.accepted == true, message.commerceMessage ?: if (message.accepted == true) "Transaction effectuée." else "Transaction refusée.")
             NetworkMessage.TYPE_VOYAGE_STATE -> recevoirVoyage(message.voyage)
+            NetworkMessage.TYPE_MAP_OPENED -> _carteOuverteJoueur.value = message.carteOuverte
+            NetworkMessage.TYPE_MAP_TRACE -> com.jc2.jdrcompagnon.feature_carte.presentation.TraceCarteSession.recevoir(message.trace)
             NetworkMessage.TYPE_REST_OFFER -> {
                 _pendingRestOffer.value = message.reposMessage ?: "Le groupe fait halte pour un repos long."
             }
@@ -1860,6 +2570,9 @@ object NetworkSessionManager {
             }
             NetworkMessage.TYPE_COMBAT_STATE -> {
                 _combatEnCours.value = message.combat
+                // Comme chez le MJ : pendant le combat l'horloge ne défile plus en temps réel,
+                // seuls les rounds (6 s chacun, diffusés par le MJ) la font avancer.
+                com.jc2.jdrcompagnon.ui.ScenarioClockState.setPauseCombat(message.combat != null)
             }
         }
     }
@@ -1892,6 +2605,9 @@ object NetworkSessionManager {
                 }
                 currentSocket = socket
                 _playerState.value = PlayerConnectionState.CONNECTED
+                // Le joueur incarnait un personnage : il le redemande (le MJ le lui rend d'office,
+                // ceci couvre un MJ qui aurait relancé sa partie entre-temps).
+                _claimedCharacterId.value?.let { requestClaimCharacter(it) }
                 listenUntilDisconnected(context, socket, target, playerName)
             } catch (e: Exception) {
                 if (manualDisconnect) return@launch
@@ -1903,6 +2619,8 @@ object NetworkSessionManager {
 
     /** Déconnexion volontaire du joueur : coupe aussi les tentatives de reconnexion. */
     fun disconnect(context: Context) {
+        _importsManquants.value = emptyList()
+        _contenuManquant.value = null
         manualDisconnect = true
         reconnectJob?.cancel()
         readJob?.cancel()
@@ -1914,6 +2632,9 @@ object NetworkSessionManager {
         _networkQuests.value = null
         _networkCampagne.value = null
         com.jc2.jdrcompagnon.feature_carte.data.CarteSyncReseau.oublierBoutiquesReseau()
+        oublierInvitationBoutique()
+        _positionsVille.value = emptyList()
+        _resultatCommerce.value = null
         _pendingRestOffer.value = null
         recevoirVoyage(null)
         _activeProposalState.value = emptyMap()
@@ -1931,6 +2652,9 @@ object NetworkSessionManager {
         _epreuveEnCours.value = null
         _epreuveMasquee.value = null
         _combatEnCours.value = null
+        com.jc2.jdrcompagnon.ui.ScenarioClockState.setPauseCombat(false)
+        _carteOuverteJoueur.value = null
+        com.jc2.jdrcompagnon.feature_carte.presentation.TraceCarteSession.recevoir(null)
         _pendingLootOffers.value = emptyList()
         _pendingGroupProposal.value = null
         _pendingProposalFinalCall.value = null
@@ -1939,11 +2663,13 @@ object NetworkSessionManager {
 
     private fun stopEverythingInternal() {
         clientsWatcherJob?.cancel()
+        etatsWatcherJob?.cancel()
         groupInfoWatcherJob?.cancel()
         questsWatcherJob?.cancel()
         campaignWatcherJob?.cancel()
         dernierEtatCampagne = null
         combatWatcherJob?.cancel()
+        joueursWatcherJob?.cancel()
         lastCombatSentToClient.clear()
         gameServer?.stop()
         gameServer = null

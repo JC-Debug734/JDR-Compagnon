@@ -1,0 +1,90 @@
+/* Combat sur la page de la table : ordre d'initiative, tour en cours, récit animé. */
+#combat {
+  position: fixed; z-index: 20; top: 56px; right: 16px; bottom: 16px;
+  width: min(430px, 42vw); overflow-y: auto; display: none;
+  background: rgba(12,12,20,0.82); backdrop-filter: blur(6px);
+  border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 14px 16px;
+}
+#combat h2 { margin: 0 0 2px; font-size: 1.3rem; }
+#combat .sub { color: #b8b8c8; font-size: 0.95rem; margin-bottom: 8px; }
+#combat .son { float: right; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.25);
+  color: #fff; border-radius: 8px; padding: 4px 8px; cursor: pointer; font-size: 0.9rem; }
+.tourBandeau { margin: 6px 0 10px; padding: 10px 12px; border-radius: 10px; font-weight: 800; font-size: 1.25rem;
+  background: rgba(212,175,55,0.18); border: 2px solid #d4af37; color: #ffe08a; animation: pulseTour 1.6s ease-in-out infinite; }
+.tourBandeau.monstre { background: rgba(229,115,115,0.16); border-color: #e57373; color: #ffb3b3; }
+.tourBandeau .ensuite { display: block; font-size: 0.85rem; font-weight: 500; color: #d8d8e4; margin-top: 2px; }
+@keyframes pulseTour { 50% { box-shadow: 0 0 18px rgba(212,175,55,0.55); } }
+
+.fighter {
+  position: relative; display: flex; align-items: center; gap: 10px; padding: 8px 10px; margin-bottom: 6px;
+  border-radius: 8px; background: rgba(255,255,255,0.05); border-left: 4px solid #64b5f6; transition: transform .3s, opacity .4s;
+}
+.fighter.monstre { border-left-color: #e57373; }
+.fighter.actif { background: rgba(255,215,120,0.18); outline: 2px solid #ffd778; transform: scale(1.02); }
+.fighter.joue { opacity: 0.7; }
+.fighter.out { opacity: 0.4; filter: grayscale(0.8); }
+.fighter.touche { animation: secousse 0.45s; }
+.fighter.soigne { animation: lueurSoin 0.9s; }
+@keyframes secousse { 0%,100% { transform: translateX(0); background: rgba(239,83,80,0.35); } 25%,75% { transform: translateX(-6px); } 50% { transform: translateX(6px); } }
+@keyframes lueurSoin { 0% { background: rgba(129,199,132,0.45); } 100% { background: rgba(255,255,255,0.05); } }
+/* Portrait entier (pas de recadrage) : coins arrondis plutôt qu'un rond, qui en rognerait les angles. */
+.fighter .portrait { width: 52px; height: 52px; flex: none; border-radius: 10px; object-fit: contain; background: rgba(0,0,0,0.35); border: 2px solid rgba(255,255,255,0.35); }
+.fighter .init { width: 2.2em; text-align: center; font-weight: 700; font-size: 1.2rem; }
+.fighter .body { flex: 1; min-width: 0; }
+.fighter .name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fighter .meta { font-size: 0.85rem; color: #c8c8d8; }
+.fighter .pos { font-size: 0.85rem; color: #c8c8d8; }
+.fighter .pos.contact { color: #ffd778; font-weight: 600; }
+.flottant { position: absolute; right: 14px; top: 4px; font-weight: 900; font-size: 1.6rem; pointer-events: none;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.9); animation: monte 1.6s ease-out forwards; }
+.flottant.degats { color: #ff6b5e; }
+.flottant.soin { color: #81c784; }
+@keyframes monte { 0% { opacity: 0; transform: translateY(10px) scale(0.7); } 15% { opacity: 1; transform: translateY(0) scale(1.2); } 100% { opacity: 0; transform: translateY(-40px) scale(1); } }
+
+.boss { padding: 10px 12px; margin-bottom: 10px; border-radius: 10px; background: rgba(229,57,53,0.14); border: 2px solid #e53935; }
+.boss.prepare { border-color: #ffa726; animation: alerte 1.2s ease-in-out infinite; }
+@keyframes alerte { 50% { background: rgba(255,167,38,0.25); } }
+.boss .name { font-weight: 800; font-size: 1.15rem; }
+.boss .meta { font-size: 0.85rem; color: #c8c8d8; }
+.boss .bar { height: 10px; }
+.boss .annonce { margin-top: 6px; font-size: 0.9rem; font-style: italic; }
+.bar { height: 6px; border-radius: 3px; background: rgba(255,255,255,0.12); margin-top: 4px; overflow: hidden; }
+.bar > div { height: 100%; transition: width .6s ease; }
+
+/* Récit : les dernières lignes, en bas à gauche de l'écran. */
+#recitTable {
+  position: fixed; z-index: 19; left: 16px; bottom: 16px; width: min(620px, calc(100vw - 480px));
+  display: none; flex-direction: column-reverse; gap: 6px; pointer-events: none;
+}
+#recitTable .ligne { padding: 8px 12px; border-radius: 10px; background: rgba(12,12,20,0.82); backdrop-filter: blur(6px);
+  border-left: 4px solid rgba(255,255,255,0.4); font-size: 1.05rem; animation: entree 0.5s ease-out; }
+#recitTable .ligne.vieille { opacity: 0.55; font-size: 0.95rem; }
+#recitTable .ligne.ROUND, #recitTable .ligne.VICTOIRE { border-left-color: #d4af37; color: #ffe08a; font-weight: 800; }
+#recitTable .ligne.CRITIQUE { border-left-color: #ffd54f; color: #ffe082; font-weight: 800; }
+#recitTable .ligne.TOUCHE, #recitTable .ligne.DEGATS { border-left-color: #ef5350; }
+#recitTable .ligne.RATE { border-left-color: #90a4ae; color: #cfd8dc; }
+#recitTable .ligne.KO, #recitTable .ligne.MORT { border-left-color: #e53935; color: #ff8a80; font-weight: 800; }
+#recitTable .ligne.SOIN { border-left-color: #66bb6a; color: #a5d6a7; }
+#recitTable .ligne.ETAT { border-left-color: #ba68c8; color: #e1bee7; }
+#recitTable .ligne.SAUVEGARDE { border-left-color: #64b5f6; }
+#recitTable .ligne.BOSS { border-left-color: #ffa726; color: #ffcc80; font-style: italic; }
+#recitTable .ligne.DEPLACEMENT { border-left-color: #4dd0e1; }
+#recitTable .ligne.TOUR, #recitTable .ligne.INFO { color: #c8c8d8; font-size: 0.95rem; }
+@keyframes entree { from { opacity: 0; transform: translateX(-30px); } to { opacity: 1; transform: none; } }
+
+/* Grande annonce au centre : nouveau round, « À toi ! », coup critique, chute, victoire. */
+#annonceCombat { position: fixed; inset: 0; z-index: 25; display: none; align-items: center; justify-content: center; pointer-events: none; }
+#annonceCombat.on { display: flex; }
+#annonceCombat .texte { padding: 22px 40px; border-radius: 18px; background: rgba(8,8,14,0.88); font-size: 3rem; font-weight: 900;
+  text-align: center; max-width: 85vw; text-shadow: 0 0 22px rgba(0,0,0,0.9); animation: annonce 2.4s ease-out forwards; }
+@keyframes annonce { 0% { opacity: 0; transform: scale(0.6); } 12% { opacity: 1; transform: scale(1.08); } 20% { transform: scale(1); } 80% { opacity: 1; } 100% { opacity: 0; transform: scale(1.05); } }
+#flashCombat { position: fixed; inset: 0; z-index: 24; pointer-events: none; opacity: 0; }
+#flashCombat.on { animation: flashCombat 0.7s ease-out; }
+@keyframes flashCombat { 0% { opacity: 1; } 100% { opacity: 0; } }
+
+@media (max-width: 700px) {
+  #combat { top: auto; left: 8px; right: 8px; bottom: 8px; width: auto; max-height: 50vh; }
+  #recitTable { left: 8px; right: 8px; width: auto; bottom: calc(50vh + 16px); }
+  #recitTable .ligne.vieille { display: none; }
+  #annonceCombat .texte { font-size: 1.9rem; padding: 16px 22px; }
+}

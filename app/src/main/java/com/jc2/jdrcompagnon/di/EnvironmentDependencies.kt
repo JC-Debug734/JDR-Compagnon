@@ -138,6 +138,7 @@ object EnvironmentDependencies {
 
     /** Image de la galerie (assets/dnd/environnements) associée à chaque environnement d'exemple. */
     private val IMAGES_EXEMPLES = mapOf(
+        "Forêt profonde" to "foret_profonde.webp",
         "Montagnes escarpées" to "montagne_citadelle.webp",
         "Marais fétide" to "marais_maudit.webp",
         "Ville animée" to "cite_marchande.webp"
@@ -154,17 +155,33 @@ object EnvironmentDependencies {
     private fun prefs(context: Context) =
         context.getSharedPreferences("environnements_images_defaut", Context.MODE_PRIVATE)
 
+    /** Images des premiers exemples, couvertes par l'ancien marqueur par monde (clé = worldId). */
+    private val IMAGES_PREMIERE_VAGUE = setOf("Montagnes escarpées", "Marais fétide", "Ville animée")
+
+    // Marqueur par monde ET par image : une image ajoutée plus tard est affectée une fois aux mondes existants.
+    private fun cle(worldId: String, nom: String) = "$worldId|$nom"
+
+    private fun dejaAffectee(context: Context, worldId: String, nom: String): Boolean {
+        val p = prefs(context)
+        return p.getBoolean(cle(worldId, nom), false) ||
+            (nom in IMAGES_PREMIERE_VAGUE && p.getBoolean(worldId, false))
+    }
+
     private fun marquerImagesAffectees(context: Context, worldId: String) =
-        prefs(context).edit().putBoolean(worldId, true).apply()
+        prefs(context).edit().apply {
+            putBoolean(worldId, true)
+            IMAGES_EXEMPLES.keys.forEach { putBoolean(cle(worldId, it), true) }
+        }.apply()
 
     /**
-     * Mondes créés avant l'ajout des images : affecte une fois l'image par défaut aux exemples
-     * restés sans image. Fait une seule fois par monde pour respecter un "Retirer" du MJ ensuite.
+     * Mondes créés avant l'ajout d'une image : l'affecte une fois à l'exemple resté sans image.
+     * Fait une seule fois par monde et par image pour respecter un "Retirer" du MJ ensuite.
      */
     private suspend fun affecterImagesAuxExemplesExistants(context: Context, worldId: String) {
-        if (prefs(context).getBoolean(worldId, false)) return
+        val aFaire = IMAGES_EXEMPLES.keys.filterNot { dejaAffectee(context, worldId, it) }
+        if (aFaire.isEmpty()) return
         repository.observerEnvironnements(worldId).first()
-            .filter { it.imageFileName == null && it.nom in IMAGES_EXEMPLES }
+            .filter { it.imageFileName == null && it.nom in aFaire }
             .forEach { repository.sauvegarder(avecImageParDefaut(context, it)) }
         marquerImagesAffectees(context, worldId)
     }

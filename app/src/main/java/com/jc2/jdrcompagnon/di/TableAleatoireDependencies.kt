@@ -8,6 +8,7 @@ import com.jc2.jdrcompagnon.feature_table_aleatoire.data.TableAleatoireRepositor
 import com.jc2.jdrcompagnon.feature_table_aleatoire.domain.model.EntreeEvenement
 import com.jc2.jdrcompagnon.feature_table_aleatoire.domain.model.EntreeLoot
 import com.jc2.jdrcompagnon.feature_table_aleatoire.domain.model.TableAleatoire
+import com.jc2.jdrcompagnon.feature_table_aleatoire.domain.model.TablesNomsParEspece
 import com.jc2.jdrcompagnon.feature_evenement.domain.model.EffetEvenement
 import com.jc2.jdrcompagnon.feature_evenement.domain.model.Evenement
 import com.jc2.jdrcompagnon.feature_evenement.domain.model.IssueEvenement
@@ -22,6 +23,8 @@ import com.jc2.jdrcompagnon.ui.LectureScenarioState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * ⚠️ Comme HistoriqueDependencies/CarteDependencies/EnvironmentDependencies : pas de Hilt/Koin
@@ -66,14 +69,34 @@ object TableAleatoireDependencies {
         val appContext = context.applicationContext
         CoroutineScope(Dispatchers.IO).launch {
             EvenementDependencies.seedSiNecessaire(appContext, worldId)
-            if (repository.compterPourMonde(worldId) > 0) return@launch
-            val tables = paliers(worldId)
-            EvenementDependencies.repository.sauvegarderTous(
-                tables.flatMap { table -> table.entreesEvenements.mapNotNull { it.evenement?.copy(worldId = worldId) } }
-            )
-            tables.forEach { table -> repository.sauvegarder(table) }
+            if (repository.compterPourMonde(worldId) == 0) {
+                val tables = paliers(worldId)
+                EvenementDependencies.repository.sauvegarderTous(
+                    tables.flatMap { table -> table.entreesEvenements.mapNotNull { it.evenement?.copy(worldId = worldId) } }
+                )
+                tables.forEach { table -> repository.sauvegarder(table) }
+                // Les événements des tables viennent d'être créés : leurs illustrations d'exemple aussi.
+                EvenementDependencies.affecterImagesExemples(appContext, worldId)
+            }
+            seedTablesNoms(appContext, worldId)
         }
     }
+
+    /**
+     * Tables de noms par espèce (TablesNomsParEspece), ajoutées une seule fois par monde — y
+     * compris aux mondes qui avaient déjà des tables. Un drapeau en SharedPreferences évite de
+     * recréer une table que le MJ aurait supprimée.
+     */
+    private suspend fun seedTablesNoms(context: Context, worldId: String) = seedNomsMutex.withLock {
+        val prefs = context.getSharedPreferences("tables_aleatoires_seed", Context.MODE_PRIVATE)
+        val cle = "noms_especes_$worldId"
+        if (prefs.getBoolean(cle, false)) return@withLock
+        TablesNomsParEspece.tables(worldId).forEach { table -> repository.sauvegarder(table) }
+        prefs.edit().putBoolean(cle, true).apply()
+    }
+
+    // Deux ouvertures rapprochées de l'écran liste ne doivent pas créer les tables en double.
+    private val seedNomsMutex = Mutex()
 
     /**
      * Événements des tables d'exemple, sans monde : modèles servant à compléter ceux déjà créés

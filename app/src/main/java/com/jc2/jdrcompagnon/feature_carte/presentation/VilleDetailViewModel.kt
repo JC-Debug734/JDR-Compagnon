@@ -62,6 +62,11 @@ class VilleDetailViewModel(
         viewModelScope.launch { repository.sauvegarderPoint(ville.copy(nom = nom, description = description)) }
     }
 
+    /** Emblème de la ville (miniature des listes), voir VilleEmblemeStore ; null = aucun. */
+    fun onChangerEmbleme(ville: PointInteret, embleme: String?) {
+        viewModelScope.launch { repository.sauvegarderPoint(ville.copy(embleme = embleme)) }
+    }
+
     fun onLierBoutique(ville: PointInteret, boutique: Boutique) {
         viewModelScope.launch { lierBoutiqueAVille(ville, boutique) }
     }

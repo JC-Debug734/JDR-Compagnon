@@ -33,6 +33,10 @@ object ArmorRules {
     /**
      * Calcule la CA détaillée d'un personnage D&D depuis equippedSlots.
      */
+    /** Le personnage porte-t-il une armure lourde (emplacement du torse) ? */
+    fun porteArmureLourde(character: Character): Boolean =
+        character.equippedSlots[EquipmentSlot.TORSO]?.let { armorSpec(it) }?.category == ArmorCategory.HEAVY
+
     fun computeAc(character: Character): AcBreakdown {
         val dexMod = abilityModifier(character.dexterity)
         val torsoItem = character.equippedSlots[EquipmentSlot.TORSO]
@@ -43,6 +47,9 @@ object ArmorRules {
         val appliedDex = when {
             armorSpec == null -> dexMod
             armorSpec.category == ArmorCategory.HEAVY -> 0
+            // Maître des armures intermédiaires (Porteur agile) : jusqu'à +3 avec Dextérité 16+.
+            maxDex != null && armorSpec.category == ArmorCategory.MEDIUM ->
+                dexMod.coerceAtMost(com.jc2.jdrcompagnon.feature_combat.domain.model.Dons.dexMaxArmureIntermediaire(character) ?: maxDex)
             maxDex != null -> dexMod.coerceAtMost(maxDex)
             else -> dexMod
         }
@@ -50,7 +57,9 @@ object ArmorRules {
         val offHandItem = character.equippedSlots[EquipmentSlot.OFF_HAND]
         val hasShield = offHandItem != null && offHandItem.contains("bouclier", ignoreCase = true)
         val shieldBonus = if (hasShield) 2 else 0
-        val total = baseAc + appliedDex + shieldBonus
+        // Style de combat Défense : +1 à la CA en portant une armure.
+        val defense = armorSpec != null && com.jc2.jdrcompagnon.feature_combat.domain.model.Guerrier.aStyle(character, "Défense")
+        val total = baseAc + appliedDex + shieldBonus + if (defense) 1 else 0
 
         val detail = buildString {
             val parts = mutableListOf<String>()
@@ -62,6 +71,9 @@ object ArmorRules {
             }
             if (hasShield) {
                 parts.add("Bouclier")
+            }
+            if (defense) {
+                parts.add("Style Défense +1")
             }
             append(if (parts.isEmpty()) "Base" else parts.joinToString(" + "))
         }
@@ -87,7 +99,8 @@ object ArmorRules {
         val maxDexBonus: Int? = null
     )
 
-    private fun abilityModifier(score: Int): Int = (score - 10) / 2
+    // Arrondi à l'inférieur : 9 → −1, 7 → −2 (une division entière tronquerait vers 0).
+    private fun abilityModifier(score: Int): Int = Math.floorDiv(score - 10, 2)
 
     internal fun abilityModifierPublic(score: Int): Int = abilityModifier(score)
 
@@ -99,20 +112,24 @@ object ArmorRules {
         return when {
             itemName.contains("harnois", ignoreCase = true) ->
                 ArmorSpec("Harnois", 18, ArmorCategory.HEAVY)
+            // Catégories et CA du SRD 5.2.1 (equipement_srd521.md) : la demi-plate, la cuirasse et
+            // l'armure d'écailles sont des armures intermédiaires (Dex max +2).
             itemName.contains("demi-plate", ignoreCase = true) ||
                     itemName.contains("demi plate", ignoreCase = true) ->
-                ArmorSpec("Demi-plate", 15, ArmorCategory.HEAVY)
+                ArmorSpec("Demi-plate", 15, ArmorCategory.MEDIUM, maxDexBonus = 2)
             itemName.contains("clibanion", ignoreCase = true) ->
                 ArmorSpec("Clibanion", 17, ArmorCategory.HEAVY)
             itemName.contains("cotte de mailles", ignoreCase = true) ->
                 ArmorSpec("Cotte de mailles", 16, ArmorCategory.HEAVY)
-            itemName.contains("broigne", ignoreCase = true) ->
-                ArmorSpec("Broigne", 14, ArmorCategory.HEAVY)
-            itemName.contains("plastron", ignoreCase = true) ||
-                    itemName.contains("armure d'écailles", ignoreCase = true) ||
-                    itemName.contains("armure d'ecailles", ignoreCase = true) ||
+            itemName.contains("broigne", ignoreCase = true) ||
                     itemName.contains("armure d'anneaux", ignoreCase = true) ->
-                ArmorSpec("Plastron", 14, ArmorCategory.HEAVY)
+                ArmorSpec("Broigne", 14, ArmorCategory.HEAVY)
+            itemName.contains("cuirasse", ignoreCase = true) ||
+                    itemName.contains("plastron", ignoreCase = true) ->
+                ArmorSpec("Cuirasse", 14, ArmorCategory.MEDIUM, maxDexBonus = 2)
+            itemName.contains("armure d'écailles", ignoreCase = true) ||
+                    itemName.contains("armure d'ecailles", ignoreCase = true) ->
+                ArmorSpec("Armure d'écailles", 14, ArmorCategory.MEDIUM, maxDexBonus = 2)
             itemName.contains("chemise de mailles", ignoreCase = true) ->
                 ArmorSpec("Chemise de mailles", 13, ArmorCategory.MEDIUM, maxDexBonus = 2)
             itemName.contains("cotte de clous", ignoreCase = true) ->
@@ -120,7 +137,7 @@ object ArmorRules {
             itemName.contains("armure de peau", ignoreCase = true) ->
                 ArmorSpec("Armure de peau", 12, ArmorCategory.MEDIUM, maxDexBonus = 2)
             itemName.contains("armure de cuir clouté", ignoreCase = true) ->
-                ArmorSpec("Armure de cuir clouté", 13, ArmorCategory.LIGHT)
+                ArmorSpec("Armure de cuir clouté", 12, ArmorCategory.LIGHT)
             itemName.contains("armure de cuir", ignoreCase = true) ->
                 ArmorSpec("Armure de cuir", 11, ArmorCategory.LIGHT)
             itemName.contains("armure matelassée", ignoreCase = true) ||
@@ -186,6 +203,9 @@ object ArmorRules {
                     lower.contains("tapis") ||
                     lower.contains("carquois") -> EquipmentSlot.BACK
             lower.contains("anneau") ||
+                    lower.contains("bague") ||
+                    lower.contains("chevalière") ||
+                    lower.contains("chevaliere") ||
                     lower.contains("amulette") ||
                     lower.contains("collier") ||
                     lower.contains("bracelet") ||
@@ -299,16 +319,28 @@ object ArmorRules {
     fun isGrimoireSupply(itemName: String): Boolean = isEncre(itemName) || isParchemin(itemName) || isCalligraphie(itemName)
 
     /**
-     * Objet volumineux pouvant être arrimé sur un emplacement EXTÉRIEUR du sac à dos
-     * (cf. Character.backpackExteriorSlots), ex. sac de couchage, corde.
+     * Objet arrimable sur un emplacement EXTÉRIEUR du sac à dos (cf. Character.backpackExteriorSlots) :
+     * tout objet (sac de couchage, corde, lanterne, potion...) sauf l'équipement — armes, armures
+     * (boucliers et casques compris), vêtements (capes et manteaux compris), accessoires — et le
+     * sac à dos lui-même.
      */
-    fun isBackExteriorItem(itemName: String): Boolean {
+    fun isBackExteriorItem(itemName: String): Boolean =
+        !isWeaponItem(itemName) && !isArmorItem(itemName) && !isClothing(itemName) &&
+            !isCloakItem(itemName) && !isBackpackItem(itemName) &&
+            slotForItem(itemName) !in setOf(EquipmentSlot.ACCESSORY, EquipmentSlot.HEAD, EquipmentSlot.OFF_HAND)
+
+    /** Armure (seul objet admis sur le torse) : armure reconnue par la CA, ou tout objet nommé « armure ». */
+    fun isArmorItem(itemName: String): Boolean =
+        armorSpec(itemName) != null || (itemName.contains("armure", ignoreCase = true) && !itemName.contains("bouclier", ignoreCase = true))
+
+    /** Cape ou manteau (porté sur l'emplacement Dos). */
+    fun isCloakItem(itemName: String): Boolean {
         val lower = itemName.lowercase()
-        return listOf(
-            "corde", "sac de couchage", "grappin", "tente", "natte", "hamac",
-            "couverture", "bélier portable", "belier portable"
-        ).any { lower.contains(it) }
+        return contientMot(lower, "cape") || lower.contains("manteau")
     }
+
+    /** Seuls objets admis sur l'emplacement Dos : capes (et manteaux) et carquois. */
+    fun isBackSlotItem(itemName: String): Boolean = isCloakItem(itemName) || isQuiverItem(itemName)
 
     /**
      * Focaliseur (arcanique, druidique, symbole sacré, sacoche à composantes) : aucune classe
@@ -345,18 +377,22 @@ object ArmorRules {
     /**
      * Un objet est-il autorisé sur cet emplacement précis ? Armes : mains et armes de dos
      * seulement, qui n'acceptent rien d'autre (sauf le bouclier en main secondaire). Tenues :
-     * Vêtements seulement. Sac à dos : son emplacement dédié. Les autres emplacements (tête,
-     * torse, dos, accessoire, utilitaires) acceptent tout le reste (potion, bourse, divers...).
+     * Vêtements seulement. Sac à dos : son emplacement dédié. Torse : armures seulement. Dos :
+     * capes et carquois seulement. Les autres emplacements (tête, accessoire, utilitaires)
+     * acceptent tout le reste, hors armures (potion, bourse, divers...).
      */
     fun itemAllowedInSlot(itemName: String, slot: EquipmentSlot): Boolean = when (slot) {
         EquipmentSlot.CLOTHING -> isClothing(itemName)
         EquipmentSlot.BACKPACK -> isBackpackItem(itemName)
+        EquipmentSlot.TORSO -> isArmorItem(itemName)
+        EquipmentSlot.BACK -> isBackSlotItem(itemName)
         // Mains et armes de dos : des armes uniquement (plus le bouclier en main secondaire).
         EquipmentSlot.MAIN_HAND -> isWeaponItem(itemName)
         EquipmentSlot.OFF_HAND -> isWeaponItem(itemName) || slotForItem(itemName) == EquipmentSlot.OFF_HAND
         EquipmentSlot.BACK_WEAPON_1, EquipmentSlot.BACK_WEAPON_2, EquipmentSlot.BACK_WEAPON_3 -> isWeaponItem(itemName)
-        // Les armes ne vont que dans les mains / le dos, les tenues que dans Vêtements.
-        else -> !isWeaponItem(itemName) && !isClothing(itemName)
+        // Les armes ne vont que dans les mains / le dos, les tenues que dans Vêtements, les
+        // armures que sur le torse.
+        else -> !isWeaponItem(itemName) && !isClothing(itemName) && !isArmorItem(itemName)
     }
 
     /**

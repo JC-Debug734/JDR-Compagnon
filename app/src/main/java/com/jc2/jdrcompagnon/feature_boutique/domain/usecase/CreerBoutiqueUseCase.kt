@@ -34,11 +34,16 @@ class CreerBoutiqueUseCase(
             nom = nom,
             standing = standing,
             marchand = Marchand(nom = nomMarchand, trait = genererTraitCaractere()),
-            employes = genererEmployes(standing),
-            inventaire = if (type == TypeBoutique.MARCHAND) genererInventaire(standing, monde) else emptyList(),
+            employes = if (type == TypeBoutique.VENDEUR_AMBULANT) emptyList() else genererEmployes(standing),
+            // Vendeur ambulant : petit étal (5 articles), seul, sans employés.
+            inventaire = when (type) {
+                TypeBoutique.MARCHAND -> genererInventaire(standing, monde)
+                TypeBoutique.VENDEUR_AMBULANT -> genererInventaire(standing, monde, nbArticles = 5)
+                else -> emptyList()
+            },
             type = type,
             services = if (type == TypeBoutique.MARCHAND) emptyList() else genererServices(type, standing),
-            argentDisponibleEnPo = determinerBudgetAchat(standing)
+            argentDisponibleEnPc = determinerBudgetAchat(standing) * com.jc2.jdrcompagnon.ui.Monnaie.PC_PAR_PO
         )
     }
 }

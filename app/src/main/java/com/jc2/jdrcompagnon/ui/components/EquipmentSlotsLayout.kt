@@ -33,6 +33,7 @@ import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdRepository
 import com.jc2.jdrcompagnon.ui.screens.joueur.character.ArmorRules
 import com.jc2.jdrcompagnon.ui.screens.joueur.character.Harmonisation
 import com.jc2.jdrcompagnon.ui.screens.joueur.character.Focaliseurs
+import com.jc2.jdrcompagnon.ui.screens.joueur.character.Malediction
 import com.jc2.jdrcompagnon.ui.screens.joueur.slotColor
 import com.jc2.jdrcompagnon.ui.screens.joueur.slotIcon
 import com.jc2.jdrcompagnon.ui.screens.joueur.itemIcon
@@ -140,10 +141,21 @@ fun EquipmentManagementContent(character: Character, isMjMode: Boolean = false, 
         }
     }
 
+    /** Objet maudit porté : prévient le joueur (true) au lieu de le laisser l'enlever. */
+    fun refuserSiMaudit(item: String?): Boolean {
+        if (item == null || !Malediction.bloque(currentCharacter, item)) return false
+        android.widget.Toast.makeText(context, Malediction.message(item), android.widget.Toast.LENGTH_LONG).show()
+        clearSelection()
+        return true
+    }
+
     fun placeOnSlot(target: EquipmentSlot) {
         val item = selectedItem ?: return
         if (!ArmorRules.itemAllowedInSlot(item, target)) return
         val originSlot = selectedFromSlot
+        if (originSlot != null && originSlot != target && refuserSiMaudit(item)) return
+        // L'emplacement visé est occupé par un objet maudit : il ne se laisse pas déloger.
+        if (originSlot != target && refuserSiMaudit(currentCharacter.equippedSlots[target])) return
         // Une pile (javelines...) se déplace entière.
         val originCount = originSlot?.let { currentCharacter.stackCount(it) } ?: 1
         if (originSlot != null && originSlot != target) {
@@ -184,6 +196,7 @@ fun EquipmentManagementContent(character: Character, isMjMode: Boolean = false, 
 
     fun returnSelectedToBackpack() {
         val item = selectedItem ?: return
+        if (selectedFromSlot != null && refuserSiMaudit(item)) return
         if (selectedFromSlot != null) {
             GameState.unequipFromSlot(currentCharacter.id, item, selectedFromSlot)
             refresh()
@@ -251,7 +264,9 @@ fun EquipmentManagementContent(character: Character, isMjMode: Boolean = false, 
             },
             canReturnToBackpack = selectedFromSlot != null,
             onReturnToBackpack = { returnSelectedToBackpack() },
-            onDelete = { pendingDeleteItem = selectedItem },
+            onDelete = {
+                if (selectedFromSlot == null || !refuserSiMaudit(selectedItem)) pendingDeleteItem = selectedItem
+            },
             onCancel = { clearSelection() }
         )
 
@@ -317,6 +332,7 @@ fun EquipmentManagementContent(character: Character, isMjMode: Boolean = false, 
         EquipmentItemDetailDialog(
             itemName = item,
             character = currentCharacter,
+            isMjMode = isMjMode,
             onDismiss = { selectedItemDetail = null }
         )
     }
@@ -519,10 +535,10 @@ private fun PurseCard(character: Character, isMjMode: Boolean) {
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Icon(Icons.Default.Payments, contentDescription = null, tint = Color(0xFFD4AF37))
-                    Text("Bourse d'or", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = SheetTextPrimary)
+                    Text("Bourse", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = SheetTextPrimary)
                 }
                 Text(
-                    text = "${character.gold} po",
+                    text = com.jc2.jdrcompagnon.ui.Monnaie.libelleBourse(character),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFFD4AF37)
@@ -542,11 +558,11 @@ private fun PurseCard(character: Character, isMjMode: Boolean) {
         AlertDialog(
             onDismissRequest = { showDetail = false },
             icon = { Icon(Icons.Default.Payments, contentDescription = null, tint = Color(0xFFD4AF37)) },
-            title = { Text("Bourse d'or") },
+            title = { Text("Bourse") },
             text = {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        text = "${character.gold} po",
+                        text = "Valeur : ${com.jc2.jdrcompagnon.ui.Monnaie.libelle(com.jc2.jdrcompagnon.ui.Monnaie.totalPc(character), zero = "0 po")}",
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFFD4AF37)
@@ -573,22 +589,43 @@ private fun PurseCard(character: Character, isMjMode: Boolean) {
                     Spacer(modifier = Modifier.height(12.dp))
                     HorizontalDivider(thickness = 0.5.dp, color = SheetBorder)
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("Équivalence en pièces", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = SheetTextPrimary)
+                    Text("Pièces", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = SheetTextPrimary)
+                    // Quantité réelle de chaque sorte de pièce ; le MJ l'ajuste pièce par pièce.
+                    val pieces = listOf(
+                        "Pièces de platine (pp)" to character.platinum,
+                        "Pièces d'or (po)" to character.gold,
+                        "Pièces d'électrum (pe)" to character.electrum,
+                        "Pièces d'argent (pa)" to character.silver,
+                        "Pièces de cuivre (pc)" to character.copper,
+                    )
+                    fun modifier(index: Int, delta: Int) {
+                        val q = pieces.map { it.second }.toMutableList()
+                        q[index] = (q[index] + delta).coerceAtLeast(0)
+                        GameState.setPieces(character.id, pp = q[0], po = q[1], pe = q[2], pa = q[3], pc = q[4])
+                    }
                     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        listOf(
-                            "Pièces de platine (pp)" to character.gold / 10,
-                            "Pièces d'or (po)" to character.gold,
-                            "Pièces d'argent (pa)" to character.gold * 10,
-                            "Pièces de cuivre (pc)" to character.gold * 100
-                        ).forEach { (label, quantite) ->
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(label, style = MaterialTheme.typography.bodySmall, color = SheetTextSecondary)
+                        pieces.forEachIndexed { index, (label, quantite) ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(label, style = MaterialTheme.typography.bodySmall, color = SheetTextSecondary, modifier = Modifier.weight(1f))
+                                if (isMjMode) {
+                                    IconButton(onClick = { modifier(index, -1) }, enabled = quantite > 0, modifier = Modifier.size(32.dp)) {
+                                        Icon(Icons.Default.Remove, contentDescription = "Retirer une pièce", modifier = Modifier.size(16.dp))
+                                    }
+                                }
                                 Text(quantite.toString(), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = SheetTextPrimary)
+                                if (isMjMode) {
+                                    IconButton(onClick = { modifier(index, 1) }, modifier = Modifier.size(32.dp)) {
+                                        Icon(Icons.Default.Add, contentDescription = "Ajouter une pièce", modifier = Modifier.size(16.dp))
+                                    }
+                                }
                             }
                         }
                     }
                     if (isMjMode) {
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                             IconButton(onClick = { GameState.addGold(character.id, -10) }) {
                                 Icon(Icons.Default.Remove, contentDescription = "Retirer 10 po")
@@ -1501,6 +1538,7 @@ private fun SelectableItemChip(
 private fun EquipmentItemDetailDialog(
     itemName: String,
     character: Character,
+    isMjMode: Boolean,
     onDismiss: () -> Unit
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -1520,6 +1558,23 @@ private fun EquipmentItemDetailDialog(
             ) {
                 if (itemDetails != null) {
                     val item = itemDetails!!
+                    com.jc2.jdrcompagnon.ui.screens.mj.library.srd.ObjetImage(item, hauteurMax = 200.dp)
+                    if (item.maudit) {
+                        val levee = Malediction.estLevee(character, item.name)
+                        Text(
+                            if (levee) "Objet maudit — malédiction levée : il peut être retiré."
+                            else "Objet maudit : une fois équipé, il ne peut plus être retiré." +
+                                item.malediction.takeIf { it.isNotBlank() }?.let { " $it" }.orEmpty(),
+                            fontWeight = FontWeight.Bold,
+                            color = if (levee) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                        )
+                        // Délivrance des malédictions : réservée au MJ.
+                        if (isMjMode) {
+                            TextButton(onClick = { GameState.leverMalediction(character.id, item.name, !levee) }) {
+                                Text(if (levee) "Rétablir la malédiction" else "Lever la malédiction")
+                            }
+                        }
+                    }
                     if (item.category.isNotBlank()) Text("Catégorie : ${item.category}")
                     if (item.cost.isNotBlank()) Text("Coût : ${item.cost}")
                     if (item.weight.isNotBlank()) Text("Poids : ${item.weight}")

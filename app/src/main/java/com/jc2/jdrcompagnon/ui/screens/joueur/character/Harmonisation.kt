@@ -34,13 +34,17 @@ object Harmonisation {
         "nain", "elfe", "halfelin", "gnome", "humain", "orc", "drakeide", "tieffelin", "tiefelin", "goliath", "aasimar",
     )
 
-    /** Nombre maximum d'objets harmonisés : 3, ou 4/5/6 pour un Artificier de niveau 10/14/18. */
+    /**
+     * Nombre maximum d'objets harmonisés : 3, ou 4/5/6 pour un Artificier de niveau 10/14/18, 4
+     * pour un Roublard Voleur de niveau 13 (Utilisation d'objets magiques).
+     */
     fun maximum(character: Character): Int {
         val artificier = niveauDansClasse(character, "artificier")
+        val voleur = com.jc2.jdrcompagnon.feature_combat.domain.model.Roublard.niveauVoleur(character)
         return when {
             artificier >= 18 -> 6
             artificier >= 14 -> 5
-            artificier >= 10 -> 4
+            artificier >= 10 || voleur >= 13 -> 4
             else -> MAXIMUM_STANDARD
         }
     }

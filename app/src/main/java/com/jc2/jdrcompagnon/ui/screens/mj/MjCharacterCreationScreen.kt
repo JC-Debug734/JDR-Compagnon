@@ -59,7 +59,6 @@ val characterTypes = listOf(
     "Personnage Joueur (PJ)",
     "Personnage Non-Joueur (PNJ)",
     "Monstre/Créature",
-    "Boss/Antagoniste",
 )
 
 // Types de PNJ
@@ -75,7 +74,7 @@ fun MjCharacterCreationScreen(
     onCharacterCreated: () -> Unit,
     onBack: () -> Unit,
     onOpenMenu: () -> Unit = {},
-    // Type présélectionné ("PJ", "PNJ", "Monstre", "Boss"), choisi dans l'outil Fiches.
+    // Type présélectionné ("PJ", "PNJ", "Monstre"), choisi dans l'outil Fiches (les boss ont leur outil BOSS).
     initialType: String = "PJ",
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -84,8 +83,7 @@ fun MjCharacterCreationScreen(
         mutableStateOf(
             when (initialType) {
                 "PNJ" -> characterTypes[1]
-                "Monstre" -> characterTypes[2]
-                "Boss" -> characterTypes[3]
+                "Monstre", "Boss" -> characterTypes[2]
                 else -> characterTypes[0]
             }
         )
@@ -599,7 +597,7 @@ fun MjCharacterCreationScreen(
                     val character = Character(
                         name = characterName,
                         type = when {
-                            isMonster -> if (characterType.contains("Boss")) "Boss" else "Monstre"
+                            isMonster -> "Monstre"
                             isPnj -> "PNJ"
                             else -> "PJ"
                         },

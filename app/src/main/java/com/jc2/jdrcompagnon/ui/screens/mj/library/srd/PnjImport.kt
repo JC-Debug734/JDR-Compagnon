@@ -31,6 +31,15 @@ object PnjImport {
         "G" to "Grande", "TG" to "Très grande", "Gig" to "Gigantesque",
     )
 
+    /**
+     * Ligne « Clé. texte » de la section « ## Personnalité » d'un profil (comparses...) :
+     * Personnalité, Idéal, Lien (ou Obligation), Défaut (ou Faille). Vide si absente.
+     */
+    internal fun traitDePersonnalite(body: String, vararg cles: String): String =
+        cles.firstNotNullOfOrNull { cle ->
+            Regex("""(?mi)^\s*""" + Regex.escape(cle) + """\s*[.:]\s*(.+)$""").find(body)?.groupValues?.get(1)?.trim()
+        }.orEmpty()
+
     /** Crée les fiches des [pnjs] absents de l'univers ; retourne le nombre de fiches créées. */
     fun creerFiches(context: Context, pnjs: List<SrdEntry>, worldId: String, source: String): Int {
         if (pnjs.isEmpty()) return 0
@@ -81,6 +90,13 @@ object PnjImport {
             type = type,
             worldId = worldId,
             race = espece,
+            characterClass = f["Classe"].orEmpty(),
+            level = leadingInt.find(f["Niveau"].orEmpty())?.groupValues?.get(1)?.toIntOrNull() ?: 1,
+            background = f["Historique"].orEmpty(),
+            personalityTraits = traitDePersonnalite(pnj.body, "Personnalité"),
+            ideals = traitDePersonnalite(pnj.body, "Idéal"),
+            bonds = traitDePersonnalite(pnj.body, "Lien", "Obligation"),
+            flaws = traitDePersonnalite(pnj.body, "Défaut", "Faille"),
             alignment = f["Alignement"].orEmpty(),
             size = tailles[f["Taille"].orEmpty().trim()].orEmpty(),
             strength = stats["For"] ?: 10,
@@ -98,6 +114,12 @@ object PnjImport {
             skillProficiencies = competences,
             equipment = f["Équipement"].orEmpty(),
             languages = langues,
+            // Type de créature (« Fée (archifée) » → Fée) et défenses aux dégâts, appliqués en combat.
+            typeCreature = com.jc2.jdrcompagnon.feature_combat.domain.model.TypesCreature.normaliser(f["Type"]).orEmpty(),
+            damageResistances = degatsListe(f["Résistances"]),
+            damageVulnerabilities = degatsListe(f["Vulnérabilités"]),
+            damageImmunities = degatsListe(f["Immunités"]),
+            immunitesEtats = f["Immunités"].orEmpty().substringAfter(';', "").split(',').map { it.trim() }.filter { it.isNotBlank() },
             traits = listOfNotNull(
                 f["Sens"]?.takeIf { it.isNotBlank() }?.let { "Sens : $it" },
                 f["Résistances"]?.takeIf { it.isNotBlank() }?.let { "Résistances : $it" },
@@ -137,4 +159,14 @@ object PnjImport {
             cible
         }.getOrNull()
     }
+}
+
+/** « acide, feu ; Charmé » → ["Acide", "Feu"] (types de dégâts seulement, avant le « ; » des états). */
+private fun degatsListe(texte: String?): List<String> {
+    val types = listOf("Acide", "Contondant", "Feu", "Force", "Foudre", "Froid", "Nécrotique", "Perforant", "Poison", "Psychique", "Radiant", "Tonnerre", "Tranchant")
+    val radicaux = com.jc2.jdrcompagnon.feature_combat.domain.model.TypesCreature
+    return texte.orEmpty().substringBefore(';').split(',', '/').flatMap { it.split(" et ") }.mapNotNull { morceau ->
+        val r = radicaux.radical(morceau)
+        types.firstOrNull { radicaux.radical(it) == r && r.isNotEmpty() }
+    }.distinct()
 }

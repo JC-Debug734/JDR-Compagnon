@@ -19,6 +19,11 @@ data class Boutique(
     val inventaire: List<ArticleEnVente>,
     val type: TypeBoutique = TypeBoutique.MARCHAND,
     val services: List<Service> = emptyList(),
-    val argentDisponibleEnPo: Int = 0,
-    val villeId: String? = null // lien optionnel vers un PointInteret (feature_carte) de type VILLE
+    val argentDisponibleEnPc: Int = 0, // caisse du marchand, en pièces de cuivre
+    val villeId: String? = null, // lien optionnel vers un PointInteret (feature_carte) de type VILLE
+    // Campagne de la boutique (celle en cours à sa création) ; null = commune à toutes les campagnes.
+    val campagneId: String? = null,
+    // Image de la boutique (miniature de la liste) : "enseigne:<clé>" pour une enseigne fournie avec
+    // l'app, sinon nom du fichier copié en stockage interne (voir BoutiqueImageStore) ; null = aucune.
+    val image: String? = null
 )

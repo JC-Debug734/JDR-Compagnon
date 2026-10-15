@@ -50,7 +50,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bolt
@@ -131,7 +131,6 @@ import com.jc2.jdrcompagnon.feature_environnement.domain.model.TERRAINS_SRD
 import com.jc2.jdrcompagnon.feature_environnement.domain.model.rencontrableDans
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.EquipmentItem
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdSectionEntry
-import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdDocSection
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdRepository
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.CustomContentParser
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.CustomContentSummary
@@ -314,7 +313,8 @@ private fun copyPickedFileToInternalStorage(context: Context, uri: Uri, id: Stri
 }
 
 /** Contenu d'une archive .zip extraite dans [dossier] : le .md du livre (s'il y en a un) et les scénarios. */
-private class ArchiveExtraite(val dossier: File, val livre: File?, val scenarios: List<File>)
+// [epreuves] : textes des .md d'épreuves (lignes {mepreuve:}), importés ensuite dans l'outil ÉPREUVES.
+private class ArchiveExtraite(val dossier: File, val livre: File?, val scenarios: List<File>, val epreuves: List<String> = emptyList())
 
 /**
  * Archive .zip : un livre (.md de bibliothèque accompagné de ses images, ex. un bestiaire
@@ -354,7 +354,9 @@ private fun extraireArchive(context: Context, uri: Uri, id: String): ArchiveExtr
             dir.deleteRecursively()
             return null
         }
-        val (scenarios, livres) = mdFiles.partition { fichier ->
+        // Épreuves de l'outil ÉPREUVES : ni livre ni scénario.
+        val (fichiersEpreuves, autres) = mdFiles.partition { com.jc2.jdrcompagnon.feature_epreuve.data.EpreuveImport.contientEpreuves(it.readText()) }
+        val (scenarios, livres) = autres.partition { fichier ->
             val dossiers = fichier.relativeTo(dir).invariantSeparatorsPath.split('/').dropLast(1)
             dossiers.any { it.equals("Scenarios", ignoreCase = true) || it.equals("Scénarios", ignoreCase = true) } ||
                 CustomContentParser.parse(fichier.readText()).summary.total == 0
@@ -364,7 +366,7 @@ private fun extraireArchive(context: Context, uri: Uri, id: String): ArchiveExtr
             1 -> livres.first()
             else -> File(dir, "livre.md").apply { writeText(livres.joinToString("\n\n") { it.readText() }) }
         }
-        ArchiveExtraite(dir, livre, scenarios)
+        ArchiveExtraite(dir, livre, scenarios, fichiersEpreuves.map { it.readText() })
     } catch (e: Exception) {
         dir.deleteRecursively()
         null
@@ -385,6 +387,14 @@ internal data class LivreAjoute(
     val scenarioIds: Map<String, String> = emptyMap(),
     val pnjIds: List<String> = emptyList(),
     val campagne: com.jc2.jdrcompagnon.feature_import.CampagneArchive.Contenu? = null,
+    // Lieux seuls de l'archive (lieux.json), ajoutés par l'outil Import à la campagne sélectionnée.
+    val lieux: com.jc2.jdrcompagnon.feature_import.CampagneArchive.LieuxContenu? = null,
+    // Illustrations d'états importées (dossier Etats/ de l'archive, voir EtatImages).
+    val etatsImages: Int = 0,
+    // Textes des épreuves de l'archive, importés par l'outil Import (EpreuveImport, fonction suspendue).
+    val epreuves: List<String> = emptyList(),
+    // Pistes du dossier Musique/ de l'archive, ajoutées aux musiques importées (noms).
+    val musiques: List<String> = emptyList(),
 )
 
 /**
@@ -406,8 +416,12 @@ internal fun ajouterLivrePersonnalise(context: Context, uri: Uri, worldId: Strin
 
     val fichesAvant = com.jc2.jdrcompagnon.ui.GameState.characters.value.map { it.id }.toSet()
     val archive = extraireArchive(context, uri, id) ?: return null
+    // Illustrations des états (dossier Etats/ de l'archive), avant tout nettoyage du dossier extrait.
+    val etatsImages = com.jc2.jdrcompagnon.ui.screens.mj.library.srd.EtatImages.importerDepuis(context, archive.dossier)
     val booksDir = customBooksDir(context)
     val livre = archive.livre?.let { enregistrerLivre(context, id, it.relativeTo(booksDir).invariantSeparatorsPath, worldId, nom) }
+    // Musiques avant les scénarios, qui les désignent par leur nom ({mscenemeta: music=Nom}).
+    val musiques = importerMusiquesArchive(context, archive.dossier)
     var pnjScenarios = 0
     val scenarioIds = linkedMapOf<String, String>()
     archive.scenarios.forEach { fichier ->
@@ -417,13 +431,45 @@ internal fun ajouterLivrePersonnalise(context: Context, uri: Uri, worldId: Strin
         scenarioIds[scenario.title] = scenario.id
     }
     val campagne = com.jc2.jdrcompagnon.feature_import.CampagneArchive.lire(archive.dossier)
+    val lieux = com.jc2.jdrcompagnon.feature_import.CampagneArchive.lireLieux(archive.dossier)
     val pnjIds = com.jc2.jdrcompagnon.ui.GameState.characters.value.filter { it.id !in fichesAvant && it.type != "PJ" }.map { it.id }
     // Les scénarios sont copiés dans l'app (images comprises) : leurs .md extraits ne servent plus.
     if (livre == null) archive.dossier.deleteRecursively() else archive.scenarios.forEach { it.delete() }
     return (livre ?: LivreAjoute(null, null, null, 0)).copy(
         scenarios = scenarioIds.keys.toList(), pnjScenarios = pnjScenarios,
-        scenarioIds = scenarioIds, pnjIds = pnjIds, campagne = campagne,
+        scenarioIds = scenarioIds, pnjIds = pnjIds, campagne = campagne, lieux = lieux,
+        etatsImages = etatsImages,
+        epreuves = archive.epreuves,
+        musiques = musiques,
     )
+}
+
+private val EXTENSIONS_AUDIO = setOf("mp3", "ogg", "wav", "m4a", "flac")
+
+/**
+ * Pistes audio du dossier `Musique/` (ou `Musiques/`) à la racine de l'archive extraite dans
+ * [dossier] : ajoutées aux musiques importées sous le nom du fichier sans extension (réimporter
+ * l'archive réutilise les pistes du même nom), puis supprimées du dossier extrait (une copie
+ * suffit). Le dossier `Campagne/musique/` reste géré par CampagneArchive (musique d'environnement).
+ * Retourne les noms des pistes.
+ */
+private fun importerMusiquesArchive(context: Context, dossier: File): List<String> {
+    val dossiersMusique = dossier.listFiles().orEmpty().filter {
+        it.isDirectory && (it.name.equals("Musique", ignoreCase = true) || it.name.equals("Musiques", ignoreCase = true))
+    }
+    val noms = dossiersMusique.flatMap { d ->
+        d.walkTopDown()
+            .filter { it.isFile && it.extension.lowercase() in EXTENSIONS_AUDIO }
+            .sortedBy { it.name }
+            .mapNotNull { fichier ->
+                val octets = runCatching { fichier.readBytes() }.getOrNull() ?: return@mapNotNull null
+                com.jc2.jdrcompagnon.ui.ImportedMusicStore.importOctets(context, octets, fichier.nameWithoutExtension, fichier.extension)
+                    ?.displayName
+            }
+            .toList()
+    }
+    dossiersMusique.forEach { it.deleteRecursively() }
+    return noms
 }
 
 /** Enregistre le livre déjà copié ([fileName], relatif à [customBooksDir]) et crée ses fiches PNJ. */
@@ -600,6 +646,7 @@ private fun CheckableFilterRow(
 fun LibraryScreen(
     currentWorld: WorldState?,
     onBack: () -> Unit,
+    onOpenMenu: () -> Unit = {},
     initialTab: String = "monsters",
     onMonsterClick: (String) -> Unit = {},
     onSpellClick: (String) -> Unit = {},
@@ -612,6 +659,7 @@ fun LibraryScreen(
     onRuleClick: (String) -> Unit = {},
     onGlossaryClick: (String) -> Unit = {},
     onEtatClick: (String) -> Unit = {},
+    onMontureClick: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
     val allTabs = listOf(
@@ -712,11 +760,6 @@ fun LibraryScreen(
         if (librarianLeftPx < 0f) 170.dp
         else (screenWidth - with(density) { librarianLeftPx.toDp() } + 8.dp).coerceAtLeast(16.dp)
     }
-    // Cible de défilement pour les livres à page unique (Règles, Montures) : initialisée
-    // par le lien profond éventuel, puis mise à jour quand on clique un résultat de
-    // recherche globale pointant vers une section de l'un de ces deux livres.
-    var activeMontureSectionTarget by remember { mutableStateOf<String?>(null) }
-
     // Écran de gestion des livres, désormais ouvert en cliquant la bibliothécaire :
     // couverture personnalisée + disponibilité aux joueurs pour chaque livre, réglages
     // persistés dans LibraryBookSettingsStore, plus l'ajout de livres personnalisés
@@ -748,7 +791,7 @@ fun LibraryScreen(
     var historiques by remember { mutableStateOf<List<SrdSectionEntry>?>(null) }
     var dons by remember { mutableStateOf<List<SrdSectionEntry>?>(null) }
     var armesMagiques by remember { mutableStateOf<List<SrdSectionEntry>?>(null) }
-    var montures by remember { mutableStateOf<List<SrdDocSection>?>(null) }
+    var montures by remember { mutableStateOf<List<SrdSectionEntry>?>(null) }
     var loadError by remember { mutableStateOf<String?>(null) }
 
     // S'assurer que les données sont rechargées quand le monde change
@@ -837,7 +880,6 @@ fun LibraryScreen(
             selectedMonsterTerrains = emptySet()
             selectedDonCategories = emptySet()
             selectedArmeMagiqueCategories = emptySet()
-            activeMontureSectionTarget = null
         }
         when (tabKeys[selectedTab]) {
             "monsters" -> {
@@ -1097,13 +1139,13 @@ fun LibraryScreen(
                     })
                 }
             }
-            montures?.forEach { section ->
-                LibrarySearch.score(query, section.title, section.content)?.let { score ->
-                    add(GlobalSearchResult(section.title, "Montures", score) {
+            montures?.forEach { entry ->
+                LibrarySearch.score(query, entry.name, entry.rawMarkdown)?.let { score ->
+                    add(GlobalSearchResult(entry.name, "Montures", score) {
                         selectedTab = tabKeys.indexOf("montures")
                         showShelf = false
                         globalSearchQuery = ""
-                        activeMontureSectionTarget = section.title
+                        onMontureClick(entry.name)
                     })
                 }
             }
@@ -1195,21 +1237,11 @@ fun LibraryScreen(
                             }
                         }
                     },
+                    // Menu latéral (petits traits) ; le retour dans la bibliothèque (étagère,
+                    // réglages du livre...) passe par le geste retour (BackHandler ci-dessus).
                     navigationIcon = {
-                        IconButton(onClick = {
-                            when {
-                                showBookSettings -> showBookSettings = false
-                                showShelf && globalSearchQuery.isNotBlank() -> globalSearchQuery = ""
-                                showShelf -> onBack()
-                                openedCustomEntry != null -> openedCustomEntry = null
-                                !hasVisitedShelf -> onBack()
-                                else -> {
-                                    selectedCustomBookId = null
-                                    showShelf = true
-                                }
-                            }
-                        }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
+                        IconButton(onClick = onOpenMenu) {
+                            Icon(Icons.Default.Menu, contentDescription = "Menu")
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
@@ -1775,14 +1807,17 @@ fun LibraryScreen(
                                 )
                             }
                         }
+                        // Montures et véhicules : caractéristiques (tables) puis règles, une fiche par
+                        // entrée, comme le livre Règles.
                         "montures" -> {
-                            val sections = montures
-                            if (sections == null) {
+                            val list = montures
+                            if (list == null) {
                                 LoadingBox()
                             } else {
-                                DocSectionTocScreen(
-                                    sections = sections,
-                                    initialSectionTitle = activeMontureSectionTarget,
+                                SectionEntryByCategoryList(
+                                    entries = list.filter { searchQuery.isBlank() || LibrarySearch.matchesName(searchQuery, it.name) },
+                                    onItemClick = { onMontureClick(it.name) },
+                                    keepFileOrder = true,
                                 )
                             }
                         }
@@ -2159,75 +2194,6 @@ private fun GlobalSearchCategoryRow(label: String, count: Int?, isSelected: Bool
     }
 }
 
-/**
- * En-tête "Table des matières" pliable, réutilisé par tous les écrans de bibliothèque
- * qui affichent une table des matières (Règles, Montures...) : reste toujours visible
- * en haut de l'écran (il n'est pas dans la zone défilante), et un clic dessus replie ou
- * déplie la liste des entrées en dessous. La liste, quand dépliée, a une hauteur maximale
- * fixe et défile en interne (`heightIn(max=...)` + son propre `verticalScroll`) : c'est
- * ce qui manquait avant et qui laissait la table des matières prendre tout l'écran quand
- * elle contenait beaucoup d'entrées, ne laissant plus de place (ni de défilement possible)
- * au contenu réel en dessous.
- */
-@Composable
-private fun CollapsibleTableOfContents(
-    titles: List<String>,
-    expanded: Boolean,
-    onToggleExpanded: () -> Unit,
-    onEntryClick: (Int) -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onToggleExpanded),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "Table des matières",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            Icon(
-                imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                contentDescription = if (expanded) "Replier la table des matières" else "Déplier la table des matières",
-                tint = MaterialTheme.colorScheme.primary,
-            )
-        }
-        if (expanded) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 240.dp)
-                    .verticalScroll(rememberScrollState())
-                    .padding(vertical = 4.dp)
-            ) {
-                titles.forEachIndexed { index, title ->
-                    Surface(
-                        onClick = { onEntryClick(index) },
-                        shape = RoundedCornerShape(8.dp),
-                        color = Color.Transparent,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = "• $title",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(vertical = 4.dp, horizontal = 4.dp),
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
 
 @Composable
 private fun HorizontalDivider() {
@@ -2293,7 +2259,7 @@ private fun customBookRows(content: String): List<CustomBookRow> {
         parsed.pnjs.forEach {
             add(
                 CustomBookRow(
-                    SrdSectionEntry(name = it.name, category = "PNJ", rawMarkdown = it.rawMarkdown),
+                    SrdSectionEntry(name = it.name, category = if (it.category.contains("compars", ignoreCase = true)) "Comparses" else "PNJ", rawMarkdown = it.rawMarkdown),
                     CustomBookRowKind.PNJ, monsterChallengeLabel(it).orEmpty(), profil = it,
                 )
             )
@@ -2679,72 +2645,6 @@ private fun SectionEntryByCategoryList(
     }
 }
 
-/**
- * Écran de sections libres (titre + contenu Markdown) avec table des matières
- * cliquable, pour les documents SRD 5.2.1 sans entrées nommées individuelles
- * (ex. montures et véhicules) : table des matières cliquable + contenu par section.
- */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun DocSectionTocScreen(
-    sections: List<SrdDocSection>,
-    initialSectionTitle: String? = null,
-) {
-    val listState = rememberLazyListState()
-    val coroutineScope = rememberCoroutineScope()
-    var tocExpanded by remember { mutableStateOf(true) }
-
-    LaunchedEffect(sections, initialSectionTitle) {
-        initialSectionTitle?.let { target ->
-            val index = sections.indexOfFirst { it.title.equals(target, ignoreCase = true) }
-            if (index >= 0) {
-                listState.animateScrollToItem(index)
-            }
-        }
-    }
-
-    Column(modifier = Modifier.fillMaxSize()) {
-        // Table des matières : toujours visible en haut, pliable/dépliable au clic.
-        CollapsibleTableOfContents(
-            titles = sections.map { it.title },
-            expanded = tocExpanded,
-            onToggleExpanded = { tocExpanded = !tocExpanded },
-            onEntryClick = { index ->
-                coroutineScope.launch {
-                    listState.animateScrollToItem(index)
-                }
-            },
-        )
-
-        HorizontalDivider()
-
-        // weight(1f) indispensable : sans ça, la table des matières (Column sans
-        // hauteur bornée) pouvait s'étendre sur presque tout l'écran quand elle
-        // contenait beaucoup d'entrées, ne laissant plus de place — ni de défilement
-        // possible — à cette LazyColumn, d'où le contenu qui ne défilait pas.
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            items(sections, key = { it.title }) { section ->
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
-                    tonalElevation = 1.dp,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        SrdMarkdownAvecTables(markdown = section.content)
-                    }
-                }
-            }
-        }
-    }
-}
 
 /**
  * Ligne réutilisable pour une entrée générique SRD 5.2.1 (nom + catégorie optionnelle),

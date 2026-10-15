@@ -5,6 +5,13 @@ import androidx.compose.animation.core.tween
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.Alignment
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Home
@@ -92,9 +99,17 @@ fun AppBottomBar(
 
     fun rollDice() {
         if (isRolling) return
-
-        GameState.hideDiceResult()
-        GameState.hidePoolResult()
+        // Un seul lancer à la fois : tant que le résultat précédent est affiché, l'appui le
+        // ferme seulement (comme un appui ailleurs sur l'écran) ; il faut un nouvel appui,
+        // résultat fermé, pour relancer. Évite une rafale de lancers en tapotant le dé.
+        val state = GameState.diceState.value
+        val resultatAffiche = (state.showResult && state.lastResult != null && state.dicePool.isEmpty()) ||
+            (state.showPoolResult && state.lastPoolResults.isNotEmpty())
+        if (resultatAffiche) {
+            GameState.hideDiceResult()
+            GameState.hidePoolResult()
+            return
+        }
 
         isRolling = true
         rotationDegrees += 720f
@@ -105,83 +120,107 @@ fun AppBottomBar(
             // Ignore les erreurs haptiques
         }
 
+        com.jc2.jdrcompagnon.ui.components.SonsDes.lancer()
         coroutineScope.launch {
             delay(600)
-            if (diceState.dicePool.isEmpty()) {
-                GameState.rollDice(diceState.defaultSides)
+            // Résultat : tintement (après le roulement), plus éclatant sur un 20 naturel.
+            val d20 = if (diceState.dicePool.isEmpty()) {
+                val r = GameState.rollDice(diceState.defaultSides)
+                r.takeIf { diceState.defaultSides == 20 }
             } else {
-                GameState.rollDicePool()
+                GameState.rollDicePool().firstOrNull { it.sides == 20 && !it.isDiscarded }?.value
             }
+            com.jc2.jdrcompagnon.ui.components.SonsDes.resultat(critique = d20 == 20, echec = d20 == 1)
             isRolling = false
         }
     }
 
+    // Libellés et pastille de sélection dorés, assortis aux icônes illustrées.
     val itemColors = NavigationBarItemDefaults.colors(
-        selectedIconColor = ForcedDarkPalette.AccentGold,
-        selectedTextColor = ForcedDarkPalette.AccentGold,
-        unselectedIconColor = ForcedDarkPalette.Content,
-        unselectedTextColor = ForcedDarkPalette.Content,
-        indicatorColor = ForcedDarkPalette.Indicator,
+        selectedIconColor = Color.Unspecified,
+        selectedTextColor = IconesAsset.TexteDore,
+        unselectedIconColor = Color.Unspecified,
+        unselectedTextColor = IconesAsset.TexteDore,
+        indicatorColor = ForcedDarkPalette.AccentGold.copy(alpha = 0.18f),
     )
+    val iconeAccueil = rememberIconeAsset(IconesAsset.BARRE_ACCUEIL)
+    val iconeConnexion = rememberIconeAsset(IconesAsset.BARRE_CONNEXION)
+    val iconeBibliotheque = rememberIconeAsset(IconesAsset.BARRE_BIBLIOTHEQUE)
+    val iconeDe = rememberIconeAsset(IconesAsset.BARRE_DE)
+    // Icônes seules, sans libellé : elles occupent toute la hauteur de la barre.
+    val tailleIcone = 56.dp
 
-    NavigationBar(
-        modifier = modifier,
-        // Fond uni (même couleur que le menu latéral) : le fond d'écran ne doit pas transparaître.
-        containerColor = ForcedDarkPalette.Surface,
-        contentColor = ForcedDarkPalette.Content,
-    ) {
-        NavigationBarItem(
-            selected = false,
-            onClick = onHomeTap,
-            icon = {
-                if (homeIconBitmap != null) {
-                    Icon(
-                        bitmap = homeIconBitmap,
-                        contentDescription = "Accueil",
-                        tint = Color.Unspecified,
-                        modifier = Modifier.size(60.dp),
-                    )
-                } else {
-                    Icon(
-                        Icons.Default.Home,
-                        contentDescription = "Accueil",
-                    )
-                }
-            },
-            colors = itemColors,
-        )
-        NavigationBarItem(
-            selected = false,
-            onClick = onNavigateConnection,
-            icon = {
-                Icon(
-                    Icons.Default.Wifi,
-                    contentDescription = if (isConnectionActive) "Connexion active" else "Connexion inactive",
-                    tint = connectionColor
-                )
-            },
-            label = { Text("Connexion") },
-            colors = itemColors,
-        )
-        NavigationBarItem(
-            selected = false,
-            onClick = onNavigateLibrary,
-            icon = { Icon(Icons.Default.LibraryBooks, contentDescription = "Bibliothèque") },
-            label = { Text("Bibliothèque") },
-            colors = itemColors,
-        )
-        NavigationBarItem(
-            selected = false,
-            onClick = { rollDice() },
-            icon = {
-                Icon(
-                    imageVector = if (isRolling) Icons.Default.Refresh else Icons.Default.Casino,
-                    contentDescription = "Lancer les dés (appui long : réglages)",
-                    modifier = Modifier
-                        .size(32.dp)
+    Column(modifier = modifier) {
+        // Liseré doré en haut de la barre, comme le cadre des illustrations.
+        HorizontalDivider(thickness = 1.dp, color = IconesAsset.LisereDore)
+        NavigationBar(
+            // Fond uni bleu nuit, celui des icônes illustrées : elles s'y fondent sans cadre visible.
+            containerColor = IconesAsset.FondIcones,
+            contentColor = IconesAsset.TexteDore,
+        ) {
+            NavigationBarItem(
+                selected = false,
+                onClick = onHomeTap,
+                icon = {
+                    val bitmap = iconeAccueil ?: homeIconBitmap
+                    if (bitmap != null) {
+                        Icon(bitmap = bitmap, contentDescription = "Accueil", tint = Color.Unspecified, modifier = Modifier.size(tailleIcone))
+                    } else {
+                        Icon(Icons.Default.Home, contentDescription = "Accueil", tint = IconesAsset.TexteDore)
+                    }
+                },
+                colors = itemColors,
+            )
+            NavigationBarItem(
+                selected = false,
+                onClick = onNavigateConnection,
+                icon = {
+                    val description = if (isConnectionActive) "Connexion active" else "Connexion inactive"
+                    Box {
+                        if (iconeConnexion != null) {
+                            Icon(bitmap = iconeConnexion, contentDescription = description, tint = Color.Unspecified, modifier = Modifier.size(tailleIcone))
+                        } else {
+                            Icon(Icons.Default.Wifi, contentDescription = description, tint = connectionColor)
+                        }
+                        // Pastille d'état de la connexion (vert : partie en cours, rouge : aucune).
+                        if (iconeConnexion != null) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .size(11.dp)
+                                    .background(connectionColor, CircleShape)
+                                    .border(1.5.dp, IconesAsset.FondIcones, CircleShape)
+                            )
+                        }
+                    }
+                },
+                colors = itemColors,
+            )
+            NavigationBarItem(
+                selected = false,
+                onClick = onNavigateLibrary,
+                icon = {
+                    if (iconeBibliotheque != null) {
+                        Icon(bitmap = iconeBibliotheque, contentDescription = "Bibliothèque", tint = Color.Unspecified, modifier = Modifier.size(tailleIcone))
+                    } else {
+                        Icon(Icons.Default.LibraryBooks, contentDescription = "Bibliothèque", tint = IconesAsset.TexteDore)
+                    }
+                },
+                colors = itemColors,
+            )
+            NavigationBarItem(
+                selected = false,
+                onClick = { rollDice() },
+                icon = {
+                    val modifierDe = Modifier
+                        .size(tailleIcone)
                         .rotate(animatedRotation)
                         .pointerInput(Unit) {
+                            // Ce détecteur consomme aussi les appuis simples sur l'icône (qui
+                            // occupe presque toute la case) : sans onTap, ils n'atteignaient
+                            // jamais le onClick de la case et le dé semblait « bloqué ».
                             detectTapGestures(
+                                onTap = { rollDice() },
                                 onLongPress = {
                                     if (!isRolling) {
                                         try {
@@ -193,11 +232,21 @@ fun AppBottomBar(
                                     }
                                 }
                             )
-                        },
-                )
-            },
-            label = { Text("Dé") },
-            colors = itemColors,
-        )
+                        }
+                    if (iconeDe != null) {
+                        // Le d20 tourne pendant le lancer (pas d'icône « en cours » à part).
+                        Icon(bitmap = iconeDe, contentDescription = "Lancer les dés (appui long : réglages)", tint = Color.Unspecified, modifier = modifierDe)
+                    } else {
+                        Icon(
+                            imageVector = if (isRolling) Icons.Default.Refresh else Icons.Default.Casino,
+                            contentDescription = "Lancer les dés (appui long : réglages)",
+                            tint = IconesAsset.TexteDore,
+                            modifier = modifierDe,
+                        )
+                    }
+                },
+                colors = itemColors,
+            )
+        }
     }
 }

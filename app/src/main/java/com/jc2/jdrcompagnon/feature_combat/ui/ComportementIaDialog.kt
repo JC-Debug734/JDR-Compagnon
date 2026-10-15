@@ -45,6 +45,8 @@ import com.jc2.jdrcompagnon.feature_combat.domain.model.ArmesPersonnage
 import com.jc2.jdrcompagnon.feature_combat.domain.model.AttaqueMonstre
 import com.jc2.jdrcompagnon.feature_combat.domain.model.Combattant
 import com.jc2.jdrcompagnon.feature_combat.domain.model.DeclencheurIA
+import com.jc2.jdrcompagnon.feature_combat.domain.model.Comportements
+import androidx.compose.runtime.collectAsState
 import com.jc2.jdrcompagnon.feature_combat.domain.model.ProfilIA
 import com.jc2.jdrcompagnon.feature_combat.domain.model.RegleProfilIA
 import com.jc2.jdrcompagnon.feature_combat.presentation.CombatSession
@@ -63,6 +65,7 @@ import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdRepository
 @Composable
 internal fun ComportementIADialog(combattant: Combattant, onDismiss: () -> Unit) {
     val estPersonnage = combattant.characterId != null
+    val tousComportements by Comportements.tous.collectAsState()
     var ajoutOuvert by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -100,18 +103,27 @@ internal fun ComportementIADialog(combattant: Combattant, onDismiss: () -> Unit)
                     if (!combattant.estMonstre) {
                         Text("Qui décide de ses actions ?", style = MaterialTheme.typography.labelMedium)
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            // Son joueur (réseau) : l'IA ne décide jamais pour lui, même s'il est déconnecté un instant.
                             FilterChip(
-                                selected = combattant.profilIA == null,
-                                onClick = { CombatSession.changerProfilIA(combattant.id, null) },
+                                selected = combattant.joueParJoueur,
+                                onClick = { CombatSession.changerPilotage(combattant.id, joueur = true, comportement = null) },
+                                label = { Text("Son joueur") }
+                            )
+                            FilterChip(
+                                selected = !combattant.joueParJoueur && !combattant.piloteParIa,
+                                onClick = { CombatSession.changerPilotage(combattant.id, joueur = false, comportement = null) },
                                 label = { Text("Le MJ") }
                             )
                             FilterChip(
-                                selected = combattant.profilIA != null,
+                                selected = combattant.piloteParIa,
                                 onClick = {
-                                    if (combattant.profilIA == null) scope.launch {
-                                        // Profil de sa fiche (ou déduit de sa classe et de ses armes).
+                                    if (!combattant.piloteParIa) {
+                                        // Comportement de sa fiche, sinon celui de sa classe (grille).
                                         val perso = GameState.characters.value.firstOrNull { it.id == combattant.characterId }
-                                        CombatSession.changerProfilIA(combattant.id, perso?.let { profilPersonnage(context, it).profil } ?: ProfilIA.PROTECTEUR)
+                                        CombatSession.changerPilotage(
+                                            combattant.id, joueur = false,
+                                            comportement = perso?.let(::comportementPersonnage) ?: Comportements.pour(ProfilIA.PROTECTEUR),
+                                        )
                                     }
                                 },
                                 label = { Text("L'IA") }
@@ -122,12 +134,19 @@ internal fun ComportementIADialog(combattant: Combattant, onDismiss: () -> Unit)
 
                 if (combattant.piloteParIa) {
                     HorizontalDivider()
-                    val base = combattant.profilIA ?: ProfilIA.BRUTE
-                    Text("Profil de base", style = MaterialTheme.typography.labelMedium)
+                    val base = combattant.comportement
+                    Text("Comportement", style = MaterialTheme.typography.labelMedium)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        ProfilIA.entries.forEach { p ->
-                            FilterChip(selected = p == base, onClick = { CombatSession.changerProfilIA(combattant.id, p) }, label = { Text(p.label) })
+                        tousComportements.forEach { c ->
+                            FilterChip(
+                                selected = c.id == base.id,
+                                onClick = { CombatSession.changerPilotage(combattant.id, joueur = false, comportement = c) },
+                                label = { Text(c.nom) }
+                            )
                         }
+                    }
+                    if (base.description.isNotBlank()) {
+                        Text(base.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
 
                     HorizontalDivider()
@@ -139,7 +158,7 @@ internal fun ComportementIADialog(combattant: Combattant, onDismiss: () -> Unit)
                     )
                     combattant.reglesIA.forEachIndexed { i, regle ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("${i + 1}. Si ${regle.libelle.lowercase()} → ${regle.profil.label}", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                            Text("${i + 1}. Si ${regle.libelle.lowercase()} → ${Comportements.pour(regle.profil).nom}", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                             if (i > 0) {
                                 IconButton(onClick = {
                                     val l = combattant.reglesIA.toMutableList()
@@ -209,7 +228,7 @@ private fun NouvelleRegle(onAjouter: (RegleProfilIA) -> Unit, onAnnuler: () -> U
         Text("…adopter le profil", style = MaterialTheme.typography.labelMedium)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             ProfilIA.entries.forEach { p ->
-                FilterChip(selected = p == profil, onClick = { profil = p }, label = { Text(p.label) })
+                FilterChip(selected = p == profil, onClick = { profil = p }, label = { Text(Comportements.pour(p).nom) })
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -219,16 +238,42 @@ private fun NouvelleRegle(onAjouter: (RegleProfilIA) -> Unit, onAnnuler: () -> U
     }
 }
 
-/** Attaques d'un personnage (PNJ piloté par l'IA) d'après ses armes équipées et le SRD. */
+/**
+ * Attaques d'un personnage (PJ ou PNJ piloté par l'IA) d'après ses armes équipées et le SRD, plus
+ * ses sorts offensifs prêts (voir SortsIa), pour que l'IA s'en serve comme un monstre de ses capacités.
+ */
 internal suspend fun attaquesDuPersonnage(context: Context, perso: Character): List<AttaqueMonstre> {
-    val armes = SrdRepository.loadEquipmentList(context, GameState.currentWorldId())
-        .filter { it.damage.isNotBlank() }
-        .map { ArmeSrd.depuisFiche(it.name, it.damage, it.properties, it.rawMarkdown) }
-    return ArmesPersonnage.attaques(
-        nomsArmes = perso.equippedItems + perso.weapons,
-        armes = armes,
-        force = perso.strength,
-        dexterite = perso.dexterity,
-        maitrise = perso.proficiencyBonus,
-    )
+    val monde = GameState.currentWorldId()
+    // PNJ à actions fixes (bloc de stats) : elles remplacent les attaques calculées depuis les armes.
+    val attaquesArmes = if (perso.actionsPnj.isNotEmpty()) {
+        perso.actionsPnj.mapNotNull { it.versAttaque() }
+    } else {
+        val armes = SrdRepository.loadEquipmentList(context, monde)
+            .filter { it.damage.isNotBlank() }
+            .map { ArmeSrd.depuisFiche(it.name, it.damage, it.properties, it.rawMarkdown) }
+        ArmesPersonnage.attaques(
+            nomsArmes = perso.equippedItems + perso.weapons,
+            armes = armes,
+            force = perso.strength,
+            dexterite = perso.dexterity,
+            maitrise = perso.proficiencyBonus,
+        )
+    }
+    if (perso.spells.isEmpty()) return attaquesArmes
+    val sorts = runCatching {
+        val srd = SrdRepository.loadSpells(context, monde)
+            .map { com.jc2.jdrcompagnon.feature_combat.domain.model.SortSrd(it.name, com.jc2.jdrcompagnon.feature_combat.domain.model.ArsenalPersonnage.niveauDepuisLibelle(it.niveauSort), it.rawMarkdown, ecole = it.category) }
+        val classesMd = SrdRepository.loadClasses(context, monde).joinToString("\n\n") { it.rawMarkdown }
+        val classes = com.jc2.jdrcompagnon.ui.screens.joueur.character.creation.ClasseParser.parse(classesMd)
+        val table = com.jc2.jdrcompagnon.ui.screens.joueur.character.creation.EmplacementsDeSortParser.parse(classesMd)
+        val emplacements = com.jc2.jdrcompagnon.ui.screens.joueur.calculerEmplacementsDeSort(perso, classes, table)
+        val prets = com.jc2.jdrcompagnon.feature_combat.domain.model.ArsenalPersonnage.sortsPrets(
+            perso, srd, com.jc2.jdrcompagnon.feature_combat.domain.model.ArsenalPersonnage.effetsCombatClasse(perso, classes),
+            com.jc2.jdrcompagnon.ui.screens.joueur.sortsDeSousClasse(perso, classes),
+        )
+        val restants = emplacements.classiques.mapValues { (niveau, max) -> (max - (perso.spellSlotsUsed[niveau] ?: 0)).coerceAtLeast(0) }
+        val pacte = emplacements.pacte?.let { (nombre, _) -> (nombre - perso.pactSlotsUsed).coerceAtLeast(0) } ?: 0
+        com.jc2.jdrcompagnon.feature_combat.domain.model.SortsIa.attaques(prets, restants, pacte)
+    }.getOrDefault(emptyList())
+    return attaquesArmes + sorts.filter { s -> attaquesArmes.none { it.nom == s.nom } }
 }

@@ -60,6 +60,38 @@ import com.jc2.jdrcompagnon.ui.components.PnjPortraits
 import com.jc2.jdrcompagnon.ui.components.rememberCharacterPortraitPainter
 
 /**
+ * Dernière discussion PNJ ouverte par le MJ, tant qu'il ne l'a pas fermée pour tous : quitter
+ * l'écran (« Quitter la discussion », retour, autre écran) la laisse en cours, et le menu latéral
+ * MJ propose d'y retourner ([rouvrir], traité par SceneProfileActionsHost).
+ */
+object DiscussionEnCours {
+    data class Discussion(
+        val character: Character,
+        val discussion: com.jc2.jdrcompagnon.ui.GameState.PnjDiscussion?,
+        val reputationGroupe: Int?,
+    )
+
+    private val _enCours = kotlinx.coroutines.flow.MutableStateFlow<Discussion?>(null)
+    val enCours: kotlinx.coroutines.flow.StateFlow<Discussion?> = _enCours
+
+    // Demande de réouverture depuis le menu latéral (écran de la discussion affiché par-dessus tout).
+    private val _aRouvrir = kotlinx.coroutines.flow.MutableStateFlow(false)
+    val aRouvrir: kotlinx.coroutines.flow.StateFlow<Boolean> = _aRouvrir
+
+    fun memoriser(character: Character, discussion: com.jc2.jdrcompagnon.ui.GameState.PnjDiscussion?, reputationGroupe: Int?) {
+        _enCours.value = Discussion(character, discussion, reputationGroupe)
+    }
+
+    fun rouvrir() { if (_enCours.value != null) _aRouvrir.value = true }
+    fun rouverte() { _aRouvrir.value = false }
+
+    fun terminer() {
+        _enCours.value = null
+        _aRouvrir.value = false
+    }
+}
+
+/**
  * Briefing plein écran d'un PNJ, ouvert par le MJ en cliquant un lien `#event:[Nom]` dans une
  * scène. Visible uniquement du MJ tant qu'il n'a pas cliqué "Envoyer aux joueurs" (comportement/
  * intentions/objectif sont des champs confidentiels de Character, jamais transmis eux-mêmes —
@@ -79,6 +111,8 @@ fun PnjBriefingOverlay(
     val portraitPainter = rememberCharacterPortraitPainter(character.portrait)
     // Tant que ce briefing est ouvert, les jets des joueurs s'y traitent (voir HostSocialRollOverlay).
     DisposableEffect(Unit) {
+        // Retenue jusqu'à « Fermer la discussion pour tous » : le menu latéral MJ permet d'y revenir.
+        DiscussionEnCours.memoriser(character, discussion, reputationGroupe)
         NetworkSessionManager.setDiscussionOpen(true)
         onDispose {
             NetworkSessionManager.setDiscussionOpen(false)
@@ -186,6 +220,9 @@ fun PnjBriefingOverlay(
                 // Comportement, personnalité, secrets (ou personnalité improvisée), MJ uniquement.
                 InfosComportementalesPnj(character)
 
+                // Secrets de la campagne que connaît ce PNJ : cochés dès que les joueurs les apprennent.
+                com.jc2.jdrcompagnon.feature_preparation.ui.SecretsConnusDuPnj(character, Modifier.padding(vertical = 6.dp))
+
                 // Aide de jeu de la discussion (confidentielle, jamais envoyée aux joueurs).
                 DiscussionAideDeJeu(discussion = discussion, reputationGroupe = reputationGroupe)
 
@@ -203,6 +240,7 @@ fun PnjBriefingOverlay(
                     Button(
                         onClick = {
                             NetworkSessionManager.closeDiscussionForAll()
+                            DiscussionEnCours.terminer()
                             onDismiss()
                         },
                         modifier = Modifier.fillMaxWidth(),

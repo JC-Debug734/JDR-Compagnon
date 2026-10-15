@@ -134,7 +134,7 @@ object CustomContentParser {
     // l'intérieur d'un bloc monstre/objet/sort/don, ils ne délimitent pas la fin de ce
     // bloc — contrairement à tout autre "## " (ex. un groupement ou une règle qui suit).
     private val knownEntrySubsections = setOf(
-        "traits", "actions", "actions bonus", "reactions", "actions legendaires",
+        "traits", "actions", "actions bonus", "reactions", "actions legendaires", "personnalite",
     )
 
     fun parse(rawMarkdown: String): CustomContentResult {

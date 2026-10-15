@@ -30,6 +30,9 @@ import java.util.UUID
 private const val SERVICE_TYPE = "_jdrcompagnon._tcp."
 private const val TAG = "GameServer"
 
+/** Port TCP fixe de la partie hébergée (les joueurs la trouvent toujours par découverte automatique). */
+const val PORT_PARTIE = 47475
+
 /**
  * Balise UDP broadcast, en complément de NSD/mDNS pour la découverte.
  * Certains appareils (notamment Samsung) ont une implémentation NsdManager
@@ -101,7 +104,10 @@ class GameServer(
             setReferenceCounted(true)
             acquire()
         }
-        val socket = ServerSocket(0) // port libre attribué par l'OS
+        // Port fixe ([PORT_PARTIE]) pour que l'adresse de la partie ne change pas d'une session à
+        // l'autre ; port libre attribué par l'OS s'il est déjà pris.
+        val socket = runCatching { ServerSocket().apply { reuseAddress = true; bind(java.net.InetSocketAddress(PORT_PARTIE)) } }
+            .getOrElse { ServerSocket(0) }
         serverSocket = socket
         registerService(socket.localPort)
         startBeacon(socket.localPort)

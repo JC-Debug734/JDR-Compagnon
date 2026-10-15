@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mon tour de combat</title>
+<style>
+  :root { --or: #d4af37; --fond: #232c40; --carte: rgba(43,53,80,0.78); }
+  html, body { margin: 0; background: var(--fond); color: #fff; font-family: system-ui, sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 14px 16px 40px; }
+  h1 { font-size: 1.3rem; margin: 4px 0 10px; color: var(--or); }
+  .carte { background: var(--carte); border-radius: 14px; padding: 14px; margin-bottom: 12px; border: 1px solid rgba(255,255,255,0.08); }
+  .titre { font-weight: 800; color: var(--or); margin-bottom: 8px; }
+  button { font: inherit; color: #fff; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 10px; padding: 10px 12px; margin: 4px 4px 0 0; cursor: pointer; }
+  button.choisi { background: rgba(212,175,55,0.3); border-color: var(--or); }
+  button.principal { background: var(--or); color: #1a1a1a; font-weight: 800; border: none; }
+  button:disabled { opacity: 0.4; }
+  input { font: inherit; width: 90px; padding: 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.3);
+    background: rgba(0,0,0,0.25); color: #fff; }
+  input.long { width: calc(100% - 24px); }
+  .rangee { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+  .rangee label { display: flex; flex-direction: column; font-size: 0.85rem; gap: 4px; }
+  .petit { font-size: 0.85rem; color: #d0d4e0; }
+  .bar { height: 10px; border-radius: 5px; background: rgba(255,255,255,0.12); overflow: hidden; margin-top: 6px; }
+  .bar > div { height: 100%; transition: width .6s; }
+  #statut { font-weight: 800; font-size: 1.25rem; padding: 14px; border-radius: 14px; margin-bottom: 12px; text-align: center; }
+  #statut.tour { background: rgba(212,175,55,0.25); border: 2px solid var(--or); color: #ffe08a; animation: pulse 1.4s ease-in-out infinite; }
+  #statut.prochain { background: rgba(100,181,246,0.18); border: 2px solid #64b5f6; }
+  #statut.attente { background: var(--carte); }
+  @keyframes pulse { 50% { box-shadow: 0 0 22px rgba(212,175,55,0.6); } }
+  #message { min-height: 1.2em; margin-top: 8px; font-weight: 700; }
+  .recit div { padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.08); }
+  .recit .ROUND { color: var(--or); font-weight: 800; text-align: center; }
+  .recit .CRITIQUE { color: #ffd54f; font-weight: 800; }
+  .recit .KO, .recit .MORT { color: #ff8a80; font-weight: 800; }
+  .recit .SOIN { color: #a5d6a7; }
+  .recit .RATE { color: #b0bec5; }
+  .recit .ETAT { color: #e1bee7; }
+  .recit .BOSS { color: #ffcc80; font-style: italic; }
+  .recit .TOUR, .recit .INFO { color: #c8c8d8; font-size: 0.9rem; }
+  #son { float: right; margin: 0; padding: 6px 10px; }
+  /* Terrain : 4 zones en bandes, ennemis en haut. Même zone qu'un ennemi = au contact. */
+  .zone { display: flex; gap: 8px; align-items: center; border-radius: 10px; padding: 6px 10px; margin-bottom: 4px; min-height: 40px;
+    border: 1px solid rgba(255,255,255,0.15); }
+  .zone.ennemi { background: rgba(229,115,115,0.10); } .zone.groupe { background: rgba(100,181,246,0.10); }
+  .zone.choisie { border: 2px solid var(--or); background: rgba(212,175,55,0.25); }
+  .zone.cliquable { cursor: pointer; } .zone.loin { opacity: 0.45; }
+  .zone .nom { width: 96px; font-size: 0.8rem; font-weight: 800; } .zone .nom small { display: block; font-weight: 400; color: #c8c8d8; }
+  .pion { display: inline-block; border-radius: 999px; padding: 3px 9px; margin: 2px; font-size: 0.8rem; }
+  .pion.m { background: rgba(229,115,115,0.35); } .pion.g { background: rgba(100,181,246,0.35); }
+  .pion.moi { outline: 1px solid #fff; font-weight: 800; } .pion.actif { outline: 2px solid var(--or); font-weight: 800; } .pion.ko { opacity: 0.45; }
+  /* Scène : la dernière chose qui s'est passée, mise en scène. */
+  #scene { text-align: center; position: relative; overflow: hidden; }
+  #scene .qui { font-size: 0.85rem; color: #c8c8d8; } #scene .actif { font-size: 1.5rem; font-weight: 900; color: var(--or); margin-bottom: 8px; }
+  #scene .actif.m { color: #e57373; }
+  #scene .icone { font-size: 3.4rem; display: inline-block; animation: pop .5s cubic-bezier(.3,1.6,.5,1); }
+  #scene .icone.coup { animation: pop .5s cubic-bezier(.3,1.6,.5,1), secousse .35s .45s; }
+  #scene .texte { display: inline-block; margin-top: 8px; padding: 8px 14px; border-radius: 12px; font-weight: 700; animation: monte .4s ease-out; }
+  #scene .bulle { position: absolute; right: 24px; top: 70px; font-size: 2rem; font-weight: 900; animation: bulle 1.6s ease-out forwards; }
+  @keyframes pop { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  @keyframes secousse { 20% { transform: translateX(-10px) rotate(-10deg); } 40% { transform: translateX(10px) rotate(10deg); } 60% { transform: translateX(-6px) rotate(-6deg); } 80% { transform: translateX(4px); } }
+  @keyframes monte { from { transform: translateY(14px); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes bulle { from { transform: translateY(0); opacity: 1; } to { transform: translateY(-60px); opacity: 0; } }
+</style>
+</head>
+<body>
+<main>
+  <button id="son"></button>
+  <h1>⚔ Mon tour de combat</h1>
+  <div id="choix" class="carte" style="display:none"></div>
+  <div id="jeu" style="display:none">
+    <div id="statut"></div>
+    <div id="moi" class="carte"></div>
+    <div id="action" class="carte" style="display:none"></div>
+    <div id="scene" class="carte" style="display:none"></div>
+    <div class="carte"><div class="titre">🗺 Terrain</div><div id="terrain"></div></div>
+    <button id="changer">Changer de personnage</button>
+  </div>
+  <div id="vide" class="carte" style="display:none">Aucun combat en cours. Cette page se mettra à jour toute seule quand le MJ lancera un combat.</div>
+</main>
+<script src="/web/sons_combat.js"></script>
+<script>
+  function e(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  const $ = id => document.getElementById(id);
+  let monId = null;
+  try { monId = localStorage.getItem('combattantWeb'); } catch (x) {}
+  let cleFormulaire = null;
+  let choix = { arme: null, cible: null, zone: null, round: null };
+  let sceneVue = null;
+  const ICONES = { TOUCHE: '🗡', CRITIQUE: '💥', RATE: '💨', DEGATS: '🩸', SOIN: '💚', KO: '☠', MORT: '💀', ETAT: '🌀',
+    SAUVEGARDE: '🛡', BOSS: '👑', VICTOIRE: '🏆', DEPLACEMENT: '🏃', ACTION: '✦', INFO: '•' };
+  const COULEURS = { TOUCHE: '#ff8a80', DEGATS: '#ff8a80', CRITIQUE: '#ffd54f', RATE: '#b0bec5', KO: '#ef5350', MORT: '#ef5350',
+    SOIN: '#81c784', ETAT: '#ce93d8', SAUVEGARDE: '#90caf9', BOSS: '#ffab40', VICTOIRE: '#d4af37', DEPLACEMENT: '#80deea' };
+
+  // Terrain : 4 zones, ennemis en haut ; distances depuis ma zone, 9 m par zone.
+  function terrainHtml(j, choisie, cliquable) {
+    return j.terrain.map(z => {
+      const ecart = Math.abs(z.index - j.maZone);
+      const info = ecart === 0 ? 'ici' : (ecart * 9) + ' m' + (ecart > j.pas * 2 ? ' · trop loin' : ecart > j.pas ? ' · se précipiter' : '');
+      const loin = cliquable && ecart > j.pas * 2;
+      return '<div class="zone ' + (z.index >= 2 ? 'ennemi' : 'groupe') + (z.index === choisie ? ' choisie' : '') +
+        (cliquable && !loin ? ' cliquable' : '') + (loin ? ' loin' : '') + '" data-z="' + z.index + '">' +
+        '<div class="nom">' + e(z.nom) + '<small>' + info + '</small></div><div>' +
+        z.pions.map(p => '<span class="pion ' + (p.monstre ? 'm' : 'g') + (p.moi ? ' moi' : '') + (p.actif ? ' actif' : '') +
+          (p.horsCombat ? ' ko' : '') + '">' + (p.actif ? '▶ ' : '') + e(p.nom) + '</span>').join('') + '</div></div>';
+    }).join('');
+  }
+
+  function majTerrainChoix(j) {
+    const conteneur = $('terrainChoix'); if (!conteneur) return;
+    conteneur.innerHTML = terrainHtml(j, choix.zone == null ? j.maZone : choix.zone, true);
+    conteneur.querySelectorAll('.zone.cliquable').forEach(d => d.onclick = () => {
+      const z = parseInt(d.dataset.z, 10);
+      choix.zone = z === j.maZone ? null : z;
+      majTerrainChoix(j);
+    });
+    const ecart = choix.zone == null ? 0 : Math.abs(choix.zone - j.maZone);
+    const ennemiIci = j.terrain.some(z => z.index === j.maZone && z.pions.some(p => p.monstre && !p.horsCombat));
+    $('aideDeplacement').textContent =
+      (ecart > j.pas ? 'Au-delà de ta vitesse : choisis « Se précipiter », sinon tu t\'arrêtes en chemin. ' : '') +
+      (choix.zone != null && ennemiIci ? 'Quitter le contact sans te désengager expose à une attaque d\'opportunité.' : '');
+  }
+
+  // Hors de mon tour : qui agit, et la dernière chose qui s'est passée, animée (rejouée seulement si elle change).
+  function scene(j) {
+    const el = $('scene');
+    if (!j.enCours || j.monTour) { el.style.display = 'none'; sceneVue = null; return; }
+    el.style.display = 'block';
+    const r = j.recit.filter(x => x.round === j.round && x.texte && !['TOUR', 'ROUND'].includes(x.type)).slice(-1)[0];
+    const cle = (j.actifNom || '') + '|' + (r ? r.numero : '') + '|' + j.prochain;
+    if (cle === sceneVue) return;
+    sceneVue = cle;
+    let html = '<div class="qui">Au tour de</div><div class="actif">' + e(j.actifNom || '…') + '</div>';
+    if (j.prochain) html += '<div style="color:var(--or);font-weight:800;margin-bottom:6px">⏳ Tu es le prochain : prépare ton action !</div>';
+    if (r) {
+      const coul = COULEURS[r.type] || '#ffffff';
+      const coup = ['TOUCHE', 'DEGATS', 'CRITIQUE', 'KO', 'MORT'].includes(r.type);
+      html += '<div><span class="icone' + (coup ? ' coup' : '') + '">' + (ICONES[r.type] || '⚔') + '</span></div>' +
+        '<div class="texte" style="border:1px solid ' + coul + ';background:' + coul + '26">' + e(r.texte) + '</div>';
+      if (r.montant > 0) html += '<div class="bulle" style="color:' + (r.type === 'SOIN' ? '#81c784' : '#ff5252') + '">' +
+        (r.type === 'SOIN' ? '+' : '−') + r.montant + '</div>';
+    } else html += '<div style="font-size:3rem;opacity:.35">⚔</div>';
+    el.innerHTML = html;
+  }
+  let tourVu = false;
+  let dernierRecit = null;
+
+  function majBoutonSon() { $('son').textContent = SonsCombat.actifs() ? '🔊 Son' : '🔇 Son'; }
+  $('son').onclick = () => { SonsCombat.activer(!SonsCombat.actifs()); majBoutonSon(); };
+  majBoutonSon();
+  $('changer').onclick = () => { monId = null; try { localStorage.removeItem('combattantWeb'); } catch (x) {} cleFormulaire = null; rafraichir(); };
+
+  async function afficherChoix() {
+    const liste = await (await fetch('/api/joueur/personnages')).json();
+    $('jeu').style.display = 'none';
+    if (!liste.length) { $('choix').style.display = 'none'; $('vide').style.display = 'block'; return; }
+    $('vide').style.display = 'none';
+    $('choix').style.display = 'block';
+    $('choix').innerHTML = '<div class="titre">Quel personnage jouez-vous ?</div>' +
+      liste.map(p => '<button data-id="' + e(p.id) + '">' + e(p.nom) + '</button>').join('');
+    $('choix').querySelectorAll('button').forEach(b => b.onclick = () => {
+      monId = b.dataset.id;
+      try { localStorage.setItem('combattantWeb', monId); } catch (x) {}
+      // Premier appui : autorise aussi le son dans ce navigateur.
+      if (!SonsCombat.actifs()) { SonsCombat.activer(true); majBoutonSon(); }
+      rafraichir();
+    });
+  }
+
+  async function envoyer(params) {
+    const corps = new URLSearchParams(Object.assign({ id: monId, zone: choix.zone == null ? '' : choix.zone }, params));
+    try {
+      const r = await (await fetch('/api/joueur/agir', { method: 'POST', body: corps })).json();
+      $('message').textContent = (r.ok ? '✔ ' : '✖ ') + r.message;
+      $('message').style.color = r.ok ? '#a5d6a7' : '#ff8a80';
+      if (r.ok) { cleFormulaire = null; rafraichir(); }
+    } catch (x) { $('message').textContent = 'Connexion perdue avec le MJ.'; }
+  }
+
+  function formulaire(j) {
+    if (!choix.arme || !j.armes.some(a => a.nom === choix.arme)) choix.arme = j.armes.length ? j.armes[0].nom : null;
+    const ennemis = j.cibles.filter(c => !c.allie);
+    if (!choix.cible || !j.cibles.some(c => c.id === choix.cible)) choix.cible = ennemis.length ? ennemis[0].id : null;
+    if (choix.round !== j.round) { choix.round = j.round; choix.zone = null; }
+    const deplacementHtml = '<div class="titre">🏃 Où finir ton tour ?</div>' +
+      '<div class="petit" style="margin-bottom:6px">Touche une zone. Même zone qu\'un ennemi : au contact.</div>' +
+      '<div id="terrainChoix"></div><div id="aideDeplacement" class="petit" style="color:var(--or)"></div>';
+    let html = '<div class="titre" style="margin-top:16px">🗡 Attaquer</div>';
+    if (!j.armes.length) html += '<div class="petit">Aucune arme sur votre fiche : annoncez votre action au MJ.</div>';
+    else {
+      html += '<div class="petit">Arme</div>' + j.armes.map(a =>
+        '<button class="arme' + (a.nom === choix.arme ? ' choisi' : '') + '" data-v="' + e(a.nom) + '">' + e(a.nom) +
+        ' (' + (a.bonus >= 0 ? '+' : '') + a.bonus + (a.formule ? ', ' + e(a.formule) : '') + ')</button>').join('');
+      html += '<div class="petit" style="margin-top:10px">Cible</div>' + j.cibles.map(c =>
+        '<button class="cible' + (c.id === choix.cible ? ' choisi' : '') + '" data-v="' + e(c.id) + '">' + (c.allie ? '🛡 ' : '') + e(c.nom) +
+        ' · ' + e(c.sante) + ' · ' + e(c.distance) + '</button>').join('');
+      html += '<div class="rangee" style="margin-top:12px">' +
+        '<label>Mon d20<input id="d20" type="number" inputmode="numeric" min="1" max="20"></label>' +
+        '<label>Mes dégâts<input id="degats" type="number" inputmode="numeric" min="0"></label></div>' +
+        '<div class="petit">Laissez « dégâts » vide si vous ne les avez pas lancés : l\'appli s\'en charge.</div>' +
+        '<button class="principal" id="envoyerDes">Envoyer mes dés</button><button id="lancerPourMoi">🎲 Lancer pour moi</button>';
+    }
+    html += '<div class="titre" style="margin-top:16px">✦ Autre action</div>' +
+      j.actions.map(a => '<button class="autre" data-v="' + e(a.id) + '" title="' + e(a.description) + '">' + e(a.nom) + '</button>').join('') +
+      '<div style="margin-top:8px"><input id="detail" class="long" placeholder="Précision (facultatif) : sort, objet, ce que vous tentez…"></div>' +
+      '<div id="message"></div>';
+    $('action').innerHTML = deplacementHtml + html;
+    majTerrainChoix(j);
+    $('action').querySelectorAll('button.arme').forEach(b => b.onclick = () => { choix.arme = b.dataset.v; marquer('arme', b); });
+    $('action').querySelectorAll('button.cible').forEach(b => b.onclick = () => { choix.cible = b.dataset.v; marquer('cible', b); });
+    $('action').querySelectorAll('button.autre').forEach(b => b.onclick = () =>
+      envoyer({ action: b.dataset.v, cible: choix.cible || '', detail: $('detail').value }));
+    if ($('envoyerDes')) $('envoyerDes').onclick = () => {
+      const d20 = parseInt($('d20').value, 10);
+      if (!(d20 >= 1 && d20 <= 20)) { $('message').textContent = 'Entrez le résultat de votre d20 (1 à 20).'; $('message').style.color = '#ff8a80'; return; }
+      envoyer({ action: 'attaquer', arme: choix.arme, cible: choix.cible, d20: d20, degats: $('degats').value });
+    };
+    if ($('lancerPourMoi')) $('lancerPourMoi').onclick = () => envoyer({ action: 'attaquer', arme: choix.arme, cible: choix.cible });
+  }
+  function marquer(classe, bouton) {
+    $('action').querySelectorAll('button.' + classe).forEach(b => b.classList.toggle('choisi', b === bouton));
+  }
+
+  function afficher(j) {
+    $('choix').style.display = 'none'; $('vide').style.display = 'none'; $('jeu').style.display = 'block';
+    const statut = $('statut');
+    if (!j.enCours) { statut.className = 'attente'; statut.textContent = 'Le MJ prépare le combat…'; }
+    else if (j.monTour) { statut.className = 'tour'; statut.textContent = '⚔ À toi de jouer, ' + j.moi.nom + ' !'; }
+    else if (j.prochain) { statut.className = 'prochain'; statut.textContent = '⏳ Au tour de ' + (j.actifNom || '…') + ' — tu es le prochain !'; }
+    else { statut.className = 'attente'; statut.textContent = 'Round ' + j.round + ' · au tour de ' + (j.actifNom || '…'); }
+    // Début de mon tour : vibration et son.
+    if (j.monTour && !tourVu) { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); SonsCombat.jouer('MON_TOUR'); }
+    tourVu = j.monTour;
+
+    const ratio = j.moi.pvMax > 0 ? Math.max(0, j.moi.pv) * 100 / j.moi.pvMax : 0;
+    const couleur = ratio > 50 ? '#66bb6a' : (ratio > 25 ? '#ffa726' : '#ef5350');
+    $('moi').innerHTML = '<div class="titre">' + e(j.moi.nom) + ' · CA ' + j.moi.ca + '</div>' +
+      'PV ' + j.moi.pv + ' / ' + j.moi.pvMax + (j.moi.horsCombat ? ' — à terre !' : '') +
+      '<div class="bar"><div style="width:' + ratio + '%;background:' + couleur + '"></div></div>' +
+      (j.moi.conditions.length ? '<div class="petit" style="margin-top:6px">États : ' + j.moi.conditions.map(e).join(', ') + '</div>' : '') +
+      (j.action ? '<div style="margin-top:8px">Votre action : <b>' + e(j.action) + '</b>' + (j.jetEnvoye ? ' — dés envoyés, le MJ applique.' : '') + '</div>' : '');
+
+    // Formulaire seulement pendant mon tour ; reconstruit quand la situation change (pas à chaque passage).
+    const cle = j.monTour && j.peutAgir && !j.jetEnvoye ? [j.round, j.armes.length, j.cibles.map(c => c.id).join(','), j.action].join('|') : null;
+    if (cle !== cleFormulaire) {
+      cleFormulaire = cle;
+      if (cle) { $('action').style.display = 'block'; formulaire(j); }
+      else $('action').style.display = 'none';
+    }
+
+    // Plus de récit écrit : la scène animée hors de mon tour, et le terrain.
+    scene(j);
+    $('terrain').innerHTML = terrainHtml(j, j.maZone, false);
+    const dernier = j.recit.length ? j.recit[j.recit.length - 1].numero : 0;
+    if (dernierRecit !== null) {
+      j.recit.filter(r => r.numero > dernierRecit && ['TOUCHE','CRITIQUE','RATE','KO','MORT','SOIN','ROUND','VICTOIRE','BOSS'].includes(r.type))
+        .slice(-2).forEach((r, i) => setTimeout(() => SonsCombat.jouer(r.type), i * 260));
+    }
+    dernierRecit = dernier;
+  }
+
+  async function rafraichir() {
+    try {
+      if (!monId) { await afficherChoix(); return; }
+      const j = await (await fetch('/api/joueur/etat?id=' + encodeURIComponent(monId))).json();
+      if (!j) {
+        // Plus de combat, ou personnage plus jouable ici : retour au choix.
+        cleFormulaire = null;
+        await afficherChoix();
+        return;
+      }
+      afficher(j);
+    } catch (x) {}
+  }
+  rafraichir();
+  setInterval(rafraichir, 1500);
+</script>
+</body>
+</html>

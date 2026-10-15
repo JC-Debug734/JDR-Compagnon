@@ -1,5 +1,7 @@
 package com.jc2.jdrcompagnon.ui.screens.joueur
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -52,12 +54,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jc2.jdrcompagnon.ui.AppRole
 import com.jc2.jdrcompagnon.ui.Character
 import com.jc2.jdrcompagnon.ui.GameState
+import com.jc2.jdrcompagnon.ui.components.CollapsibleSectionCard
 import com.jc2.jdrcompagnon.ui.ScenarioClockState
 import com.jc2.jdrcompagnon.ui.screens.joueur.character.Harmonisation
 import com.jc2.jdrcompagnon.ui.screens.joueur.character.ObjetsACharges
@@ -85,8 +89,8 @@ import kotlin.math.ceil
  *   de 1 si le personnage a mangé le jour du repos.
  * - Faim (règle "Nourriture et eau" du SRD) : un personnage tient 3 + modificateur de
  *   Constitution jours (minimum 1) sans manger ; au-delà, il subit un niveau
- *   d'épuisement par jour supplémentaire (GameState.syncHunger, appelé à l'ouverture
- *   de cet écran, rattrape les jours écoulés depuis le dernier repas).
+ *   d'épuisement par jour supplémentaire et la condition « Affamé » (GameState.syncHunger,
+ *   calculé à chaque repos court ou long ; un repas remet le compteur à zéro).
  * - Objets à charges (ObjetsACharges) : listés avec leurs charges restantes ; le repos long
  *   relance leur formule de recharge (ex. 1d6 + 4 pour le bâton des chants d'oiseaux).
  * - Sorts préparés (Clerc, Druide, Magicien, Paladin) : choisis ici parmi les sorts connus
@@ -96,6 +100,57 @@ import kotlin.math.ceil
  * - Magicien : Restauration magique (emplacements récupérés à la fin d'un repos court, une fois
  *   par repos long) et Mémorisation de sort (niv. 5, un sort préparé échangé), dans ShortRestCard.
  */
+/**
+ * Règles de cadence des repos (rules.md, « Reposez-vous ») : repos court d'1 h, 3 au maximum
+ * entre deux repos longs ; repos long de 8 h, un seul par période de 24 h, et il faut au moins
+ * 1 PV au début du repos pour en tirer les bénéfices.
+ */
+object ReglesRepos {
+    const val REPOS_COURTS_MAX = 3
+    const val DUREE_REPOS_COURT_MINUTES = 60L
+    const val DUREE_REPOS_LONG_MINUTES = 8L * 60
+    const val INTERVALLE_REPOS_LONG_MINUTES = 24L * 60
+
+    fun reposCourtsRestants(character: Character): Int =
+        (REPOS_COURTS_MAX - character.reposCourtsPris).coerceAtLeast(0)
+
+    /**
+     * Minutes à attendre avant qu'un repos long commençant à [debutMinutes] soit permis (0 =
+     * permis). Une horloge reculée sous le dernier repos long (remise à zéro par le MJ) le permet.
+     */
+    fun attenteReposLong(character: Character, debutMinutes: Long): Long {
+        val dernier = character.dernierReposLongMinutes ?: return 0
+        val ecoule = debutMinutes - dernier
+        if (ecoule < 0) return 0
+        return (INTERVALLE_REPOS_LONG_MINUTES - ecoule).coerceAtLeast(0)
+    }
+
+    /** Raison pour laquelle le repos long est refusé, ou null s'il est permis. */
+    fun blocageReposLong(character: Character, debutMinutes: Long): String? {
+        val attente = attenteReposLong(character, debutMinutes)
+        return when {
+            character.currentHitPoints < 1 -> "Il faut au moins 1 PV au début du repos long pour en tirer les bénéfices."
+            attente > 0 -> "Un seul repos long par période de 24 h : prochain repos long possible dans ${formaterDuree(attente)}."
+            else -> null
+        }
+    }
+
+    fun blocageReposCourt(character: Character): String? =
+        if (reposCourtsRestants(character) <= 0)
+            "$REPOS_COURTS_MAX repos courts déjà pris : un repos long est nécessaire avant le suivant."
+        else null
+
+    fun formaterDuree(minutes: Long): String {
+        val h = minutes / 60
+        val m = minutes % 60
+        return when {
+            h == 0L -> "$m min"
+            m == 0L -> "$h h"
+            else -> "$h h ${"%02d".format(m)}"
+        }
+    }
+}
+
 /** Demande d'ouverture de l'écran de repos depuis n'importe où (halte d'un voyage) : traitée par NavGraph. */
 object ReposNavigation {
     private val _demande = kotlinx.coroutines.flow.MutableStateFlow(false)
@@ -110,6 +165,33 @@ object ReposNavigation {
     }
 }
 
+/** Ouvre la fiche détaillée d'un élément de l'écran (type de lien : "spell", "equipment"), cf. [detailAuDoubleAppui]. */
+private val LocalDetailElement = androidx.compose.runtime.staticCompositionLocalOf<(String, String) -> Unit> { { _, _ -> } }
+
+/** Double appui sur le nom d'un sort, d'une arme ou d'un objet : sa fiche détaillée (bibliothèque). */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun Modifier.detailAuDoubleAppui(type: String, nom: String): Modifier {
+    val ouvrir = LocalDetailElement.current
+    return combinedClickable(onClick = {}, onDoubleClick = { ouvrir(type, nom) })
+}
+
+/** Double appui : fenêtre avec le texte [texte] d'une règle, masqué de l'écran pour l'alléger. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun Modifier.regleAuDoubleAppui(titre: String, texte: String): Modifier {
+    var ouverte by remember { mutableStateOf(false) }
+    if (ouverte) {
+        AlertDialog(
+            onDismissRequest = { ouverte = false },
+            title = { Text(titre) },
+            text = { Text(texte) },
+            confirmButton = { TextButton(onClick = { ouverte = false }) { Text("Fermer") } },
+        )
+    }
+    return combinedClickable(onClick = {}, onDoubleClick = { ouverte = true })
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RestScreen(
@@ -121,10 +203,6 @@ fun RestScreen(
     val character = characters.firstOrNull { it.id == selectedCharacterId }
     val appRole by GameState.appRole.collectAsState()
     val isMj = appRole == AppRole.MJ
-
-    LaunchedEffect(character?.id) {
-        character?.let { GameState.syncHunger(it.id) }
-    }
 
     // Objets à harmonisation portés par le personnage (cartes Harmonisation et Repos court).
     val context = LocalContext.current
@@ -155,6 +233,18 @@ fun RestScreen(
             return@Scaffold
         }
 
+        // Fiche d'un sort, d'une arme ou d'un objet ouverte par un double appui sur son nom.
+        var detailElement by remember { mutableStateOf<Pair<String, String>?>(null) }
+        detailElement?.let { (type, nom) ->
+            com.jc2.jdrcompagnon.ui.screens.mj.scenario.InternalLinkDetailDialog(
+                type = type,
+                name = nom,
+                worldId = character.worldId.ifBlank { GameState.currentWorldId() ?: "donjon_et_dragon" },
+                onDismiss = { detailElement = null },
+            )
+        }
+
+        androidx.compose.runtime.CompositionLocalProvider(LocalDetailElement provides { type, nom -> detailElement = type to nom }) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -167,17 +257,24 @@ fun RestScreen(
                 IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour") }
                 Text(character.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             }
+            Text(
+                "Double appui sur un sort, une arme ou un objet : sa fiche détaillée.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.8f),
+            )
 
             HpCard(character)
             HitDiceCard(character)
+            ShortRestCard(character, aHarmoniser)
+            LongRestCard(character)
             HungerCard(character)
             ExhaustionCard(character, isMj = isMj)
             ChargedItemsCard(character)
             HarmonisationCard(character, aHarmoniser, isMj = isMj)
-            ShortRestCard(character, aHarmoniser)
-            LongRestCard(character)
+            ResistanceFielonneCard(character)
             WeaponMasteryCard(character)
             SpellPreparationCard(character)
+        }
         }
     }
 }
@@ -247,7 +344,7 @@ private fun HungerCard(character: Character) {
             val statusText = when {
                 daysSinceLastMeal == 0L -> "A mangé aujourd'hui."
                 daysSinceLastMeal <= tolerance -> "$daysSinceLastMeal jour(s) sans manger (tient $tolerance jour(s) sans effet)."
-                else -> "$daysSinceLastMeal jour(s) sans manger — au-delà de la limite de $tolerance jour(s), un niveau d'épuisement est subi chaque jour."
+                else -> "$daysSinceLastMeal jour(s) sans manger — au-delà de la limite de $tolerance jour(s) (3 + mod. Constitution) : condition Affamé, et un niveau d'épuisement par jour de dépassement, compté à chaque repos."
             }
             Text(
                 statusText,
@@ -351,15 +448,35 @@ private fun ShortRestCard(character: Character, aHarmoniser: List<EquipmentItem>
     var memorisation by remember(character.id) { mutableStateOf<Pair<String?, String?>>(null to null) }
     val echange = memorisation.takeIf { (retire, ajoute) -> retire != null && ajoute != null }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("Repos court (≈1h)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "Dépensez des dés de vie pour récupérer des PV : 1D$dieFaces + modificateur de Constitution par dé.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+    val restants = ReglesRepos.reposCourtsRestants(character)
+    val blocage = ReglesRepos.blocageReposCourt(character)
+
+    CollapsibleSectionCard(ownerKey = "repos:${character.id}", title = "Repos court (1 h)", count = restants) {
+        Column {
+            // Règles du repos court : affichées au double appui sur la ligne ci-dessous.
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.regleAuDoubleAppui(
+                    "Repos court",
+                    "Au moins 1 heure d'immobilisation (manger, boire, lire, soigner ses blessures). À la fin, dépensez " +
+                        "des dés de vie : chaque dé (1D$dieFaces) + modificateur de Constitution rend des PV, sans dépasser " +
+                        "le maximum. Magie de pacte et certaines ressources de classe sont récupérées. " +
+                        "${ReglesRepos.REPOS_COURTS_MAX} repos courts au maximum entre deux repos longs. Avance l'horloge d'1 h.",
+                ),
+            ) {
+                Icon(Icons.Default.Bedtime, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "Repos courts disponibles : $restants / ${ReglesRepos.REPOS_COURTS_MAX}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (blocage != null) MaterialTheme.colorScheme.error else Color.White,
+                )
+            }
+            blocage?.let {
+                Spacer(Modifier.height(4.dp))
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            }
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { if (diceToSpend > 0) diceToSpend-- }, enabled = diceToSpend > 0) { Text("−") }
@@ -384,6 +501,7 @@ private fun ShortRestCard(character: Character, aHarmoniser: List<EquipmentItem>
                                     else -> "S'harmoniser : ${action.objet}"
                                 },
                                 style = MaterialTheme.typography.bodyMedium,
+                                modifier = action?.let { Modifier.detailAuDoubleAppui("equipment", it.objet) } ?: Modifier,
                             )
                             blocage?.let {
                                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
@@ -403,6 +521,7 @@ private fun ShortRestCard(character: Character, aHarmoniser: List<EquipmentItem>
             Spacer(Modifier.height(8.dp))
             TextButton(
                 onClick = {
+                    if (ReglesRepos.blocageReposCourt(character) != null) return@TextButton
                     val conMod = GameState.abilityModifier(character.constitution)
                     var healed = 0
                     repeat(diceToSpend) {
@@ -410,12 +529,23 @@ private fun ShortRestCard(character: Character, aHarmoniser: List<EquipmentItem>
                         healed += (roll + conMod).coerceAtLeast(1)
                         GameState.spendHitDie(character.id)
                     }
-                    if (diceToSpend > 0) GameState.updateCharacterHp(character.id, character.currentHitPoints + healed)
+                    // Les dés de vie soignent sans dépasser le maximum de PV (updateCharacterHp
+                    // tolère max + PV temporaires, pour les autres usages).
+                    val pvApres = maxOf(character.currentHitPoints, minOf(character.currentHitPoints + healed, character.maxHitPoints))
+                    healed = pvApres - character.currentHitPoints
+                    if (diceToSpend > 0) GameState.updateCharacterHp(character.id, pvApres)
+                    GameState.enregistrerReposCourt(character.id)
                     // Magie de pacte (Occultiste) récupère au repos court, contrairement aux
                     // emplacements de sort classiques (repos long uniquement, cf. LongRestCard).
                     GameState.resetPactSlots(character.id)
                     // Sorts de prédilection (Magicien niv. 20) : récupérés au repos court comme au repos long.
                     GameState.recupererSortsPredilection(character.id)
+                    // Occultiste : Combattant clairvoyant récupéré, Résilience céleste.
+                    val texteOccultiste = GameState.reposOccultiste(character.id)
+                    // Paladin : une utilisation de Conduit divin récupérée.
+                    val textePaladin = GameState.reposCourtPaladin(character.id) +
+                        // Guerrier : Second souffle (1), Fougue, dés de Supériorité, Énergie psionique (1), runes…
+                        GameState.reposCourtGuerrier(character.id)
                     val lienHarmonisation = harmonisation?.let { action ->
                         if (action.rompre) {
                             GameState.rompreHarmonisation(character.id, action.objet)
@@ -434,15 +564,17 @@ private fun ShortRestCard(character: Character, aHarmoniser: List<EquipmentItem>
                         GameState.setPreparedSpells(character.id, prepares.filterNot { it == retire } + ajoute!!)
                         " Mémorisation de sort : $ajoute préparé à la place de $retire."
                     }.orEmpty()
-                    ScenarioClockState.advanceManually(60L)
+                    ScenarioClockState.advanceManually(ReglesRepos.DUREE_REPOS_COURT_MINUTES)
+                    val restantsApres = ReglesRepos.reposCourtsRestants(character) - 1
                     result = "Repos court : +$healed PV récupérés ($diceToSpend dé(s) dépensé(s))." + lienHarmonisation +
-                        texteRestauration + texteMemorisation
+                        texteRestauration + texteMemorisation + texteOccultiste + textePaladin +
+                        " Repos courts restants avant un repos long : $restantsApres."
                     diceToSpend = 0
                     harmonisation = null
                     restauration = emptyMap()
                     memorisation = null to null
                 },
-                enabled = diceToSpend > 0 || harmonisation != null || restauration.isNotEmpty() || echange != null,
+                enabled = blocage == null,
             ) {
                 Icon(Icons.Default.Bedtime, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
@@ -464,28 +596,31 @@ private fun ShortRestCard(character: Character, aHarmoniser: List<EquipmentItem>
 @Composable
 private fun RestaurationMagiqueSection(character: Character, budget: Int, choix: Map<Int, Int>, onChoix: (Map<Int, Int>) -> Unit) {
     val cout = choix.entries.sumOf { (niveau, n) -> niveau * n }
-    Text("Restauration magique (Magicien)", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-    if (character.arcaneRecoveryUsed) {
-        Text(
-            "Déjà utilisée depuis le dernier repos long.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        return
-    }
-    Text(
-        "Récupérez des emplacements dépensés à la fin de ce repos court : somme des niveaux ≤ $budget, " +
-            "aucun du 6e niveau ou plus. Une fois par repos long. Niveaux choisis : $cout / $budget.",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
     val depenses = (1..minOf(budget, ArsenalPersonnage.NIVEAU_MAX_RESTAURATION_MAGIQUE))
         .associateWith { character.spellSlotsUsed[it] ?: 0 }
         .filterValues { it > 0 }
-    if (depenses.isEmpty()) {
-        Text("Aucun emplacement récupérable n'a été dépensé.", style = MaterialTheme.typography.bodySmall)
-        return
+    // Seul le nombre d'emplacements récupérés est affiché ; la règle s'ouvre au double appui.
+    Column(
+        modifier = Modifier.regleAuDoubleAppui(
+            "Restauration magique",
+            "Récupérez des emplacements dépensés à la fin de ce repos court : somme des niveaux ≤ $budget, " +
+                "aucun du 6e niveau ou plus. Une fois par repos long. Niveaux choisis : $cout / $budget." +
+                when {
+                    character.arcaneRecoveryUsed -> "\n\nDéjà utilisée depuis le dernier repos long."
+                    depenses.isEmpty() -> "\n\nAucun emplacement récupérable n'a été dépensé."
+                    else -> ""
+                },
+        ),
+    ) {
+        Text("Restauration magique (Magicien)", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+        Text(
+            if (character.arcaneRecoveryUsed) "Déjà utilisée"
+            else "Emplacements récupérés : ${choix.values.sum()}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
+    if (character.arcaneRecoveryUsed || depenses.isEmpty()) return
     depenses.forEach { (niveau, utilises) ->
         val n = choix[niveau] ?: 0
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -601,7 +736,7 @@ private fun HarmonisationCard(character: Character, aHarmoniser: List<EquipmentI
             )
             character.attunedItems.forEach { nom ->
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    Text("• $nom", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    Text("• $nom", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).detailAuDoubleAppui("equipment", nom))
                     if (isMj) {
                         TextButton(onClick = { GameState.rompreHarmonisation(character.id, nom) }) { Text("Rompre (MJ)") }
                     }
@@ -613,6 +748,7 @@ private fun HarmonisationCard(character: Character, aHarmoniser: List<EquipmentI
                         if (Harmonisation.prerequisRempli(character, item) == null) " (prérequis à vérifier par le MJ)" else "",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.detailAuDoubleAppui("equipment", item.name),
                 )
             }
             if (isMj && character.attunedItems.isNotEmpty()) {
@@ -649,7 +785,7 @@ private fun ChargedItemsCard(character: Character) {
                 val max = item.charges ?: 0
                 val restantes = ObjetsACharges.restantes(character, item)
                 Spacer(Modifier.height(8.dp))
-                Text("${item.name} · $restantes / $max charges", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                Text("${item.name} · $restantes / $max charges", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, modifier = Modifier.detailAuDoubleAppui("equipment", item.name))
                 LinearProgressIndicator(
                     progress = { if (max > 0) restantes.toFloat() / max else 0f },
                     modifier = Modifier.fillMaxWidth().height(6.dp),
@@ -669,9 +805,11 @@ private fun ChargedItemsCard(character: Character) {
 
 /**
  * Repos long d'un personnage (voir LongRestCard) : PV, dés de vie, emplacements de sort,
- * épuisement si le personnage a mangé, objets à charges. [avancerHorloge] faux quand le MJ a
- * déjà avancé l'horloge pour tout le groupe (halte sur un trajet). [onResultat] reçoit le résumé,
- * puis à nouveau le résumé complété des recharges d'objets.
+ * épuisement si le personnage a mangé, objets à charges, compteur de repos courts remis à zéro.
+ * [avancerHorloge] faux quand le MJ a déjà avancé l'horloge pour tout le groupe (halte sur un
+ * trajet) : le repos a alors commencé 8 h plus tôt. [onResultat] reçoit le résumé, puis à nouveau
+ * le résumé complété des recharges d'objets — ou la raison du refus (moins de 24 h depuis le
+ * dernier repos long, 0 PV). Retourne faux si le repos est refusé.
  */
 fun effectuerReposLong(
     context: android.content.Context,
@@ -679,32 +817,49 @@ fun effectuerReposLong(
     character: Character,
     avancerHorloge: Boolean = true,
     onResultat: (String) -> Unit = {},
-) {
+): Boolean {
+    val maintenant = ScenarioClockState.state.value.scenarioMinutes
+    val debut = if (avancerHorloge) maintenant else maintenant - ReglesRepos.DUREE_REPOS_LONG_MINUTES
+    ReglesRepos.blocageReposLong(character, debut)?.let {
+        onResultat("Repos long impossible : $it")
+        return false
+    }
     val currentDay = ScenarioClockState.dayIndex(ScenarioClockState.state.value.scenarioMinutes)
     val ateToday = character.lastMealDay >= currentDay
     val recovered = ceil(character.level / 2.0).toInt().coerceAtLeast(1)
     GameState.updateCharacterHp(character.id, character.maxHitPoints)
     GameState.recoverHitDice(character.id, recovered)
     GameState.resetSpellSlots(character.id)
+    GameState.enregistrerReposLong(character.id, debut)
+    // Occultiste : aptitudes de protecteur récupérées, Résilience céleste.
+    val texteOccultiste = GameState.reposOccultiste(character.id)
     if (ateToday && character.exhaustionLevel > 0) {
         GameState.setExhaustionLevel(character.id, character.exhaustionLevel - 1)
     }
-    if (avancerHorloge) ScenarioClockState.advanceManually(8L * 60)
-    val resume = "Repos long effectué : PV au maximum, $recovered dé(s) de vie récupéré(s), emplacements de sort restaurés." +
+    if (avancerHorloge) ScenarioClockState.advanceManually(ReglesRepos.DUREE_REPOS_LONG_MINUTES)
+    // La faim se calcule à chaque repos (condition « Affamé », épuisement).
+    GameState.syncHunger(character.id)
+    val resume = "Repos long effectué : PV au maximum, $recovered dé(s) de vie récupéré(s), emplacements de sort restaurés, " +
+        "${ReglesRepos.REPOS_COURTS_MAX} repos courts de nouveau disponibles." +
         (if (ArsenalPersonnage.reservePuissanceCurative(character) > 0) " Puissance curative restaurée." else "") +
         (if (ArsenalPersonnage.aChatimentDePaladin(character)) " Châtiment divin gratuit de nouveau disponible." else "") +
+        (if (com.jc2.jdrcompagnon.feature_combat.domain.model.Paladin.conduitDivinMax(character) > 0) " Conduit divin restauré." else "") +
+        (if (com.jc2.jdrcompagnon.feature_combat.domain.model.RessourcesClasse.toutes(character).isNotEmpty()) " Ressources de classe restaurées." else "") +
+        (com.jc2.jdrcompagnon.feature_combat.domain.model.Paladin.aptitude20(character)?.let { " ${it.first} de nouveau disponible." } ?: "") +
         (if (ArsenalPersonnage.niveauMagicien(character) > 0) " Restauration magique de nouveau disponible." else "") +
         (if (character.sortsSpeciaux.containsValue(ArsenalPersonnage.SORT_PREDILECTION)) " Sorts de prédilection de nouveau disponibles." else "") +
         (if (ArsenalPersonnage.nombreBottes(character) > 0) " Vous pouvez changer vos bottes d'arme dans l'écran Repos." else "") +
         (if (ateToday && character.exhaustionLevel > 0) " Épuisement réduit de 1." else "") +
         if (ArsenalPersonnage.classesQuiPreparent.any { it.equals(character.characterClass, ignoreCase = true) })
             " Vous pouvez changer vos sorts préparés dans l'écran Repos." else ""
-    onResultat(resume)
+    val resumeComplet = resume + texteOccultiste
+    onResultat(resumeComplet)
     // Objets à charges : chacun relance sa formule de recharge.
     scope.launch {
         val recharges = ObjetsACharges.rechargerAuReposLong(context, character)
-        if (recharges.isNotEmpty()) onResultat(resume + "\n" + recharges.joinToString("\n"))
+        if (recharges.isNotEmpty()) onResultat(resumeComplet + "\n" + recharges.joinToString("\n"))
     }
+    return true
 }
 
 @Composable
@@ -713,20 +868,44 @@ private fun LongRestCard(character: Character) {
     val scope = rememberCoroutineScope()
     var showConfirm by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf<String?>(null) }
+    val horloge by ScenarioClockState.state.collectAsState()
+    val blocage = ReglesRepos.blocageReposLong(character, horloge.scenarioMinutes)
 
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("Repos long (8h)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+    CollapsibleSectionCard(ownerKey = "repos:${character.id}", title = "Repos long (8 h)") {
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Nightlight, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    if (blocage == null) "Repos long disponible" else "Repos long indisponible",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (blocage != null) MaterialTheme.colorScheme.error else Color.White,
+                )
+            }
+            character.dernierReposLongMinutes?.let { dernier ->
+                Text(
+                    "Dernier repos long : jour ${ScenarioClockState.dayIndex(dernier)} à ${ScenarioClockState.formattedTime(dernier)}.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.8f),
+                )
+            }
             Spacer(Modifier.height(4.dp))
             Text(
-                "Restaure tous les PV, la moitié des dés de vie (arrondi au supérieur), les emplacements de sort et les " +
-                    "ressources de classe (Puissance curative, Châtiment divin gratuit…). Réduit l'épuisement de 1 " +
-                    "si le personnage a mangé aujourd'hui. Recharge les objets à charges. Avance l'horloge de scénario de 8h.",
+                "Au moins 8 heures de sommeil ou d'activité légère (2 h de garde au plus). Restaure tous les PV, la " +
+                    "moitié des dés de vie (arrondi au supérieur, minimum 1), les emplacements de sort et les ressources " +
+                    "de classe, et rend les ${ReglesRepos.REPOS_COURTS_MAX} repos courts. Réduit l'épuisement de 1 si le " +
+                    "personnage a mangé aujourd'hui. Recharge les objets à charges. Un seul repos long par période de " +
+                    "24 h, et il faut au moins 1 PV au début du repos. Avance l'horloge de 8 h.",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = Color.White.copy(alpha = 0.8f),
             )
+            blocage?.let {
+                Spacer(Modifier.height(4.dp))
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            }
             Spacer(Modifier.height(12.dp))
-            TextButton(onClick = { showConfirm = true }) {
+            TextButton(onClick = { showConfirm = true }, enabled = blocage == null) {
                 Icon(Icons.Default.Nightlight, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Prendre un repos long")
@@ -809,7 +988,7 @@ private fun WeaponMasteryCard(character: Character) {
                                 selection = if (c) selection + arme.nom else selection.filterNot { it.equals(arme.nom, ignoreCase = true) }.toSet()
                             }
                         )
-                        Text("${arme.nom} — botte ${arme.botte}", style = MaterialTheme.typography.bodyMedium)
+                        Text("${arme.nom} — botte ${arme.botte}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).detailAuDoubleAppui("equipment", arme.nom))
                     }
                 }
             }
@@ -852,8 +1031,7 @@ private fun SpellPreparationCard(character: Character) {
     if (aPreparer.isEmpty()) return
 
     // Toujours préparés (Châtiment divin du Paladin, sorts de sous-classe) : hors de la limite, jamais à cocher.
-    val toujoursPrepares = sortsDeSousClasse(character, classesSrd) + ArsenalPersonnage.SORT_CHATIMENT_DIVIN +
-        ArsenalPersonnage.sortsToujoursPreparesClasse(character)
+    val toujoursPrepares = sortsDeSousClasse(character, classesSrd) + ArsenalPersonnage.sortsToujoursPreparesClasse(character)
 
     // Sorts de niveau 1+ connus pour chaque classe qui prépare.
     fun sortsDe(piste: PisteIncantation) = character.spells.distinct().filter { s ->
@@ -912,7 +1090,7 @@ private fun SpellPreparationCard(character: Character) {
                             enabled = !complet,
                             onCheckedChange = { selection = if (it) selection + sort else selection - sort }
                         )
-                        Text("$sort (niv. ${niveaux[sort] ?: "?"})", style = MaterialTheme.typography.bodyMedium)
+                        Text("$sort (niv. ${niveaux[sort] ?: "?"})", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).detailAuDoubleAppui("spell", sort))
                     }
                 }
             }
@@ -924,6 +1102,37 @@ private fun SpellPreparationCard(character: Character) {
                 }
             ) { Text("Enregistrer la préparation") }
             message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
+        }
+    }
+}
+
+/**
+ * Occultiste Protecteur Fiélon (niveau 10) — Résistance fiélonne : à la fin de chaque repos court
+ * ou long, un type de dégâts (hors force) auquel le personnage résiste jusqu'au prochain choix.
+ * Appliquée en combat (CombatSession : dégâts de ce type divisés par deux).
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun ResistanceFielonneCard(character: Character) {
+    val occultiste = com.jc2.jdrcompagnon.feature_combat.domain.model.Occultiste
+    if (occultiste.niveauFielon(character) < 10) return
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Résistance fiélonne (Occultiste)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                "À la fin d'un repos court ou long, choisissez un type de dégâts : vous y résistez jusqu'au prochain choix." +
+                    (character.resistanceFielonne.takeIf { it.isNotBlank() }?.let { " Actuellement : $it." } ?: " Aucun type choisi."),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                occultiste.TYPES_RESISTANCE.forEach { type ->
+                    androidx.compose.material3.FilterChip(
+                        selected = character.resistanceFielonne == type,
+                        onClick = { GameState.choisirResistanceFielonne(character.id, type) },
+                        label = { Text(type) },
+                    )
+                }
+            }
         }
     }
 }

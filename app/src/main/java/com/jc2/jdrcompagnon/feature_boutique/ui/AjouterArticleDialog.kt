@@ -1,5 +1,6 @@
 package com.jc2.jdrcompagnon.feature_boutique.ui
 
+import com.jc2.jdrcompagnon.ui.Monnaie
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -86,12 +87,12 @@ fun AjouterArticleDialog(
                             }
                             resultats.forEach { equipement ->
                                 Text(
-                                    text = "${equipement.nom} — ${equipement.coutBaseEnPo} po",
+                                    text = "${equipement.nom} — ${Monnaie.libelle(equipement.coutBaseEnPc)}",
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable {
                                             equipementSelectionne = equipement
-                                            prixTexte = prixSuggere(equipement).toString()
+                                            prixTexte = Monnaie.libelle(prixSuggere(equipement), zero = "0")
                                         }
                                         .padding(vertical = 8.dp)
                                 )
@@ -108,9 +109,8 @@ fun AjouterArticleDialog(
                     TextButton(onClick = { equipementSelectionne = null }) { Text("Changer d'objet") }
                     OutlinedTextField(
                         value = prixTexte,
-                        onValueChange = { prixTexte = it.filter(Char::isDigit) },
-                        label = { Text("Prix (po)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        onValueChange = { prixTexte = it },
+                        label = { Text("Prix (ex. 12 po, 5 pa, 1 po 5 pa)") },
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
@@ -132,10 +132,10 @@ fun AjouterArticleDialog(
             TextButton(
                 onClick = {
                     if (choisi != null) {
-                        onConfirmer(choisi, prixTexte.toIntOrNull() ?: 0, quantiteTexte.toIntOrNull() ?: 1, toujoursDisponible)
+                        onConfirmer(choisi, Monnaie.parser(prixTexte) ?: 0, quantiteTexte.toIntOrNull() ?: 1, toujoursDisponible)
                     }
                 },
-                enabled = choisi != null && prixTexte.toIntOrNull() != null && quantiteTexte.toIntOrNull() != null
+                enabled = choisi != null && Monnaie.parser(prixTexte) != null && quantiteTexte.toIntOrNull() != null
             ) { Text("Ajouter") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } }

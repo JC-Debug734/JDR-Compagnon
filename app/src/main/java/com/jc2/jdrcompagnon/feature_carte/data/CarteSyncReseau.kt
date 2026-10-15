@@ -9,9 +9,11 @@ import com.jc2.jdrcompagnon.feature_carte.domain.model.CarteCampagne
 import com.jc2.jdrcompagnon.feature_boutique.domain.model.Boutique
 import com.jc2.jdrcompagnon.feature_carte.domain.model.LieuNotable
 import com.jc2.jdrcompagnon.feature_carte.domain.model.PointInteret
+import com.jc2.jdrcompagnon.network.AffichageLieuData
 import com.jc2.jdrcompagnon.network.LieuJoueurData
 import com.jc2.jdrcompagnon.network.VilleImageData
 import com.jc2.jdrcompagnon.feature_carte.domain.model.TypePointInteret
+import com.jc2.jdrcompagnon.network.ArticleJoueurData
 import com.jc2.jdrcompagnon.network.BoutiqueJoueurData
 import com.jc2.jdrcompagnon.network.ServiceJoueurData
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -59,24 +61,32 @@ object CarteSyncReseau {
 
     /**
      * Boutiques des villes de [villes] (liées par Boutique.villeId ou PointInteret.boutiqueIds), vues
-     * par les joueurs : services actifs seulement, sans stock ni caisse. Sert à la diffusion réseau
-     * comme à l'affichage local des services du lieu (menu joueur).
+     * par les joueurs : services actifs, articles en vente (prix, stock) et caisse du marchand. Sert
+     * à la diffusion réseau comme à l'affichage local des commerces du lieu (menu joueur).
      */
     fun boutiquesJoueur(villes: List<PointInteret>, boutiques: List<Boutique>): List<BoutiqueJoueurData> =
         villes.filter { it.type == TypePointInteret.VILLE }.flatMap { ville ->
-            boutiques.filter { it.villeId == ville.id || it.id in ville.boutiqueIds }.map { b ->
-                BoutiqueJoueurData(
-                    id = b.id,
-                    villeId = ville.id,
-                    nom = b.nom,
-                    type = b.type.label,
-                    marchand = b.marchand.nom,
-                    services = b.services.filter { it.actif }.map { s ->
-                        ServiceJoueurData(s.nom, s.description, s.prixEnPo, s.quantiteDisponible)
-                    },
-                )
-            }
+            boutiques.filter { it.villeId == ville.id || it.id in ville.boutiqueIds }.map { b -> boutiqueJoueur(b, ville.id) }
         }.distinctBy { it.id }
+
+    /** Une boutique vue par les joueurs (voir [boutiquesJoueur]) ; [villeId] vide hors d'une ville. */
+    fun boutiqueJoueur(b: Boutique, villeId: String = b.villeId.orEmpty()) =
+        BoutiqueJoueurData(
+            id = b.id,
+            villeId = villeId,
+            nom = b.nom,
+            type = b.type.label,
+            marchand = b.marchand.nom,
+            services = b.services.filter { it.actif }.map { s ->
+                ServiceJoueurData(s.nom, s.description, s.prixEnPc, s.quantiteDisponible, s.effetReel.name)
+            },
+            articles = b.inventaire.map { a ->
+                ArticleJoueurData(a.equipement.nom, a.equipement.type, a.prixEnPc, a.quantiteStock)
+            },
+            argentPc = b.argentDisponibleEnPc,
+            traitMarchand = b.marchand.trait,
+            image = b.image,
+        )
 
     fun etatCampagne(
         context: Context,
@@ -105,12 +115,19 @@ object CarteSyncReseau {
             points = points.filter { it.visibleJoueurs }.map { it.copy(boutiqueIds = emptyList(), scenarioIds = emptyList()) },
             // Les services, eux, sont partagés : les joueurs y accèdent depuis le lieu où se trouve le groupe.
             boutiques = boutiquesJoueur(points.filter { it.visibleJoueurs }, boutiques),
-            lieux = lieux.filter { l -> points.any { it.id == l.villeId && it.visibleJoueurs } }
-                .map { LieuJoueurData(it.id, it.villeId, it.nom, it.description) },
+            // Lieux à visiter cachés par le MJ : jamais transmis non plus.
+            lieux = lieux.filter { l -> l.visibleJoueurs && points.any { it.id == l.villeId && it.visibleJoueurs } }
+                .map { LieuJoueurData(it.id, it.villeId, it.nom, it.description, it.fonction.name, it.chancePourcent, it.prixPc, it.texte, it.queteIds, it.dd, it.valeur) },
             // Images des villes révélées : envoyées à part (imageVilleEncodee), quand la signature change.
             imagesVilles = points.filter { it.visibleJoueurs && it.type == TypePointInteret.VILLE }
                 .mapNotNull { v -> VilleImageStore.signature(context, v.id)?.let { v.id to it } }
                 .toMap(),
+            // Nom caché, taille d'icône... : les joueurs voient les lieux comme le MJ les a réglés.
+            affichageLieux = points.filter { it.visibleJoueurs }.associate { p ->
+                val r = CartePointPrefs.lire(context, p.id)
+                p.id to AffichageLieuData(r.taille, r.afficherTexte, r.positionTexte.name)
+            },
+            nomsCartes = cartes.associate { it.id to CarteGrillePrefs.afficherNoms(context, it.id) },
         )
 
     fun imageEncodee(context: Context, carte: CarteCampagne): CarteImageData? {
@@ -180,12 +197,35 @@ object CarteSyncReseau {
         repo.observerPoints(data.id).first()
             .filter { local -> data.points.none { it.id == local.id } }
             .forEach { repo.supprimerPoint(it.id) }
+        // Réglages d'affichage du MJ (nom caché, taille d'icône...), avant les points pour que
+        // l'écran de carte les lise en se redessinant.
+        data.nomsCartes.forEach { (carteId, afficher) -> CarteGrillePrefs.setAfficherNoms(context, carteId, afficher) }
+        data.affichageLieux.forEach { (pointId, a) ->
+            val actuel = CartePointPrefs.lire(context, pointId)
+            CartePointPrefs.ecrire(
+                context, pointId,
+                actuel.copy(
+                    taille = a.taille,
+                    afficherTexte = a.afficherTexte,
+                    positionTexte = PositionTexte.entries.firstOrNull { it.name == a.positionTexte } ?: PositionTexte.BAS,
+                ),
+            )
+        }
         // Points d'abord : les réenregistrer efface leurs lieux notables (cascade), remis ensuite.
         data.points.forEach { repo.sauvegarderPoint(it) }
         repo.observerLieuxNotablesCampagne(data.id).first()
             .filter { local -> data.lieux.none { it.id == local.id } }
             .forEach { repo.supprimerLieuNotable(it.id) }
-        data.lieux.forEach { repo.sauvegarderLieuNotable(LieuNotable(it.id, it.villeId, it.nom, it.description)) }
+        data.lieux.forEach {
+            repo.sauvegarderLieuNotable(
+                LieuNotable(
+                    it.id, it.villeId, it.nom, it.description,
+                    fonction = com.jc2.jdrcompagnon.feature_carte.domain.model.FonctionLieu.depuis(it.fonction),
+                    chancePourcent = it.chancePourcent, prixPc = it.prixPc, texte = it.texte, queteIds = it.queteIds,
+                    dd = it.dd, valeur = it.valeur,
+                )
+            )
+        }
         // Image retirée par le MJ (ou ville cachée) : retirée aussi chez le joueur.
         data.points.filter { it.type == TypePointInteret.VILLE && it.id !in data.imagesVilles }
             .forEach { VilleImageStore.supprimer(context, it.id) }

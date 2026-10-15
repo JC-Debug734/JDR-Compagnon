@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.map
 
 interface CarteRepository {
     fun observerPoints(campagneId: String): Flow<List<PointInteret>>
+    /** Villes de toutes les campagnes et de la bibliothèque (campagneId = PointInteret.SANS_CAMPAGNE). */
+    fun observerToutesLesVilles(): Flow<List<PointInteret>>
     suspend fun sauvegarderPoint(point: PointInteret)
     suspend fun supprimerPoint(id: String)
     /** Position libre du centre de l'icône, en fraction de la carte (voir PointInteret.fx). */
@@ -33,6 +35,9 @@ class CarteRepositoryImpl(private val dao: CarteDao) : CarteRepository {
 
     override fun observerPoints(campagneId: String): Flow<List<PointInteret>> =
         dao.observerPoints(campagneId).map { liste -> liste.map { it.toDomain() } }
+
+    override fun observerToutesLesVilles(): Flow<List<PointInteret>> =
+        dao.observerToutesLesVilles().map { liste -> liste.map { it.toDomain() } }
 
     override suspend fun sauvegarderPoint(point: PointInteret) {
         dao.sauvegarderPoint(point.toEntity())

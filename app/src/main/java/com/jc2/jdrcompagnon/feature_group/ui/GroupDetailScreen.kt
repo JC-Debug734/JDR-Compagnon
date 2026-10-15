@@ -33,7 +33,7 @@ import com.jc2.jdrcompagnon.ui.GameState
 
 /**
  * Écran du groupe : membres, PNJ, montures, véhicules, réputation, inventaire, biens (tout
- * localisé) et calculateur de rencontre — ouvert depuis GroupsScreen via un tap sur la carte du
+ * localisé) — ouvert depuis GroupsScreen via un tap sur la carte du
  * groupe. Voir GroupDetailContent.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -90,16 +90,18 @@ fun GroupDetailScreen(
         ) {
             var name by remember(group.id) { mutableStateOf(group.name) }
             LaunchedEffect(group.id, group.name) { name = group.name }
-            OutlinedTextField(
-                value = name,
-                onValueChange = { value ->
-                    name = value
-                    if (value.isNotBlank()) GameState.updateMjGroup(group.copy(name = value))
-                },
-                label = { Text("Nom du groupe") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
+            SubsectionCard {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { value ->
+                        name = value
+                        if (value.isNotBlank()) GameState.updateMjGroup(group.copy(name = value))
+                    },
+                    label = { Text("Nom du groupe") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+            }
 
             GroupDetailContent(
                 group = group,
@@ -118,7 +120,6 @@ fun GroupDetailScreen(
                 onOpenBestiaryDetail = onOpenBestiaryDetail,
                 onOpenEquipmentDetail = onOpenEquipmentDetail,
                 onOpenCharacter = onOpenCharacter,
-                onTablePlayersChange = { players -> GameState.updateMjGroup(group.copy(tablePlayers = players)) },
             )
         }
     }

@@ -65,12 +65,27 @@ fun PlayerNetworkOverlay() {
     val epreuveMasquee by NetworkSessionManager.epreuveMasquee.collectAsState()
     val restOffer by NetworkSessionManager.pendingRestOffer.collectAsState()
     val voyageAnnonce by NetworkSessionManager.voyageAnnonce.collectAsState()
+    val importsManquants by NetworkSessionManager.importsManquants.collectAsState()
+    val importsMasques by NetworkSessionManager.importsMasques.collectAsState()
+    val telechargement by NetworkSessionManager.telechargementImports.collectAsState()
+    val contenuManquant by NetworkSessionManager.contenuManquant.collectAsState()
+    val boutiqueInvitation by NetworkSessionManager.boutiqueInvitation.collectAsState()
+    val invitationBoutiqueEnAttente by NetworkSessionManager.invitationBoutiqueEnAttente.collectAsState()
+    // Écran de la boutique où le MJ a invité le joueur, ouvert après acceptation de l'invitation.
+    var boutiqueOuverte by remember { mutableStateOf(false) }
 
     when {
         conflict != null -> CharacterConflictDialog(
             conflict = conflict!!,
             onKeepHostVersion = { NetworkSessionManager.resolveCharacterConflictKeepHost() },
             onProposeMine = { NetworkSessionManager.resolveCharacterConflictProposeMine() },
+        )
+        telechargement != null -> TelechargementImportsDialog(telechargement!!)
+        importsManquants.isNotEmpty() && !importsMasques -> ImportsManquantsDialog(importsManquants)
+        contenuManquant != null -> ContenuManquantDialog(
+            alerte = contenuManquant!!,
+            texte = "Votre bibliothèque ne contient pas tout ce qu'utilise « ${contenuManquant!!.sujet} ». Le MJ a été prévenu.",
+            onDismiss = { NetworkSessionManager.dismissContenuManquant() },
         )
         finalCall != null -> ProposalFinalCallDialog(
             title = finalCall!!.title,
@@ -98,6 +113,14 @@ fun PlayerNetworkOverlay() {
             epreuve = epreuve!!,
             onDismiss = { NetworkSessionManager.masquerEpreuve() },
         )
+        invitationBoutiqueEnAttente && boutiqueInvitation != null -> InvitationBoutiqueDialog(
+            boutique = boutiqueInvitation!!,
+            onEntrer = {
+                NetworkSessionManager.repondreInvitationBoutique()
+                boutiqueOuverte = true
+            },
+            onPlusTard = { NetworkSessionManager.repondreInvitationBoutique() },
+        )
         restOffer != null -> RestOfferDialog(message = restOffer!!, onDismiss = { NetworkSessionManager.dismissRestOffer() })
         voyageAnnonce != null -> VoyageAnnonceDialog(
             voyage = voyageAnnonce!!,
@@ -108,6 +131,134 @@ fun PlayerNetworkOverlay() {
             onDismiss = { NetworkSessionManager.dismissVoyageAnnonce() },
         )
     }
+
+    val boutique = boutiqueInvitation
+    if (boutiqueOuverte && boutique != null) {
+        BoutiqueInviteeDialog(boutique = boutique, onDismiss = { boutiqueOuverte = false })
+    }
+    // Invitation oubliée (déconnexion) : l'écran ne se rouvre pas tout seul à la prochaine.
+    androidx.compose.runtime.LaunchedEffect(boutique == null) { if (boutique == null) boutiqueOuverte = false }
+}
+
+/** Le MJ invite les joueurs dans une boutique (lien #boutique: de son scénario). */
+@Composable
+private fun InvitationBoutiqueDialog(
+    boutique: com.jc2.jdrcompagnon.network.BoutiqueJoueurData,
+    onEntrer: () -> Unit,
+    onPlusTard: () -> Unit,
+) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = {},
+        title = { Text(boutique.nom) },
+        text = {
+            Text(
+                "Le MJ vous invite à entrer dans la boutique « ${boutique.nom} » (${boutique.type} · ${boutique.marchand}).",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        },
+        confirmButton = { Button(onClick = onEntrer) { Text("Entrer") } },
+        dismissButton = { TextButton(onClick = onPlusTard) { Text("Plus tard") } },
+    )
+}
+
+/**
+ * Écran de commerce de la boutique où le MJ a invité le joueur : le même que pour une boutique
+ * de ville (CommerceLieuDialog), achats et ventes validés par le MJ, données tenues à jour par
+ * ses renvois de l'invitation.
+ */
+@Composable
+private fun BoutiqueInviteeDialog(boutique: com.jc2.jdrcompagnon.network.BoutiqueJoueurData, onDismiss: () -> Unit) {
+    val characters by GameState.characters.collectAsState()
+    val claimedId by NetworkSessionManager.claimedCharacterId.collectAsState()
+    val selectedId by GameState.selectedCharacterId.collectAsState()
+    val personnage = characters.firstOrNull { it.id == (claimedId ?: selectedId) }
+    com.jc2.jdrcompagnon.feature_boutique.ui.CommerceLieuDialog(
+        lieu = boutique.nom,
+        description = boutique.traitMarchand.takeIf { it.isNotBlank() }?.let { "${boutique.marchand}, $it." }.orEmpty(),
+        boutique = boutique,
+        personnage = personnage,
+        presents = emptyList(),
+        onUtiliserService = { b, service ->
+            val id = personnage?.id ?: return@CommerceLieuDialog
+            // Paiement sur la fiche (relayée au MJ), puis place décomptée par le MJ.
+            GameState.payer(id, service.prixEnPc)
+            NetworkSessionManager.signalerServiceUtilise(id, b.id, service.nom)
+        },
+        onDismiss = onDismiss,
+    )
+}
+
+/** Le MJ partage des imports que le joueur n'a pas : il est invité à les télécharger. */
+@Composable
+private fun ImportsManquantsDialog(manquants: List<com.jc2.jdrcompagnon.network.ImportsPartages.ImportManquant>) {
+    fun taille(octets: Long) = if (octets >= 1_048_576) String.format("%.1f Mo", octets / 1_048_576.0) else "${(octets / 1024).coerceAtLeast(1)} Ko"
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = {},
+        title = { Text("Imports du MJ") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    "Le MJ utilise des imports que vous ne possédez pas. Téléchargez-les pour avoir tout son contenu (textes et images) :",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                LazyColumn(modifier = Modifier.heightIn(max = 260.dp)) {
+                    items(manquants) { m ->
+                        Text(
+                            "• ${m.import.nom} (${taille(m.import.taille)})" +
+                                if (m.remplace != null) " — remplace votre version de « ${m.remplace.name} »" else "",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = { Button(onClick = { NetworkSessionManager.telechargerImportsManquants() }) { Text("Télécharger") } },
+        dismissButton = { TextButton(onClick = { NetworkSessionManager.masquerImportsManquants() }) { Text("Plus tard") } },
+    )
+}
+
+@Composable
+private fun TelechargementImportsDialog(etat: NetworkSessionManager.TelechargementImports) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = {},
+        title = { Text("Imports du MJ") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                when {
+                    etat.enCours != null -> {
+                        Text("Téléchargement de « ${etat.enCours} »…", style = MaterialTheme.typography.bodyMedium)
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    }
+                    etat.erreurs.isEmpty() -> Text("Imports ajoutés à votre bibliothèque.", style = MaterialTheme.typography.bodyMedium)
+                    else -> {
+                        Text("Certains imports n'ont pas pu être téléchargés :", style = MaterialTheme.typography.bodyMedium)
+                        etat.erreurs.forEach { Text("• $it", style = MaterialTheme.typography.bodySmall) }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (etat.enCours == null) TextButton(onClick = { NetworkSessionManager.fermerTelechargementImports() }) { Text("OK") }
+        },
+    )
+}
+
+/** Contenu introuvable dans la bibliothèque (joueur : ce qu'il a récupéré ; MJ : signalé par un joueur). */
+@Composable
+private fun ContenuManquantDialog(alerte: NetworkSessionManager.AlerteContenuManquant, texte: String, onDismiss: () -> Unit) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Contenu manquant") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(texte, style = MaterialTheme.typography.bodyMedium)
+                LazyColumn(modifier = Modifier.heightIn(max = 260.dp)) {
+                    items(alerte.manquants) { Text("• $it", style = MaterialTheme.typography.bodySmall) }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } },
+    )
 }
 
 /**
@@ -221,9 +372,20 @@ fun HostNetworkOverlay() {
     val proposals by NetworkSessionManager.pendingProposals.collectAsState()
     val clients by NetworkSessionManager.connectedClients.collectAsState()
     val characters by GameState.characters.collectAsState()
+    val alertesManquants by NetworkSessionManager.alertesContenuManquant.collectAsState()
     var postponed by remember { mutableStateOf(emptyMap<String, Character>()) }
 
-    val (clientId, proposed) = proposals.entries.firstOrNull { postponed[it.key] != it.value }?.toPair() ?: return
+    val (clientId, proposed) = proposals.entries.firstOrNull { postponed[it.key] != it.value }?.toPair()
+        ?: run {
+            alertesManquants.firstOrNull()?.let { alerte ->
+                ContenuManquantDialog(
+                    alerte = alerte,
+                    texte = "${alerte.joueur} a récupéré « ${alerte.sujet} », mais sa bibliothèque ne contient pas :",
+                    onDismiss = { NetworkSessionManager.dismissAlerteContenuManquant(alerte) },
+                )
+            }
+            return
+        }
     val clientName = clients.find { it.id == clientId }?.displayName ?: "Un joueur"
     val existing = characters.find { it.id == proposed.id }
     val diffs = remember(existing, proposed) { existing?.let { diffCharacters(proposed, it) } }
@@ -286,6 +448,16 @@ private fun EpreuvePlayerDialog(epreuve: EpreuveJoueurData, onDismiss: () -> Uni
                     progress = { epreuve.progres.toFloat() / epreuve.progresMax.coerceAtLeast(1) },
                     modifier = Modifier.fillMaxWidth(),
                 )
+                if (epreuve.echecsMax > 0) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Échecs : ${epreuve.echecs} / ${epreuve.echecsMax}", style = MaterialTheme.typography.labelLarge)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    LinearProgressIndicator(
+                        progress = { epreuve.echecs.toFloat() / epreuve.echecsMax },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
                 if (epreuve.competences.isNotEmpty() && epreuve.issue == null) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("Compétences utiles : ${epreuve.competences.joinToString(", ")}", style = MaterialTheme.typography.bodySmall)

@@ -32,7 +32,8 @@ internal fun getLocalIpAddress(): String? = try {
  * ce soit. La page affiche "Connexion réussie" puis se met à jour toute
  * seule (polling) à chaque envoi de fichier par le MJ.
  */
-class MjWebServer(private val context: Context) : NanoHTTPD(0) {
+// [port] : port d'écoute de la page table (0 = port libre attribué par l'OS).
+class MjWebServer(private val context: Context, port: Int = 0) : NanoHTTPD(port) {
 
     private data class MediaItem(val fileName: String, val displayName: String)
 
@@ -119,15 +120,34 @@ class MjWebServer(private val context: Context) : NanoHTTPD(0) {
         val revelees: Set<Int>,
         // Lieux montrés aux joueurs, dessinés par-dessus le brouillard.
         val lieux: List<LieuTable> = emptyList(),
-        // Zone sur laquelle la table zoome (double appui du MJ), null = carte entière.
+        // Zone sur laquelle la table zoome (double appui du MJ, tracé terminé), null = carte entière.
         val zoom: ZoomTable? = null,
+        // Carte de campagne affichée (voir CarteTable), null pour une carte d'exploration.
+        val carteId: String? = null,
+        // Tracé en cours sur cette carte (étapes en fractions de l'image) et s'il est terminé.
+        val trace: List<Pair<Float, Float>> = emptyList(),
+        val traceTermine: Boolean = false,
     )
 
     /** Cadre de zoom en fractions de l'image (coin haut-gauche, largeur, hauteur). */
     data class ZoomTable(val x: Float, val y: Float, val largeur: Float, val hauteur: Float)
 
-    /** Lieu visible des joueurs : centre de son icône en fractions de l'image ([fx], [fy]). */
-    data class LieuTable(val nom: String, val fx: Float, val fy: Float, val emoji: String, val couleurArgb: Int?)
+    /**
+     * Lieu visible des joueurs : centre de son icône en fractions de l'image ([fx], [fy]).
+     * [taille] : diamètre de l'icône en fraction de la largeur de la carte, comme réglé par le MJ
+     * (null = taille par défaut de la page). [afficherNom] / [positionNom] (BAS, HAUT, GAUCHE, DROITE) :
+     * nom du lieu montré ou non, et de quel côté de l'icône.
+     */
+    data class LieuTable(
+        val nom: String,
+        val fx: Float,
+        val fy: Float,
+        val emoji: String,
+        val couleurArgb: Int?,
+        val taille: Float? = null,
+        val afficherNom: Boolean = true,
+        val positionNom: String = "BAS",
+    )
 
     // Orientation (degrés, par quarts de tour) choisie par le MJ sur l'écran de carte : appliquée
     // à toutes les images de la table (photo envoyée, carte d'exploration, fond de scène, épreuve).
@@ -136,6 +156,35 @@ class MjWebServer(private val context: Context) : NanoHTTPD(0) {
     @Synchronized
     fun updateRotation(degres: Int) {
         rotationTable = ((degres % 360) + 360) % 360
+    }
+
+    /**
+     * État qui vient d'être appliqué à un joueur ([nom] du personnage, [etat] = libellé), affiché
+     * quelques secondes en grand sur la page table avec son illustration (EtatImages) s'il y en a
+     * une. [numero] croissant : la page affiche à la suite les annonces qu'elle n'a pas encore vues.
+     */
+    private data class AnnonceEtat(val numero: Int, val nom: String, val etat: String, val temps: Long)
+
+    private val annoncesEtats = ArrayDeque<AnnonceEtat>()
+    private var numeroAnnonce = 0
+
+    /** Annonce sur la page table que [nom] subit désormais l'état [etat]. */
+    @Synchronized
+    fun annoncerEtat(nom: String, etat: String) {
+        annoncesEtats.addLast(AnnonceEtat(++numeroAnnonce, nom, etat, System.currentTimeMillis()))
+        while (annoncesEtats.size > 10) annoncesEtats.removeFirst()
+    }
+
+    // Annonces des 30 dernières secondes seulement : une page ouverte plus tard ne rejoue pas l'historique.
+    @Synchronized
+    private fun etatsJson(): String {
+        val limite = System.currentTimeMillis() - 30_000
+        val liste = annoncesEtats.filter { it.temps >= limite }.joinToString(",") { a ->
+            val image = com.jc2.jdrcompagnon.ui.screens.mj.library.srd.EtatImages.fichier(context, a.etat)
+                ?.let { "\"/etat-image?nom=${android.net.Uri.encode(a.etat)}&v=${it.lastModified()}\"" } ?: "null"
+            """{"numero":${a.numero},"nom":"${escapeJson(a.nom)}","etat":"${escapeJson(a.etat)}","image":$image}"""
+        }
+        return """{"dernier":$numeroAnnonce,"annonces":[$liste]}"""
     }
 
     private var currentExploration: ExplorationInfo? = null
@@ -161,11 +210,14 @@ class MjWebServer(private val context: Context) : NanoHTTPD(0) {
         val revelees = buildString(total) { for (i in 0 until total) append(if (i in explo.revelees) '1' else '0') }
         val lieux = explo.lieux.joinToString(",", "[", "]") { l ->
             val couleur = l.couleurArgb?.let { "#%06X".format(it and 0xFFFFFF) } ?: "#8D6E63"
-            """{"nom":"${escapeJson(l.nom)}","x":${l.fx},"y":${l.fy},"emoji":"${escapeJson(l.emoji)}","color":"$couleur"}"""
+            """{"nom":"${escapeJson(l.nom)}","x":${l.fx},"y":${l.fy},"emoji":"${escapeJson(l.emoji)}","color":"$couleur",""" +
+                """"s":${l.taille ?: "null"},"n":${l.afficherNom},"p":"${l.positionNom}"}"""
         }
         val zoom = explo.zoom?.let { z -> """{"x":${z.x},"y":${z.y},"w":${z.largeur},"h":${z.hauteur}}""" } ?: "null"
+        val trace = explo.trace.joinToString(",", "[", "]") { (x, y) -> "[$x,$y]" }
         return """{"version":$explorationVersion,"image":"/exploration-image?v=$explorationImageVersion",""" +
             """"cols":${explo.colonnes},"rows":${explo.lignes},"revealed":"$revelees","lieux":$lieux,"zoom":$zoom,""" +
+            """"trace":$trace,"traceFini":${explo.traceTermine},""" +
             """"masquee":${currentMedia != null && mediaSequence > explorationSequence}}"""
     }
 
@@ -179,7 +231,29 @@ class MjWebServer(private val context: Context) : NanoHTTPD(0) {
             uri == "/api/status" ->
                 newFixedLengthResponse(Response.Status.OK, "application/json", statusJson())
             uri == "/api/combat" ->
-                newFixedLengthResponse(Response.Status.OK, "application/json", combatJson())
+                newFixedLengthResponse(Response.Status.OK, "application/json; charset=utf-8", CombatWeb.table(context))
+            // Page d'un joueur sans l'appli : il choisit son personnage et joue son tour depuis son téléphone.
+            uri == "/joueur" -> serveAsset("web/joueur.html")
+            uri.startsWith("/web/") -> serveAsset("web/" + uri.removePrefix("/web/"))
+            uri == "/api/sons-combat" ->
+                newFixedLengthResponse(Response.Status.OK, "application/json; charset=utf-8", sonsCombatJson())
+            uri.startsWith("/son/combat/") -> serveAsset("son/combat/" + uri.removePrefix("/son/combat/"))
+            uri == "/api/joueur/personnages" ->
+                newFixedLengthResponse(Response.Status.OK, "application/json; charset=utf-8", CombatWeb.personnages())
+            uri == "/api/joueur/etat" ->
+                newFixedLengthResponse(Response.Status.OK, "application/json; charset=utf-8", CombatWeb.joueur(context, session.parameters["id"]?.firstOrNull()))
+            uri == "/api/joueur/agir" && session.method == Method.POST -> {
+                runCatching { session.parseBody(HashMap()) }
+                val params = session.parameters.mapValues { it.value.firstOrNull().orEmpty() }
+                newFixedLengthResponse(Response.Status.OK, "application/json; charset=utf-8", CombatWeb.agir(params))
+            }
+            uri == "/portrait" -> {
+                val id = session.parameters["id"]?.firstOrNull()
+                val c = com.jc2.jdrcompagnon.feature_combat.presentation.CombatSession.etat.value?.combattants?.firstOrNull { it.id == id }
+                val octets = c?.let { PortraitsCombat.jpeg(context, it) }
+                if (octets == null) newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "Introuvable")
+                else newFixedLengthResponse(Response.Status.OK, "image/jpeg", java.io.ByteArrayInputStream(octets), octets.size.toLong())
+            }
             uri == "/api/rotation" ->
                 newFixedLengthResponse(Response.Status.OK, "application/json", synchronized(this) { "$rotationTable" })
             uri == "/api/scene" ->
@@ -191,7 +265,21 @@ class MjWebServer(private val context: Context) : NanoHTTPD(0) {
             uri == "/api/epreuve" ->
                 newFixedLengthResponse(Response.Status.OK, "application/json", epreuveJson())
             uri == "/epreuve-image" -> serveEpreuveImage()
+            uri == "/api/etats" ->
+                newFixedLengthResponse(Response.Status.OK, "application/json", etatsJson())
+            uri == "/etat-image" -> serveImageFile(
+                session.parameters["nom"]?.firstOrNull()?.let { com.jc2.jdrcompagnon.ui.screens.mj.library.srd.EtatImages.fichier(context, it) }
+            )
             uri.startsWith("/media/") -> serveMediaFile(uri.removePrefix("/media/"))
+            // Import partagé par le MJ, téléchargé par un joueur (ImportsPartages) : seuls les livres
+            // que le MJ a choisi de partager sont servis.
+            uri == "/import" -> {
+                val monde = session.parameters["monde"]?.firstOrNull().orEmpty()
+                val id = session.parameters["id"]?.firstOrNull().orEmpty()
+                val zip = runCatching { ImportsPartages.archive(context, monde, id) }.getOrNull()
+                if (zip == null) newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "Import non partagé")
+                else newFixedLengthResponse(Response.Status.OK, "application/zip", zip.inputStream(), zip.length())
+            }
             else -> newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "Introuvable")
         }
     }
@@ -208,29 +296,33 @@ class MjWebServer(private val context: Context) : NanoHTTPD(0) {
         return """{"time":"${escapeJson(status.time)}","weatherKey":"${escapeJson(status.weatherKey)}","weatherLabel":"${escapeJson(status.weatherLabel)}"}"""
     }
 
+    /** Bruitages du combat embarqués (assets/son/combat), pour sons_combat.js. */
+    private fun sonsCombatJson(): String {
+        val fichiers = runCatching { context.assets.list("son/combat")?.toList() }.getOrNull().orEmpty()
+            .filter { it.substringAfterLast('.').lowercase() in setOf("ogg", "mp3", "wav") }
+        return fichiers.joinToString(",", "[", "]") { "\"" + it.replace("\"", "") + "\"" }
+    }
+
     /**
-     * Fiche du combat en cours (CombatSession) pour la table : ordre d'initiative, tour actif,
-     * PV exacts des personnages. Les PV des monstres restent secrets : seul un état de santé
-     * approximatif est transmis (comme le décrirait le MJ).
+     * Fichier de assets/web (page joueur, script et style du combat) ou assets/son/combat
+     * (bruitages), noms simples seulement.
      */
-    private fun combatJson(): String {
-        val combat = com.jc2.jdrcompagnon.feature_combat.presentation.CombatSession.etat.value ?: return "null"
-        val actifId = combat.actif?.id
-        val combattants = combat.combattants.joinToString(",") { c ->
-            val etatSante = when {
-                c.pv <= 0 -> if (c.estMonstre) "Vaincu" else "À terre"
-                c.pv * 4 <= c.pvMax -> "Gravement blessé"
-                c.pv * 2 <= c.pvMax -> "En sang"
-                c.pv < c.pvMax -> "Blessé"
-                else -> "Indemne"
-            }
-            val ratio = if (c.pvMax > 0) (c.pv.coerceAtLeast(0) * 100 / c.pvMax) else 0
-            val pv = if (c.estMonstre) "null" else "\"${c.pv}/${c.pvMax}\""
-            val conditions = c.conditions.joinToString(",") { "\"${escapeJson(it.label)}\"" }
-            """{"nom":"${escapeJson(c.nom)}","monstre":${c.estMonstre},"initiative":${c.initiative ?: "null"},""" +
-                """"pv":$pv,"ratio":$ratio,"sante":"${escapeJson(etatSante)}","actif":${c.id == actifId},"conditions":[$conditions]}"""
+    private fun serveAsset(chemin: String): Response {
+        if (!Regex("""(web|son/combat)/[A-Za-z0-9_.-]+""").matches(chemin) || chemin.contains("..")) {
+            return newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "Introuvable")
         }
-        return """{"titre":"${escapeJson(combat.titre)}","round":${combat.round},"combattants":[$combattants]}"""
+        val octets = runCatching { context.assets.open(chemin).use { it.readBytes() } }.getOrNull()
+            ?: return newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "Introuvable")
+        val mime = when (chemin.substringAfterLast('.')) {
+            "html" -> "text/html; charset=utf-8"
+            "js" -> "application/javascript; charset=utf-8"
+            "css" -> "text/css; charset=utf-8"
+            "ogg" -> "audio/ogg"
+            "mp3" -> "audio/mpeg"
+            "wav" -> "audio/wav"
+            else -> "application/octet-stream"
+        }
+        return newFixedLengthResponse(Response.Status.OK, mime, java.io.ByteArrayInputStream(octets), octets.size.toLong())
     }
 
     @Synchronized
@@ -279,9 +371,15 @@ class MjWebServer(private val context: Context) : NanoHTTPD(0) {
         val complication = etat.derniereComplication?.let {
             """{"titre":"${escapeJson(it.titre)}","description":"${escapeJson(it.description)}","numero":${etat.numeroComplication}}"""
         } ?: "null"
+        // Texte de l'issue lu aux joueurs une fois l'épreuve gagnée ou perdue (balises {lire} retirées).
+        val issue = when {
+            etat.reussie -> epreuve.issueReussite
+            etat.echouee -> epreuve.issueEchec
+            else -> ""
+        }.replace(Regex("""\{/?lire\}"""), "")
         return """{"id":"${escapeJson(epreuve.id)}","nom":"${escapeJson(epreuve.nom)}","description":"${escapeJson(epreuve.description)}",""" +
-            """"reussites":${etat.reussites},"requises":${epreuve.reussitesRequises},"echecs":${etat.echecs},""" +
-            """"terminee":${etat.terminee},"reussie":${etat.reussie},"image":$image,"complication":$complication}"""
+            """"reussites":${etat.reussites},"requises":${epreuve.reussitesRequises},"echecs":${etat.echecs},"echecsMax":${epreuve.echecsMax},""" +
+            """"terminee":${etat.terminee},"reussie":${etat.reussie},"echouee":${etat.echouee},"issue":"${escapeJson(issue)}","image":$image,"complication":$complication}"""
     }
 
     private fun serveEpreuveImage(): Response {
@@ -394,31 +492,6 @@ class MjWebServer(private val context: Context) : NanoHTTPD(0) {
             96% { opacity: 0; }
           }
 
-          #combat {
-            position: fixed; z-index: 20; top: 56px; right: 16px; bottom: 16px;
-            width: min(420px, 42vw); overflow-y: auto; display: none;
-            background: rgba(12,12,20,0.82); backdrop-filter: blur(6px);
-            border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 14px 16px;
-          }
-          #combat h2 { margin: 0 0 2px; font-size: 1.3rem; }
-          #combat .sub { color: #b8b8c8; font-size: 0.95rem; margin-bottom: 10px; }
-          .fighter {
-            display: flex; align-items: center; gap: 10px; padding: 8px 10px; margin-bottom: 6px;
-            border-radius: 8px; background: rgba(255,255,255,0.05); border-left: 4px solid #64b5f6;
-          }
-          .fighter.monstre { border-left-color: #e57373; }
-          .fighter.actif { background: rgba(255,215,120,0.18); outline: 2px solid #ffd778; }
-          .fighter.out { opacity: 0.45; }
-          .fighter .init { width: 2.2em; text-align: center; font-weight: 700; font-size: 1.2rem; }
-          .fighter .body { flex: 1; min-width: 0; }
-          .fighter .name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-          .fighter .meta { font-size: 0.85rem; color: #c8c8d8; }
-          .bar { height: 6px; border-radius: 3px; background: rgba(255,255,255,0.12); margin-top: 4px; overflow: hidden; }
-          .bar > div { height: 100%; }
-          @media (max-width: 700px) {
-            #combat { top: auto; left: 8px; right: 8px; bottom: 8px; width: auto; max-height: 55vh; }
-          }
-
           #explo {
             position: fixed; inset: 0; z-index: 3; display: none;
             align-items: center; justify-content: center; background: #000; overflow: hidden;
@@ -427,19 +500,22 @@ class MjWebServer(private val context: Context) : NanoHTTPD(0) {
           #exploBox img { position: absolute; inset: 0; width: 100%; height: 100%; }
           #exploBox canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
           #exploLieux { position: absolute; inset: 0; pointer-events: none; }
-          .lieu {
-            position: absolute; transform: translate(-50%, -17px); transform-origin: 50% 17px;
-            display: flex; flex-direction: column; align-items: center;
-          }
+          #exploBox canvas#exploTrace { pointer-events: none; }
+          /* Lieu : boîte de la taille de l'icône, centrée sur sa position ; le nom est posé autour. */
+          .lieu { position: absolute; transform: translate(-50%, -50%); }
           .lieu .pin {
-            width: 34px; height: 34px; border-radius: 50%; border: 2px solid #fff;
-            display: flex; align-items: center; justify-content: center; font-size: 18px;
+            width: 100%; height: 100%; box-sizing: border-box; border-radius: 50%; border: 2px solid #fff;
+            display: flex; align-items: center; justify-content: center;
             box-shadow: 0 2px 6px rgba(0,0,0,0.6);
           }
           .lieu .nom {
-            margin-top: 2px; font-size: 0.85rem; padding: 1px 6px; border-radius: 4px;
+            position: absolute; padding: 1px 6px; border-radius: 4px;
             background: rgba(0,0,0,0.65); white-space: nowrap;
           }
+          .lieu .nom.BAS { top: 100%; left: 50%; transform: translateX(-50%); margin-top: 2px; }
+          .lieu .nom.HAUT { bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 2px; }
+          .lieu .nom.GAUCHE { right: 100%; top: 50%; transform: translateY(-50%); margin-right: 4px; }
+          .lieu .nom.DROITE { left: 100%; top: 50%; transform: translateY(-50%); margin-left: 4px; }
 
           #epreuve { position: fixed; inset: 0; z-index: 4; display: none; overflow: hidden; background: #0c0c14; }
           #epreuve.sansImage { background: radial-gradient(circle at 50% 30%, #2b3550, #0c0c14 75%); }
@@ -476,12 +552,25 @@ class MjWebServer(private val context: Context) : NanoHTTPD(0) {
           }
           #epreuveIssue { margin-top: 14px; font-size: 1.6rem; font-weight: 900; text-align: center; }
           #epreuveIssue.reussie { color: #81c784; text-shadow: 0 0 14px rgba(129,199,132,0.7); }
+          #epreuveIssue.echouee { color: #ef5350; text-shadow: 0 0 14px rgba(239,83,80,0.7); }
+          #epreuveIssueTexte { margin-top: 8px; white-space: pre-line; color: #f0f0f6; font-size: 1.1rem; text-align: center; }
+          .pipsBreak { flex-basis: 100%; height: 0; }
+          .pip.echec { border-color: #e53935; }
+          .pip.echec.on { background: #e53935; box-shadow: 0 0 12px rgba(229,57,53,0.8); }
 
           .sunGlow {
             position: absolute; top: -20%; right: -10%; width: 60vw; height: 60vw; border-radius: 50%;
             background: radial-gradient(circle, rgba(255,220,140,0.25), rgba(255,220,140,0) 70%);
           }
+          #etatAnnonce { position: fixed; inset: 0; z-index: 20; display: none; align-items: center; justify-content: center;
+            background: rgba(5,5,12,0.82); flex-direction: column; gap: 18px; padding: 24px; }
+          #etatAnnonce.on { display: flex; animation: etatApparait 0.5s ease-out; }
+          #etatAnnonce img { max-width: 80vw; max-height: 68vh; border-radius: 14px; box-shadow: 0 0 40px rgba(255,80,80,0.45); }
+          #etatAnnonce .texte { font-size: 2.6rem; font-weight: 900; text-align: center; color: #fff; text-shadow: 0 0 18px rgba(0,0,0,0.9); }
+          #etatAnnonce .texte .etat { color: #ff8a7a; }
+          @keyframes etatApparait { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: scale(1); } }
         </style>
+        <link rel="stylesheet" href="/web/combat_table.css">
         </head>
         <body>
         <div id="topbar">
@@ -495,7 +584,7 @@ class MjWebServer(private val context: Context) : NanoHTTPD(0) {
         <div id="stage">
           <div id="empty">En attente d'un envoi du MJ…</div>
         </div>
-        <div id="explo"><div id="exploBox"><img id="exploImg" alt="Carte"><canvas id="exploFog"></canvas><div id="exploLieux"></div></div></div>
+        <div id="explo"><div id="exploBox"><img id="exploImg" alt="Carte"><canvas id="exploFog"></canvas><canvas id="exploTrace"></canvas><div id="exploLieux"></div></div></div>
         <div id="epreuve">
           <div id="epreuveBg"></div>
           <div id="epreuveFlash"></div>
@@ -505,38 +594,14 @@ class MjWebServer(private val context: Context) : NanoHTTPD(0) {
             <div class="pips" id="epreuvePips"></div>
             <div id="epreuveComplication" style="display:none"><div class="titre"></div><div class="effet"></div></div>
             <div id="epreuveIssue" style="display:none"></div>
+            <div id="epreuveIssueTexte" style="display:none"></div>
           </div>
         </div>
         <div id="combat"></div>
+        <div id="etatAnnonce"><img id="etatImg" alt=""><div class="texte" id="etatTexte"></div></div>
         <script>
         function esc(s) {
           return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-        }
-
-        async function refreshCombat() {
-          const panel = document.getElementById('combat');
-          try {
-            const res = await fetch('/api/combat');
-            const combat = await res.json();
-            if (!combat) { panel.style.display = 'none'; return; }
-            const actif = combat.combattants.find(c => c.actif);
-            let html = '<h2>⚔ ' + esc(combat.titre) + '</h2><div class="sub">' +
-              (combat.round > 0 ? 'Round ' + combat.round + (actif ? ' — au tour de <b>' + esc(actif.nom) + '</b>' : '')
-                                : 'Préparation du combat…') + '</div>';
-            for (const c of combat.combattants) {
-              const out = c.ratio <= 0;
-              const color = c.ratio > 50 ? '#66bb6a' : (c.ratio > 25 ? '#ffa726' : '#ef5350');
-              const meta = (c.pv ? 'PV ' + esc(c.pv) : esc(c.sante)) +
-                (c.conditions.length ? ' · ' + c.conditions.map(esc).join(', ') : '');
-              html += '<div class="fighter' + (c.monstre ? ' monstre' : '') + (c.actif ? ' actif' : '') + (out ? ' out' : '') + '">' +
-                '<div class="init">' + (c.initiative ?? '–') + '</div>' +
-                '<div class="body"><div class="name">' + (c.actif ? '▶ ' : '') + esc(c.nom) + '</div>' +
-                '<div class="meta">' + meta + '</div>' +
-                '<div class="bar"><div style="width:' + Math.max(0, c.ratio) + '%;background:' + color + '"></div></div></div></div>';
-            }
-            panel.innerHTML = html;
-            panel.style.display = 'block';
-          } catch (e) {}
         }
 
         let currentWeatherKey = null;
@@ -735,13 +800,55 @@ class MjWebServer(private val context: Context) : NanoHTTPD(0) {
           const z = explo && explo.zoom;
           const W = box.clientWidth, H = box.clientHeight;
           const rot = tableRotation ? 'rotate(' + tableRotation + 'deg) ' : '';
-          if (!z || !W || !H) { box.style.transform = rot; return; }
+          if (!z || !W || !H) { box.style.transform = rot; exploScale = 1; drawTrace(); return; }
           const top = document.getElementById('topbar').offsetHeight;
           const availW = quartTourne() ? window.innerHeight - top : window.innerWidth;
           const availH = quartTourne() ? window.innerWidth : window.innerHeight - top;
           const s = Math.max(1, Math.min(6, 0.9 * Math.min(availW / (z.w * W), availH / (z.h * H))));
           const dx = (z.x + z.w / 2 - 0.5) * W, dy = (z.y + z.h / 2 - 0.5) * H;
           box.style.transform = rot + 'scale(' + s + ') translate(' + (-dx) + 'px,' + (-dy) + 'px)';
+          exploScale = s;
+          drawTrace();
+        }
+
+        // Tracé fait sur la carte de campagne (MJ ou joueur) : étapes reliées en pointillés. Le
+        // trait garde la même épaisseur à l'écran quel que soit le zoom.
+        let exploScale = 1;
+        function drawTrace() {
+          const canvas = document.getElementById('exploTrace');
+          const box = document.getElementById('exploBox');
+          const w = box.clientWidth, h = box.clientHeight;
+          if (!w || !h) return;
+          const dpr = window.devicePixelRatio || 1;
+          canvas.width = Math.round(w * dpr);
+          canvas.height = Math.round(h * dpr);
+          const ctx = canvas.getContext('2d');
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          const pts = (explo && explo.trace) || [];
+          if (!pts.length) return;
+          const u = dpr / exploScale;
+          ctx.strokeStyle = '#FFD54F';
+          ctx.lineWidth = 4 * u;
+          ctx.lineCap = 'round';
+          ctx.setLineDash([14 * u, 7 * u]);
+          ctx.beginPath();
+          pts.forEach((p, i) => {
+            const x = p[0] * canvas.width, y = p[1] * canvas.height;
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          });
+          ctx.stroke();
+          ctx.setLineDash([]);
+          pts.forEach((p, i) => {
+            const x = p[0] * canvas.width, y = p[1] * canvas.height;
+            ctx.beginPath();
+            ctx.arc(x, y, ((i === 0 || i === pts.length - 1) ? 9 : 6) * u, 0, 2 * Math.PI);
+            ctx.fillStyle = '#fff';
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(x, y, ((i === 0 || i === pts.length - 1) ? 6 : 4) * u, 0, 2 * Math.PI);
+            ctx.fillStyle = (i === pts.length - 1 && explo.traceFini) ? '#E53935' : '#FFB300';
+            ctx.fill();
+          });
         }
 
         function drawFog(force) {
@@ -782,11 +889,17 @@ class MjWebServer(private val context: Context) : NanoHTTPD(0) {
           if (!explo || !explo.lieux) { layer.innerHTML = ''; return; }
           let html = '';
           // Icônes et noms contre-tournés : ils restent lisibles quand la carte pivote.
-          const contre = tableRotation ? ';transform:translate(-50%,-17px) rotate(' + (-tableRotation) + 'deg)' : '';
+          const contre = tableRotation ? ';transform:translate(-50%,-50%) rotate(' + (-tableRotation) + 'deg)' : '';
+          // Taille réglée par le MJ (fraction de la largeur de la carte) : mêmes proportions que
+          // sur son écran, quelle que soit la taille de l'écran de table.
+          const largeur = document.getElementById('exploBox').clientWidth;
           for (const l of explo.lieux) {
-            html += '<div class="lieu" style="left:' + (l.x * 100) + '%;top:' + (l.y * 100) + '%' + contre + '">' +
-              '<div class="pin" style="background:' + esc(l.color) + '">' + esc(l.emoji) + '</div>' +
-              '<div class="nom">' + esc(l.nom) + '</div></div>';
+            const taille = (l.s && largeur) ? Math.max(8, l.s * largeur) : 34;
+            const police = Math.max(10, taille * 0.38);
+            const pos = ['BAS', 'HAUT', 'GAUCHE', 'DROITE'].indexOf(l.p) >= 0 ? l.p : 'BAS';
+            html += '<div class="lieu" style="left:' + (l.x * 100) + '%;top:' + (l.y * 100) + '%;width:' + taille + 'px;height:' + taille + 'px' + contre + '">' +
+              '<div class="pin" style="background:' + esc(l.color) + ';font-size:' + (taille * 0.55) + 'px">' + esc(l.emoji) + '</div>' +
+              (l.n === false ? '' : '<div class="nom ' + pos + '" style="font-size:' + police + 'px">' + esc(l.nom) + '</div>') + '</div>';
           }
           layer.innerHTML = html;
         }
@@ -836,6 +949,9 @@ class MjWebServer(private val context: Context) : NanoHTTPD(0) {
             let pips = '';
             for (let i = 0; i < ep.requises; i++) pips += '<div class="pip' + (i < ep.reussites ? ' on' : '') + '"></div>';
             pips += '<span class="pipsLabel">' + ep.reussites + ' / ' + ep.requises + ' réussite' + (ep.requises > 1 ? 's' : '') + '</span>';
+            pips += '<span class="pipsBreak"></span>';
+            for (let i = 0; i < ep.echecsMax; i++) pips += '<div class="pip echec' + (i < ep.echecs ? ' on' : '') + '"></div>';
+            pips += '<span class="pipsLabel">' + ep.echecs + ' / ' + ep.echecsMax + ' échec' + (ep.echecsMax > 1 ? 's' : '') + '</span>';
             document.getElementById('epreuvePips').innerHTML = pips;
 
             const comp = document.getElementById('epreuveComplication');
@@ -857,14 +973,46 @@ class MjWebServer(private val context: Context) : NanoHTTPD(0) {
 
             const issue = document.getElementById('epreuveIssue');
             if (ep.terminee) {
-              issue.textContent = ep.reussie ? '✔ Épreuve surmontée !' : 'Épreuve interrompue';
-              issue.className = ep.reussie ? 'reussie' : '';
+              issue.textContent = ep.reussie ? '✔ Épreuve surmontée !' : (ep.echouee ? '✖ Épreuve perdue' : 'Épreuve interrompue');
+              issue.className = ep.reussie ? 'reussie' : (ep.echouee ? 'echouee' : '');
+              const texteIssue = document.getElementById('epreuveIssueTexte');
+              texteIssue.textContent = ep.issue || '';
+              texteIssue.style.display = ep.issue ? 'block' : 'none';
               issue.style.display = 'block';
             } else {
               issue.style.display = 'none';
+              document.getElementById('epreuveIssueTexte').style.display = 'none';
             }
           } catch (e) {}
         }
+
+        let etatVu = null;
+        const etatFile = [];
+        let etatEnCours = false;
+        function montrerEtatSuivant() {
+          const layer = document.getElementById('etatAnnonce');
+          const a = etatFile.shift();
+          if (!a) { etatEnCours = false; layer.classList.remove('on'); return; }
+          etatEnCours = true;
+          const img = document.getElementById('etatImg');
+          if (a.image) { img.src = a.image; img.style.display = 'block'; } else { img.removeAttribute('src'); img.style.display = 'none'; }
+          document.getElementById('etatTexte').innerHTML = esc(a.nom) + ' est <span class="etat">' + esc(a.etat).toLowerCase() + '</span>';
+          layer.classList.remove('on'); void layer.offsetWidth; layer.classList.add('on');
+          setTimeout(montrerEtatSuivant, 6000);
+        }
+        async function refreshEtats() {
+          try {
+            const res = await fetch('/api/etats');
+            const data = await res.json();
+            // Premier passage : on ne rejoue pas ce qui a été annoncé avant l'ouverture de la page.
+            if (etatVu === null) { etatVu = data.dernier; return; }
+            for (const a of data.annonces) if (a.numero > etatVu) etatFile.push(a);
+            etatVu = Math.max(etatVu, data.dernier);
+            if (!etatEnCours && etatFile.length) montrerEtatSuivant();
+          } catch (e) {}
+        }
+        refreshEtats();
+        setInterval(refreshEtats, 1000);
 
         refreshEpreuve();
         setInterval(refreshEpreuve, 1000);
@@ -881,9 +1029,9 @@ class MjWebServer(private val context: Context) : NanoHTTPD(0) {
         refreshMedia();
         setInterval(refreshStatus, 3000);
         setInterval(refreshMedia, 3000);
-        refreshCombat();
-        setInterval(refreshCombat, 1500);
         </script>
+        <script src="/web/sons_combat.js"></script>
+        <script src="/web/combat_table.js"></script>
         </body>
         </html>
     """.trimIndent()

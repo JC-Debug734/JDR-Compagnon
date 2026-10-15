@@ -63,7 +63,7 @@ class BoutiqueDetailViewModel(
     /** Charge le catalogue SRD du monde actif — appelé depuis un LaunchedEffect côté UI. */
     suspend fun equipementsDisponibles(): List<EquipementReference> = listerEquipements(mondeActif())
 
-    fun prixSuggere(coutBaseEnPo: Int, boutique: Boutique): Int = calculerPrixArticle(coutBaseEnPo, boutique.standing)
+    fun prixSuggere(coutBaseEnPc: Int, boutique: Boutique): Int = calculerPrixArticle(coutBaseEnPc, boutique.standing)
 
     fun budgetSuggere(boutique: Boutique): Int = determinerBudgetAchat(boutique.standing)
 
@@ -121,6 +121,11 @@ class BoutiqueDetailViewModel(
         }
     }
 
+    /** Enseigne de la boutique (miniature de la liste), voir BoutiqueImageStore ; null = aucune. */
+    fun onChangerImage(boutique: Boutique, image: String?) {
+        viewModelScope.launch { repository.sauvegarderBoutique(boutique.copy(image = image)) }
+    }
+
     /** [index] car Employe n'a pas d'identifiant propre — suppression par position dans la liste affichée. */
     fun onSupprimerEmploye(boutique: Boutique, index: Int) {
         viewModelScope.launch {
@@ -130,8 +135,22 @@ class BoutiqueDetailViewModel(
 
     fun onAjouterArticle(boutique: Boutique, equipement: EquipementReference, prix: Int, quantite: Int, toujoursDisponible: Boolean = false) {
         viewModelScope.launch {
-            val article = ArticleEnVente(equipement = equipement, prixApplique = prix, quantiteStock = quantite, toujoursDisponible = toujoursDisponible)
+            val article = ArticleEnVente(equipement = equipement, prixEnPc = prix, quantiteStock = quantite, toujoursDisponible = toujoursDisponible)
             repository.sauvegarderBoutique(boutique.copy(inventaire = boutique.inventaire + article))
+        }
+    }
+
+    /**
+     * Ajoute en une fois des équipements (toute une catégorie filtrée par le MJ), au prix ajusté
+     * au standing, [quantite] exemplaires chacun ; ceux déjà en vente sont ignorés.
+     */
+    fun onAjouterEquipements(boutique: Boutique, equipements: List<EquipementReference>, quantite: Int) {
+        viewModelScope.launch {
+            val dejaEnVente = boutique.inventaire.map { it.equipement.nom }.toSet()
+            val nouveaux = equipements.filter { it.nom !in dejaEnVente }.distinctBy { it.nom }.map {
+                ArticleEnVente(equipement = it, prixEnPc = calculerPrixArticle(it.coutBaseEnPc, boutique.standing), quantiteStock = quantite.coerceAtLeast(1))
+            }
+            repository.sauvegarderBoutique(boutique.copy(inventaire = boutique.inventaire + nouveaux))
         }
     }
 

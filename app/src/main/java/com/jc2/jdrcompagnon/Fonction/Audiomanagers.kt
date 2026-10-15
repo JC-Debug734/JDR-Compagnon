@@ -3,7 +3,6 @@ package com.jc2.jdrcompagnon.ui
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.MediaPlayer
-import android.media.SoundPool
 import com.jc2.jdrcompagnon.R
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,6 +28,13 @@ object MusicManager {
     private var mediaPlayer: MediaPlayer? = null
     // Source jouée ("res:<id>" ou "file:<chemin>"), pour reprendre plutôt que relancer.
     private var currentKey: String? = null
+    // Position (ms) de chaque piste quittée sans « Stop », pour reprendre au même endroit.
+    private val savedPositions = mutableMapOf<String, Int>()
+
+    private fun savePosition() {
+        val key = currentKey ?: return
+        runCatching { mediaPlayer?.currentPosition }.getOrNull()?.let { savedPositions[key] = it }
+    }
 
     private val _currentTrack = MutableStateFlow<String?>(null)
     val currentTrack: StateFlow<String?> = _currentTrack.asStateFlow()
@@ -47,7 +53,10 @@ object MusicManager {
     /** Coupure volontaire par le MJ (bouton son) : bloque la relecture automatique. */
     fun stopByUser() {
         _mutedByUser.value = true
+        // « Stop » remet la piste au début (contrairement à la pause ou au changement de piste).
+        val key = currentKey
         stop()
+        key?.let { savedPositions.remove(it) }
     }
 
     /** Pause volontaire par le MJ (écran Musique) : bloque aussi la relecture automatique. */
@@ -92,6 +101,8 @@ object MusicManager {
             return
         }
 
+        // Changement de piste : stop() retient où en était l'ancienne pour la reprendre au même
+        // endroit si le MJ y revient plus tard.
         stop()
         try {
             val player = create()
@@ -103,6 +114,9 @@ object MusicManager {
                 setOnErrorListener { _, _, _ ->
                     stop()
                     true
+                }
+                savedPositions.remove(key)?.let { position ->
+                    if (position in 1 until duration) seekTo(position)
                 }
                 start()
             }
@@ -159,6 +173,17 @@ object MusicManager {
         } catch (_: Exception) { }
     }
 
+    /** Position de lecture (ms) de la piste locale en cours, 0 sans piste locale. */
+    fun positionMs(): Int = runCatching { mediaPlayer?.currentPosition }.getOrNull() ?: 0
+
+    /** Durée (ms) de la piste locale en cours, 0 si inconnue (piste YouTube, aucune piste). */
+    fun durationMs(): Int = runCatching { mediaPlayer?.duration }.getOrNull()?.coerceAtLeast(0) ?: 0
+
+    /** Place la lecture à [positionMs] (en lecture comme en pause). */
+    fun seekTo(positionMs: Int) {
+        runCatching { mediaPlayer?.seekTo(positionMs.coerceIn(0, durationMs())) }
+    }
+
     fun pause() {
         try {
             if (mediaPlayer?.isPlaying == true) {
@@ -173,6 +198,7 @@ object MusicManager {
      * Arrête et libère le MediaPlayer.
      */
     fun stop() {
+        savePosition()
         try {
             mediaPlayer?.stop()
             mediaPlayer?.release()
@@ -288,75 +314,6 @@ object WeatherSoundManager {
 }
 
 /**
- * Gestionnaire audio pour les sons de dés.
- * Singleton initialisé depuis MainActivity et libéré dans onDestroy.
- */
-object SoundManager {
-
-    private var soundPool: SoundPool? = null
-    private var rollSoundId: Int = 0
-    private var resultSoundId: Int = 0
-    private var loaded = false
-
-    fun init(context: Context) {
-        if (loaded) return
-        try {
-            val audioAttributes = AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_GAME)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .build()
-
-            soundPool = SoundPool.Builder()
-                .setMaxStreams(3)
-                .setAudioAttributes(audioAttributes)
-                .build()
-                .apply {
-                    rollSoundId = load(context, R.raw.dice_roll, 1)
-                    resultSoundId = load(context, R.raw.dice_result, 1)
-                }
-            loaded = true
-        } catch (e: Exception) {
-            android.util.Log.e("SoundManager", "Impossible d'initialiser les sons", e)
-            release()
-        }
-    }
-
-    fun playRoll() {
-        if (!shouldPlay()) return
-        try {
-            soundPool?.play(rollSoundId, 1f, 1f, 1, 0, 1f)
-        } catch (e: Exception) {
-            android.util.Log.e("SoundManager", "Erreur lecture son de lancer", e)
-        }
-    }
-
-    fun playResult() {
-        if (!shouldPlay()) return
-        try {
-            soundPool?.play(resultSoundId, 1f, 1f, 1, 0, 1f)
-        } catch (e: Exception) {
-            android.util.Log.e("SoundManager", "Erreur lecture son de résultat", e)
-        }
-    }
-
-    private fun shouldPlay(): Boolean {
-        return loaded && GameState.diceState.value.soundEnabled
-    }
-
-    fun release() {
-        try {
-            soundPool?.release()
-        } catch (_: Exception) {
-            // ignore
-        }
-        soundPool = null
-        loaded = false
-        rollSoundId = 0
-        resultSoundId = 0
-    }
-}
-
-/**
  * Catalogue des pistes musicales locales, jouables en boucle.
  * `id` est la clé stable utilisée dans le markdown des scénarios
  * ({mscenemeta: music=<id>}) et dans les préférences persistées ;
@@ -414,7 +371,7 @@ object ImportedMusicStore {
      */
     fun import(context: Context, uri: android.net.Uri, name: String, originalFileName: String?): LoopTrack? {
         val targetDir = dir ?: java.io.File(context.filesDir, DIR_NAME).also { it.mkdirs(); dir = it }
-        val id = "import_" + System.currentTimeMillis()
+        val id = nouvelId()
         val extension = originalFileName?.substringAfterLast('.', "")?.takeIf { it.length in 1..5 } ?: "mp3"
         val fileName = "$id.$extension"
         val ok = runCatching {
@@ -427,6 +384,30 @@ object ImportedMusicStore {
         save(context)
         publish()
         return _tracks.value.firstOrNull { it.id == id }
+    }
+
+    /**
+     * Ajoute le fichier audio [bytes] (lu dans une archive importée) sous le nom [name] ; une piste
+     * importée du même nom est réutilisée plutôt que dupliquée à chaque réimport. Retourne la piste,
+     * ou null si le fichier n'a pas pu être écrit.
+     */
+    fun importOctets(context: Context, bytes: ByteArray, name: String, extension: String): LoopTrack? {
+        _tracks.value.firstOrNull { it.displayName.equals(name.trim(), ignoreCase = true) }?.let { return it }
+        val targetDir = dir ?: java.io.File(context.filesDir, DIR_NAME).also { it.mkdirs(); dir = it }
+        val id = nouvelId()
+        val fileName = "$id.${extension.lowercase().takeIf { it.length in 1..5 } ?: "mp3"}"
+        if (runCatching { java.io.File(targetDir, fileName).writeBytes(bytes) }.isFailure) return null
+        stored = stored + StoredTrack(id, name.trim().ifBlank { "Musique importée" }, fileName)
+        save(context)
+        publish()
+        return _tracks.value.firstOrNull { it.id == id }
+    }
+
+    /** Id libre : plusieurs pistes d'une archive sont importées dans la même milliseconde. */
+    private fun nouvelId(): String {
+        var t = System.currentTimeMillis()
+        while (stored.any { it.id == "import_$t" }) t++
+        return "import_$t"
     }
 
     fun rename(context: Context, id: String, name: String) {
@@ -468,4 +449,9 @@ private val builtInLoopTracks: List<LoopTrack> = listOf(
     LoopTrack(id = "shadowchargeepic", displayName = "Charge de l'ombre (épique)", resId = R.raw.shadowchargeepic),
     LoopTrack(id = "stoneechoes", displayName = "Échos de pierre", resId = R.raw.stoneechoes),
     LoopTrack(id = "stoneroomechoes", displayName = "Échos de la salle de pierre", resId = R.raw.stoneroomechoes),
+    // Musiques de combat par défaut (réglages du combat), CC0 via OpenGameArt : « Determined
+    // Pursuit » (emmama), « Battle Theme A » (cynicmusic), « Epic Boss Battle » (Juhani Junkala).
+    LoopTrack(id = "combat_poursuite", displayName = "Combat — Poursuite acharnée", resId = R.raw.combat_poursuite),
+    LoopTrack(id = "combat_bataille", displayName = "Combat — Thème de bataille", resId = R.raw.combat_bataille),
+    LoopTrack(id = "boss_epique", displayName = "Boss — Bataille épique", resId = R.raw.boss_epique),
 )

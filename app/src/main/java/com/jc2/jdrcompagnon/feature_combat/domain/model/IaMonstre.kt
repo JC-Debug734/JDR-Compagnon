@@ -335,6 +335,8 @@ data class DecisionMonstre(
     val deplacements: Map<String, Distance> = emptyMap(),
     val desengage: Boolean = false,
     val profil: ProfilIA? = null,
+    // Nom du comportement appliqué ce round (intégré ou créé par le MJ).
+    val comportementNom: String? = null,
 )
 
 object IaMonstre {
@@ -343,6 +345,7 @@ object IaMonstre {
     fun disponible(monstre: Combattant, attaque: AttaqueMonstre): Boolean {
         val utilisations = monstre.capacitesUtilisees[attaque.nom] ?: 0
         return when {
+            attaque.nom in monstre.actionsDesactivees -> false
             attaque.recharge != null -> utilisations == 0
             attaque.usagesParJour != null -> utilisations < attaque.usagesParJour
             else -> true
@@ -381,12 +384,13 @@ object IaMonstre {
             ratioAdversaireMin = cibles.minOfOrNull { if (it.pvMax > 0) it.pv.toFloat() / it.pvMax else 1f } ?: 1f,
         )
         val regle = monstre.reglesIA.firstOrNull { it.sApplique(situation) }
-        var profil = regle?.profil ?: monstre.profilIA ?: ProfilIA.BRUTE
+        // Comportement (outil COMPORTEMENT) : celui de la règle de situation, sinon le sien.
+        var profil = regle?.profil?.let(Comportements::pour) ?: monstre.comportement
         val notes = mutableListOf<String>()
-        regle?.let { notes += "Situation « ${it.libelle} » → ${it.profil.label}" }
-        if (profil == ProfilIA.IMPREVISIBLE) {
-            profil = ProfilIA.entries.filter { it != ProfilIA.IMPREVISIBLE }.let { it[aleatoire.nextInt(it.size)] }
-            notes += "Imprévisible : agit en ${profil.label} ce round"
+        regle?.let { notes += "Situation « ${it.libelle} » → ${profil.nom}" }
+        if (profil.imprevisible) {
+            profil = ProfilIA.entries.filter { it != ProfilIA.IMPREVISIBLE }.let { Comportements.pour(it[aleatoire.nextInt(it.size)]) }
+            notes += "Imprévisible : agit en ${profil.nom} ce round"
         }
         // Vitesse 0 (Agrippé, Entravé…) : seules les cibles déjà à portée comptent, et il ne bouge pas.
         val immobilise = Etats.immobilisant(monstre.conditions)?.takeIf { Etats.peutAgir(monstre.conditions) }
@@ -404,12 +408,12 @@ object IaMonstre {
             }
         }
         val raison = (notes + decision.raison).joinToString(" — ")
-        return decision.copy(raison = raison, profil = profil)
+        return decision.copy(raison = raison, profil = profil.profilIntegre, comportementNom = profil.nom)
     }
 
     private fun selonProfil(
         monstre: Combattant,
-        profil: ProfilIA,
+        profil: Comportement,
         cibles: List<Combattant>,
         allies: List<Combattant>,
         dist: (Combattant) -> Distance,
@@ -425,7 +429,7 @@ object IaMonstre {
 
         profil.seuilFuite?.let { seuil ->
             if (monstre.pvMax > 0 && monstre.pv.toFloat() / monstre.pvMax <= seuil) {
-                return fuir(monstre, cibles, dist, "${profil.label} à ${monstre.pv}/${monstre.pvMax} PV (≤ ${(seuil * 100).toInt()} %)")
+                return fuir(monstre, cibles, dist, "${profil.nom} à ${monstre.pv}/${monstre.pvMax} PV (≤ ${(seuil * 100).toInt()} %)")
             }
         }
 
@@ -465,7 +469,7 @@ object IaMonstre {
         val meilleure = normales.maxByOrNull { it.degatsMoyens }
         val valeurNormale = (meilleure?.degatsMoyens ?: 0) * if (meilleure?.bonusToucher != null) monstre.nbAttaquesMultiples else 1
         if (speciale != null && (profil.speciauxEnPremier || valeur(speciale, enZone) > valeurNormale)) {
-            val raison = if (profil.speciauxEnPremier) "${profil.label} : capacité spéciale disponible" else "Capacité plus rentable que ses attaques"
+            val raison = if (profil.speciauxEnPremier) "${profil.nom} : capacité spéciale disponible" else "Capacité plus rentable que ses attaques"
             val cible = if (speciale.zone) null else choisir(cibles.filter { speciale.atteint(dist(it)) })
             return attaquer(monstre, speciale, cible, raison + if (speciale.zone) " ($enZone cible(s) à portée)" else "", multiples = false)
         }
@@ -476,7 +480,7 @@ object IaMonstre {
             val base = attaquer(monstre, tirs.maxBy { it.degatsMoyens }, cible, "")
             return base.copy(
                 libelle = "Recule puis tire : ${base.libelle}",
-                raison = "${profil.label} au contact de ${auContact.joinToString { it.nom }} : recule à courte distance " +
+                raison = "${profil.nom} au contact de ${auContact.joinToString { it.nom }} : recule à courte distance " +
                     "(attaque d'opportunité possible) puis tire sur ${cible.nom}",
                 deplacements = auContact.associate { it.id to Distance.CONTACT.eloigne(monstre.vitesse) },
             )
@@ -485,7 +489,7 @@ object IaMonstre {
         if (auContact.isNotEmpty() && style == StyleCombat.ARTILLERIE && tirs.isNotEmpty()) {
             return DecisionMonstre(
                 "Se désengager et prendre de la distance",
-                raison = "${profil.label} au contact de ${auContact.joinToString { it.nom }} : se dégage pour garder ses distances",
+                raison = "${profil.nom} au contact de ${auContact.joinToString { it.nom }} : se dégage pour garder ses distances",
                 deplacements = auContact.associate { it.id to Distance.CONTACT.eloigne(monstre.vitesse) },
                 desengage = true,
             )
@@ -522,7 +526,7 @@ object IaMonstre {
             val choix = candidates.maxByOrNull { it.degatsMoyens }
             if (choix != null) {
                 val approche = !choix.atteint(d)
-                val base = attaquer(monstre, choix, cible, "${profil.label}, cible ${profil.cible.label}")
+                val base = attaquer(monstre, choix, cible, "${profil.nom}, cible ${profil.cible.label}")
                 return when {
                     style == StyleCombat.HARCELEMENT && choix.corpsACorps -> base.copy(
                         libelle = "Frappe puis recule : ${base.libelle}",
@@ -542,7 +546,7 @@ object IaMonstre {
         if (!seDeplace) {
             return DecisionMonstre(
                 "Se tient prêt à son poste (Préparer une action)",
-                raison = "${profil.label} : aucun adversaire à sa portée, ne quitte pas sa position",
+                raison = "${profil.nom} : aucun adversaire à sa portée, ne quitte pas sa position",
             )
         }
         // Personne à portée : s'élance vers une cible (longue → courte).

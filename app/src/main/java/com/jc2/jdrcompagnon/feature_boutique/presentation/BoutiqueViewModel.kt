@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -35,12 +35,16 @@ class BoutiqueViewModel(
     private val modifierBoutique: ModifierBoutiqueUseCase,
     private val genererNomBoutique: GenererNomBoutiqueUseCase,
     private val genererNomMarchand: GenererNomMarchandUseCase,
-    private val mondeActif: () -> String // fourni par GameState via DI, pas de couplage direct ici
+    private val mondeActif: () -> String, // fourni par GameState via DI, pas de couplage direct ici
+    // Campagne en cours (null = aucune) : seules ses boutiques et les boutiques communes sont listées.
+    private val campagneCourante: StateFlow<String?> = MutableStateFlow(null),
 ) : ViewModel() {
 
     val uiState: StateFlow<BoutiqueListUiState> = repository
         .observerToutesLesBoutiques()
-        .map { boutiques -> BoutiqueListUiState.Success(boutiques) as BoutiqueListUiState }
+        .combine(campagneCourante) { boutiques, campagne ->
+            BoutiqueListUiState.Success(boutiques.filter { it.estVisibleDans(campagne) }) as BoutiqueListUiState
+        }
         .catch { e -> emit(BoutiqueListUiState.Error(e.message ?: "Erreur inconnue")) }
         .stateIn(
             scope = viewModelScope,
@@ -57,7 +61,7 @@ class BoutiqueViewModel(
                 standingChoisi = standingChoisi,
                 type = type,
                 monde = mondeActif()
-            )
+            ).copy(campagneId = campagneCourante.value)
             repository.sauvegarderBoutique(boutique)
         }
     }
@@ -91,3 +95,9 @@ class BoutiqueViewModel(
     fun genererNomBoutiqueAleatoire(): String = genererNomBoutique()
     fun genererNomMarchandAleatoire(): String = genererNomMarchand()
 }
+/**
+ * Boutique listée quand [campagne] est la campagne en cours : boutiques de cette campagne et
+ * boutiques communes (sans campagne) ; toutes quand aucune campagne n'est sélectionnée.
+ */
+fun Boutique.estVisibleDans(campagne: String?): Boolean =
+    campagne == null || campagneId == null || campagneId == campagne

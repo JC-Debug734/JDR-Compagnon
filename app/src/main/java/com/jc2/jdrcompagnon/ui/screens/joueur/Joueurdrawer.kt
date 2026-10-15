@@ -6,6 +6,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -15,6 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Home
@@ -45,6 +51,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -115,7 +122,18 @@ fun JoueurDrawer(
     val networkGroup by NetworkSessionManager.networkGroup.collectAsState()
 
     ModalDrawerSheet(
-        drawerContainerColor = ForcedDarkPalette.Surface,
+        // Liseré doré sur le flanc droit du menu, comme le menu du MJ et la barre du bas.
+        modifier = Modifier.drawWithContent {
+            drawContent()
+            val x = size.width - 1.dp.toPx()
+            drawLine(
+                color = com.jc2.jdrcompagnon.ui.components.IconesAsset.LisereDore,
+                start = androidx.compose.ui.geometry.Offset(x, 16.dp.toPx()),
+                end = androidx.compose.ui.geometry.Offset(x, size.height - 16.dp.toPx()),
+                strokeWidth = 1.dp.toPx(),
+            )
+        },
+        drawerContainerColor = com.jc2.jdrcompagnon.ui.components.IconesAsset.FondIcones,
         drawerContentColor = ForcedDarkPalette.Content,
     ) {
         Column(
@@ -179,7 +197,7 @@ fun JoueurDrawer(
                 }
             }
 
-            HorizontalDivider(color = ForcedDarkPalette.Indicator)
+            HorizontalDivider(thickness = 1.dp, color = com.jc2.jdrcompagnon.ui.components.IconesAsset.LisereDore)
 
             ScenarioClockRow()
 
@@ -204,16 +222,12 @@ fun JoueurDrawer(
                         onOpenCarte(campagneId)
                     },
                     colors = NavigationDrawerItemDefaults.colors(
-                        unselectedContainerColor = ForcedDarkPalette.Surface,
+                        unselectedContainerColor = com.jc2.jdrcompagnon.ui.components.IconesAsset.FondIcones,
                         unselectedIconColor = ForcedDarkPalette.Content,
                         unselectedTextColor = ForcedDarkPalette.Content
                     )
                 )
                 VilleDuGroupe(
-                    campagneId = campagneId,
-                    lieu = networkGroup?.details?.location ?: currentGroup?.location.orEmpty(),
-                )
-                ServicesDuLieu(
                     campagneId = campagneId,
                     lieu = networkGroup?.details?.location ?: currentGroup?.location.orEmpty(),
                     enReseau = networkCampagne != null,
@@ -227,23 +241,25 @@ fun JoueurDrawer(
             run {
                 val enCours = networkQuests?.count { it.status == "EN_COURS" }
                     ?: selectedCampaign?.quests?.count { it.visibleToPlayers && it.status.name == "EN_COURS" } ?: 0
+                // Fenêtre par-dessus l'écran en cours, comme la liste des lieux de la ville.
+                var quetesOuvertes by remember { mutableStateOf(false) }
+                if (quetesOuvertes) {
+                    com.jc2.jdrcompagnon.feature_quete.ui.PlayerQuestsDialog(onDismiss = { quetesOuvertes = false })
+                }
                 NavigationDrawerItem(
                     icon = { Icon(Icons.Default.Flag, null, tint = ForcedDarkPalette.Content) },
                     label = { Text("Quêtes" + if (enCours > 0) " ($enCours en cours)" else "", color = ForcedDarkPalette.Content) },
                     selected = false,
-                    onClick = {
-                        onClose()
-                        onOpenQuetes()
-                    },
+                    onClick = { quetesOuvertes = true },
                     colors = NavigationDrawerItemDefaults.colors(
-                        unselectedContainerColor = ForcedDarkPalette.Surface,
+                        unselectedContainerColor = com.jc2.jdrcompagnon.ui.components.IconesAsset.FondIcones,
                         unselectedIconColor = ForcedDarkPalette.Content,
                         unselectedTextColor = ForcedDarkPalette.Content
                     )
                 )
             }
 
-            HorizontalDivider(color = ForcedDarkPalette.Indicator)
+            HorizontalDivider(thickness = 1.dp, color = com.jc2.jdrcompagnon.ui.components.IconesAsset.LisereDore)
 
             // Connecté à une partie : le groupe vient du MJ (le joueur n'a pas ses groupes en local).
             val groupName = networkGroup?.name ?: currentGroup?.name
@@ -271,7 +287,7 @@ fun JoueurDrawer(
                     onOpenGroupe()
                 },
                 colors = NavigationDrawerItemDefaults.colors(
-                    unselectedContainerColor = ForcedDarkPalette.Surface,
+                    unselectedContainerColor = com.jc2.jdrcompagnon.ui.components.IconesAsset.FondIcones,
                     unselectedIconColor = ForcedDarkPalette.Content,
                     unselectedTextColor = ForcedDarkPalette.Content
                 )
@@ -286,7 +302,7 @@ fun JoueurDrawer(
                     onOpenRepos()
                 },
                 colors = NavigationDrawerItemDefaults.colors(
-                    unselectedContainerColor = ForcedDarkPalette.Surface,
+                    unselectedContainerColor = com.jc2.jdrcompagnon.ui.components.IconesAsset.FondIcones,
                     unselectedIconColor = ForcedDarkPalette.Content,
                     unselectedTextColor = ForcedDarkPalette.Content
                 )
@@ -301,7 +317,7 @@ fun JoueurDrawer(
                     onOpenCombatActions()
                 },
                 colors = NavigationDrawerItemDefaults.colors(
-                    unselectedContainerColor = ForcedDarkPalette.Surface,
+                    unselectedContainerColor = com.jc2.jdrcompagnon.ui.components.IconesAsset.FondIcones,
                     unselectedIconColor = ForcedDarkPalette.Content,
                     unselectedTextColor = ForcedDarkPalette.Content
                 )
@@ -317,13 +333,13 @@ fun JoueurDrawer(
                         onOpenProposalStatus()
                     },
                     colors = NavigationDrawerItemDefaults.colors(
-                        unselectedContainerColor = ForcedDarkPalette.Surface,
+                        unselectedContainerColor = com.jc2.jdrcompagnon.ui.components.IconesAsset.FondIcones,
                         unselectedIconColor = ForcedDarkPalette.Content,
                         unselectedTextColor = ForcedDarkPalette.Content
                     )
                 )
 
-                HorizontalDivider(color = ForcedDarkPalette.Indicator)
+                HorizontalDivider(thickness = 1.dp, color = com.jc2.jdrcompagnon.ui.components.IconesAsset.LisereDore)
             }
 
             // Choose character (masqué une fois assigné à un personnage réseau)
@@ -337,13 +353,13 @@ fun JoueurDrawer(
                         onChooseCharacter()
                     },
                     colors = NavigationDrawerItemDefaults.colors(
-                        unselectedContainerColor = ForcedDarkPalette.Surface,
+                        unselectedContainerColor = com.jc2.jdrcompagnon.ui.components.IconesAsset.FondIcones,
                         unselectedIconColor = ForcedDarkPalette.Content,
                         unselectedTextColor = ForcedDarkPalette.Content
                     )
                 )
 
-                HorizontalDivider(color = ForcedDarkPalette.Indicator)
+                HorizontalDivider(thickness = 1.dp, color = com.jc2.jdrcompagnon.ui.components.IconesAsset.LisereDore)
             }
         }
     }
@@ -370,13 +386,35 @@ fun JoueurDrawer(
     }
 }
 
+/** Lieu d'une ville où le joueur peut se rendre : lieu notable, boutique, ou les deux (même nom). */
+private data class LieuVisitable(
+    // null = entrée de la ville ; "boutique:<id>" pour une boutique sans lieu notable à son nom.
+    val id: String?,
+    val nom: String,
+    val description: String,
+    val boutique: com.jc2.jdrcompagnon.network.BoutiqueJoueurData?,
+    // Lieu notable (avec sa fonction : temple, panneau de quêtes...), null = entrée ou boutique seule.
+    val notable: com.jc2.jdrcompagnon.feature_carte.domain.model.LieuNotable? = null,
+)
+
 /**
  * Ville où se trouve le groupe (localisation du groupe rapprochée, par son nom, d'une ville de la
- * campagne) : entrée du menu à son nom, qui ouvre la liste des lieux à visiter. Le joueur arrive
- * toujours par l'entrée de la ville (VisiteVille), puis choisit où il va.
+ * campagne) : entrée du menu à son nom, qui ouvre la liste des lieux à visiter — lieux notables et
+ * boutiques — avec, pour chacun, les autres joueurs qui s'y trouvent. Le joueur arrive toujours par
+ * l'entrée de la ville (VisiteVille) ; choisir un lieu l'y emmène (position envoyée au MJ, qui la
+ * diffuse aux autres) et ouvre son écran : particularité, commerce et services (CommerceLieuDialog).
+ *
+ * En partie réseau, boutiques, stock et services viennent du MJ (CarteSyncReseau.boutiquesReseau) ;
+ * sinon, de la base locale.
  */
 @Composable
-private fun VilleDuGroupe(campagneId: String, lieu: String) {
+private fun VilleDuGroupe(
+    campagneId: String,
+    lieu: String,
+    enReseau: Boolean,
+    characterId: String?,
+    connecte: Boolean,
+) {
     val context = LocalContext.current
     // null tant que la base n'a pas répondu : ne pas prendre ce premier instant pour un départ.
     val points by remember(campagneId) {
@@ -388,123 +426,16 @@ private fun VilleDuGroupe(campagneId: String, lieu: String) {
             lieu.isNotBlank() && it.nom.trim().equals(lieu.trim(), ignoreCase = true)
     }
     if (ville == null) {
-        androidx.compose.runtime.LaunchedEffect(Unit) { com.jc2.jdrcompagnon.feature_carte.data.VisiteVille.quitter(context) }
+        androidx.compose.runtime.LaunchedEffect(Unit) {
+            com.jc2.jdrcompagnon.feature_carte.data.VisiteVille.quitter(context)
+            NetworkSessionManager.signalerPositionVille(null)
+            characterId?.let { GameState.setLieuVille(it, "") }
+        }
         return
     }
-    val lieux by remember(ville.id) {
+    val lieuxNotables by remember(ville.id) {
         com.jc2.jdrcompagnon.di.CarteDependencies.repository.observerLieuxNotables(ville.id)
     }.collectAsState(initial = emptyList())
-    var lieuActuelId by remember(ville.id) {
-        com.jc2.jdrcompagnon.feature_carte.data.VisiteVille.arriver(context, ville.id)
-        mutableStateOf(com.jc2.jdrcompagnon.feature_carte.data.VisiteVille.lieuActuel(context, ville.id))
-    }
-    val lieuActuel = lieux.firstOrNull { it.id == lieuActuelId }
-    var ouvert by remember { mutableStateOf(false) }
-
-    NavigationDrawerItem(
-        icon = { Icon(Icons.Default.LocationCity, null, tint = ForcedDarkPalette.AccentGold) },
-        label = {
-            Column {
-                Text(ville.nom, color = ForcedDarkPalette.Content, fontWeight = FontWeight.Bold)
-                Text(
-                    "Vous êtes : ${lieuActuel?.nom ?: com.jc2.jdrcompagnon.feature_carte.ui.ENTREE_DE_LA_VILLE}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ForcedDarkPalette.Content,
-                )
-            }
-        },
-        selected = false,
-        onClick = { ouvert = true },
-        colors = NavigationDrawerItemDefaults.colors(
-            unselectedContainerColor = ForcedDarkPalette.Surface,
-            unselectedIconColor = ForcedDarkPalette.Content,
-            unselectedTextColor = ForcedDarkPalette.Content
-        )
-    )
-
-    if (ouvert) {
-        AlertDialog(
-            onDismissRequest = { ouvert = false },
-            title = { Text(ville.nom) },
-            text = {
-                Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Text("Où allez-vous ?", style = MaterialTheme.typography.labelMedium)
-                    LieuVilleRow(
-                        nom = com.jc2.jdrcompagnon.feature_carte.ui.ENTREE_DE_LA_VILLE,
-                        description = ville.description,
-                        ici = lieuActuelId == null || lieuActuel == null,
-                    ) {
-                        com.jc2.jdrcompagnon.feature_carte.data.VisiteVille.aller(context, ville.id, null)
-                        lieuActuelId = null
-                    }
-                    lieux.forEach { l ->
-                        LieuVilleRow(nom = l.nom, description = l.description, ici = l.id == lieuActuel?.id) {
-                            com.jc2.jdrcompagnon.feature_carte.data.VisiteVille.aller(context, ville.id, l.id)
-                            lieuActuelId = l.id
-                        }
-                    }
-                    if (lieux.isEmpty()) {
-                        Text("Le MJ n'a pas encore indiqué d'autre lieu à visiter.", style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-            },
-            confirmButton = { TextButton(onClick = { ouvert = false }) { Text("Fermer") } },
-        )
-    }
-}
-
-/** Lieu à visiter d'une ville dans la liste du menu joueur ; [ici] = lieu actuel du joueur. */
-@Composable
-private fun LieuVilleRow(nom: String, description: String, ici: Boolean, onAller: () -> Unit) {
-    androidx.compose.material3.Surface(
-        onClick = onAller,
-        shape = MaterialTheme.shapes.medium,
-        color = if (ici) ForcedDarkPalette.AccentGold.copy(alpha = 0.2f) else androidx.compose.ui.graphics.Color.White.copy(alpha = 0.06f),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                Icons.Default.Place,
-                contentDescription = null,
-                tint = if (ici) ForcedDarkPalette.AccentGold else MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.size(20.dp),
-            )
-            Spacer(Modifier.width(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(nom, fontWeight = FontWeight.Bold)
-                if (description.isNotBlank()) {
-                    Text(description, style = MaterialTheme.typography.bodySmall, maxLines = 3)
-                }
-            }
-            if (ici) Text("Vous êtes ici", style = MaterialTheme.typography.labelSmall, color = ForcedDarkPalette.AccentGold)
-        }
-    }
-}
-
-/**
- * Services disponibles là où se trouve le groupe : la localisation du groupe est rapprochée (par
- * son nom) d'une ville de la campagne, dont les boutiques proposent leurs services. En partie
- * réseau, boutiques et services viennent du MJ (CarteSyncReseau.boutiquesReseau) ; sinon, de la
- * base locale. Rien n'est affiché si le groupe n'est pas dans une ville ayant des services.
- */
-@Composable
-private fun ServicesDuLieu(
-    campagneId: String,
-    lieu: String,
-    enReseau: Boolean,
-    characterId: String?,
-    connecte: Boolean,
-) {
-    val points by remember(campagneId) {
-        com.jc2.jdrcompagnon.di.CarteDependencies.repository.observerPoints(campagneId)
-    }.collectAsState(initial = emptyList())
-    val ville = points.firstOrNull {
-        it.type == com.jc2.jdrcompagnon.feature_carte.domain.model.TypePointInteret.VILLE &&
-            lieu.isNotBlank() && it.nom.trim().equals(lieu.trim(), ignoreCase = true)
-    } ?: return
     val boutiquesReseau by com.jc2.jdrcompagnon.feature_carte.data.CarteSyncReseau.boutiquesReseau.collectAsState()
     val boutiquesLocales by remember {
         com.jc2.jdrcompagnon.di.BoutiqueDependencies.repository.observerToutesLesBoutiques()
@@ -513,50 +444,202 @@ private fun ServicesDuLieu(
         boutiquesReseau.filter { it.villeId == ville.id }
     } else {
         com.jc2.jdrcompagnon.feature_carte.data.CarteSyncReseau.boutiquesJoueur(listOf(ville), boutiquesLocales)
-    }.filter { it.services.isNotEmpty() }
-    if (boutiques.isEmpty()) return
+    }
+    // Un lieu notable au nom d'une boutique est cette boutique ; les autres boutiques sont des lieux à part.
+    val lieux = buildList {
+        add(LieuVisitable(null, com.jc2.jdrcompagnon.feature_carte.ui.ENTREE_DE_LA_VILLE, ville.description, null))
+        // Lieux cachés par le MJ : jamais proposés (en réseau, ils ne sont même pas transmis).
+        lieuxNotables.filter { it.visibleJoueurs }.forEach { l ->
+            add(LieuVisitable(l.id, l.nom, l.description, boutiques.firstOrNull { it.nom.trim().equals(l.nom.trim(), ignoreCase = true) }, l))
+        }
+        boutiques.filter { b -> none { it.boutique?.id == b.id } }.forEach { b ->
+            add(LieuVisitable("boutique:${b.id}", b.nom, "", b))
+        }
+    }
 
+    var lieuActuelId by remember(ville.id) {
+        com.jc2.jdrcompagnon.feature_carte.data.VisiteVille.arriver(context, ville.id)
+        mutableStateOf(com.jc2.jdrcompagnon.feature_carte.data.VisiteVille.lieuActuel(context, ville.id))
+    }
+    val lieuActuel = lieux.firstOrNull { it.id == lieuActuelId } ?: lieux.first()
+    androidx.compose.runtime.LaunchedEffect(ville.id, lieuActuel.id, lieuActuel.nom, characterId) {
+        // Sur la fiche aussi : le MJ voit où est le personnage, sur le même téléphone comme en réseau.
+        characterId?.let { GameState.setLieuVille(it, "${ville.nom} · ${lieuActuel.nom}") }
+        NetworkSessionManager.signalerPositionVille(
+            com.jc2.jdrcompagnon.network.PositionVilleData(villeId = ville.id, lieuId = lieuActuel.id, lieuNom = lieuActuel.nom)
+        )
+    }
+
+    // Autres joueurs dans cette ville (pas soi-même, reconnu à son pseudo ou à son personnage).
+    val positions by NetworkSessionManager.positionsVille.collectAsState()
+    val monPseudo by NetworkSessionManager.nomJoueurReseau.collectAsState()
     val characters by GameState.characters.collectAsState()
     val personnage = characters.firstOrNull { it.id == characterId }
+    val autres = positions.filter { p ->
+        p.villeId == ville.id &&
+            !(monPseudo != null && p.joueur == monPseudo) &&
+            !(personnage != null && p.personnage == personnage.name)
+    }
+    fun presentsA(l: LieuVisitable) = autres.filter { it.lieuId == l.id }
+
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     var ouvert by remember { mutableStateOf(false) }
+    var lieuOuvert by remember { mutableStateOf<LieuVisitable?>(null) }
+    var carteOuverte by remember { mutableStateOf(false) }
+    // Carte de la ville : son image, envoyée par le MJ (VilleImageStore, synchronisée en partie réseau).
+    val versionImageVille by com.jc2.jdrcompagnon.feature_carte.data.VilleImageStore.version.collectAsState()
+    val fichierCarteVille = remember(ville.id, versionImageVille) {
+        com.jc2.jdrcompagnon.feature_carte.data.VilleImageStore.fichier(context, ville.id).takeIf { it.exists() }
+    }
 
     NavigationDrawerItem(
-        icon = { Icon(Icons.Default.Storefront, null, tint = ForcedDarkPalette.Content) },
+        icon = { Icon(Icons.Default.LocationCity, null, tint = ForcedDarkPalette.AccentGold) },
         label = {
-            Text(
-                "Services — ${ville.nom} (${boutiques.sumOf { it.services.size }})",
-                color = ForcedDarkPalette.Content,
-            )
+            Column {
+                Text(ville.nom, color = ForcedDarkPalette.Content, fontWeight = FontWeight.Bold)
+                Text(
+                    "Vous êtes : ${lieuActuel.nom}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ForcedDarkPalette.Content,
+                )
+                autres.forEach { p ->
+                    Text(
+                        "${com.jc2.jdrcompagnon.feature_boutique.ui.nomPresent(p)} → ${p.lieuNom.ifBlank { com.jc2.jdrcompagnon.feature_carte.ui.ENTREE_DE_LA_VILLE }}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ForcedDarkPalette.Content,
+                    )
+                }
+            }
         },
         selected = false,
         onClick = { ouvert = true },
         colors = NavigationDrawerItemDefaults.colors(
-            unselectedContainerColor = ForcedDarkPalette.Surface,
+            unselectedContainerColor = com.jc2.jdrcompagnon.ui.components.IconesAsset.FondIcones,
             unselectedIconColor = ForcedDarkPalette.Content,
             unselectedTextColor = ForcedDarkPalette.Content
         )
     )
 
     if (ouvert) {
-        com.jc2.jdrcompagnon.feature_boutique.ui.ServicesLieuDialog(
-            lieu = ville.nom,
-            boutiques = boutiques,
-            personnage = personnage,
-            onUtiliser = { boutique, service ->
-                val id = personnage?.id ?: return@ServicesLieuDialog
-                // Paiement sur la fiche (relayée au MJ en partie réseau), puis place décomptée.
-                GameState.addGold(id, -service.prixEnPo)
-                if (connecte) {
-                    NetworkSessionManager.signalerServiceUtilise(id, boutique.id, service.nom)
-                } else {
-                    scope.launch {
-                        com.jc2.jdrcompagnon.feature_boutique.domain.usecase.UtiliserServiceUseCase.decompter(boutique.id, service.nom)
+        AlertDialog(
+            onDismissRequest = { ouvert = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(ville.nom, modifier = Modifier.weight(1f))
+                    if (fichierCarteVille != null) {
+                        androidx.compose.material3.IconButton(onClick = { carteOuverte = true }) {
+                            Icon(Icons.Default.Map, contentDescription = "Carte de la ville", tint = ForcedDarkPalette.AccentGold)
+                        }
                     }
                 }
             },
-            onDismiss = { ouvert = false },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text("Où allez-vous ?", style = MaterialTheme.typography.labelMedium)
+                    lieux.forEach { l ->
+                        LieuVilleRow(
+                            nom = (l.notable?.fonction?.takeIf { it != com.jc2.jdrcompagnon.feature_carte.domain.model.FonctionLieu.AUCUNE }?.let { "${it.emoji} " } ?: "") + l.nom,
+                            description = l.description.ifBlank { l.boutique?.let { b -> "${b.type} · ${b.marchand}" }.orEmpty() },
+                            ici = l.id == lieuActuel.id,
+                            commerce = l.boutique != null,
+                            image = l.boutique?.image,
+                            presents = presentsA(l).map { com.jc2.jdrcompagnon.feature_boutique.ui.nomPresent(it) },
+                        ) {
+                            com.jc2.jdrcompagnon.feature_carte.data.VisiteVille.aller(context, ville.id, l.id)
+                            lieuActuelId = l.id
+                            // L'entrée de la ville n'a d'écran que si elle a une description à lire.
+                            if (l.id != null || l.description.isNotBlank()) lieuOuvert = l
+                        }
+                    }
+                    if (lieux.size == 1) {
+                        Text("Le MJ n'a pas encore indiqué d'autre lieu à visiter.", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { ouvert = false }) { Text("Fermer") } },
         )
+    }
+
+    if (carteOuverte && fichierCarteVille != null) {
+        CarteVilleDialog(ville.nom, fichierCarteVille) { carteOuverte = false }
+    }
+
+    lieuOuvert?.let { l ->
+        // Données à jour (stock, caisse, services) : la boutique est relue à chaque diffusion.
+        val boutique = l.boutique?.let { b -> boutiques.firstOrNull { it.id == b.id } }
+        com.jc2.jdrcompagnon.feature_boutique.ui.CommerceLieuDialog(
+            lieu = l.nom,
+            description = l.description,
+            boutique = boutique,
+            personnage = personnage,
+            presents = presentsA(l),
+            onUtiliserService = { b, service ->
+                val id = personnage?.id ?: return@CommerceLieuDialog
+                // Paiement sur la fiche (relayée au MJ en partie réseau), puis place décomptée.
+                GameState.payer(id, service.prixEnPc)
+                if (connecte) {
+                    NetworkSessionManager.signalerServiceUtilise(id, b.id, service.nom)
+                } else {
+                    scope.launch {
+                        com.jc2.jdrcompagnon.feature_boutique.domain.usecase.UtiliserServiceUseCase.decompter(b.id, service.nom)
+                    }
+                }
+            },
+            onDismiss = { lieuOuvert = null },
+            fonction = l.notable?.takeIf { it.fonction != com.jc2.jdrcompagnon.feature_carte.domain.model.FonctionLieu.AUCUNE }?.let { n ->
+                { com.jc2.jdrcompagnon.feature_carte.ui.FonctionLieuJoueur(n, personnage, campagneId) }
+            },
+        )
+    }
+}
+
+/**
+ * Lieu à visiter d'une ville dans la liste du menu joueur ; [ici] = lieu actuel du joueur,
+ * [commerce] = on peut y acheter ou vendre, [presents] = autres joueurs qui s'y trouvent.
+ */
+@Composable
+private fun LieuVilleRow(
+    nom: String,
+    description: String,
+    ici: Boolean,
+    commerce: Boolean = false,
+    // Enseigne de la boutique du lieu (affichée à la place de l'icône générique quand elle est disponible).
+    image: String? = null,
+    presents: List<String> = emptyList(),
+    onAller: () -> Unit,
+) {
+    androidx.compose.material3.Surface(
+        onClick = onAller,
+        shape = MaterialTheme.shapes.medium,
+        color = if (ici) ForcedDarkPalette.AccentGold.copy(alpha = 0.2f) else androidx.compose.ui.graphics.Color.White.copy(alpha = 0.06f),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            val teinte = if (ici) ForcedDarkPalette.AccentGold else MaterialTheme.colorScheme.onSurface
+            if (commerce) {
+                com.jc2.jdrcompagnon.feature_boutique.ui.EnseigneBoutique(image, Modifier.size(36.dp), tint = teinte)
+            } else {
+                Icon(Icons.Default.Place, contentDescription = null, tint = teinte, modifier = Modifier.size(36.dp).padding(8.dp))
+            }
+            Spacer(Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(nom, fontWeight = FontWeight.Bold)
+                if (description.isNotBlank()) {
+                    Text(description, style = MaterialTheme.typography.bodySmall, maxLines = 3)
+                }
+                if (presents.isNotEmpty()) {
+                    Text(
+                        "Ici : ${presents.joinToString(", ")}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ForcedDarkPalette.AccentGold,
+                    )
+                }
+            }
+            if (ici) Text("Vous êtes ici", style = MaterialTheme.typography.labelSmall, color = ForcedDarkPalette.AccentGold)
+        }
     }
 }
 
@@ -596,4 +679,56 @@ private fun PlayerSettingsDialog(onDismiss: () -> Unit) {
             TextButton(onClick = onDismiss) { Text("Annuler") }
         }
     )
+}
+/** Carte (image) de la ville en plein écran, agrandissable en pinçant et déplaçable au doigt. */
+@Composable
+private fun CarteVilleDialog(nomVille: String, fichier: java.io.File, onDismiss: () -> Unit) {
+    val image = com.jc2.jdrcompagnon.ui.rememberImageFichier(fichier, maxDimension = 2400)
+    var echelle by remember { mutableStateOf(1f) }
+    var decalage by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        androidx.compose.material3.Surface(modifier = Modifier.fillMaxSize(), color = androidx.compose.ui.graphics.Color.Black) {
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clipToBounds()
+                    .pointerInput(Unit) {
+                        detectTransformGestures { _, deplacement, zoom, _ ->
+                            echelle = (echelle * zoom).coerceIn(1f, 6f)
+                            decalage = if (echelle == 1f) androidx.compose.ui.geometry.Offset.Zero else decalage + deplacement
+                        }
+                    },
+            ) {
+                if (image != null) {
+                    androidx.compose.foundation.Image(
+                        bitmap = image,
+                        contentDescription = "Carte de $nomVille",
+                        contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                scaleX = echelle
+                                scaleY = echelle
+                                translationX = decalage.x
+                                translationY = decalage.y
+                            },
+                    )
+                } else {
+                    Text("Chargement de la carte…", color = androidx.compose.ui.graphics.Color.White, modifier = Modifier.align(Alignment.Center))
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().align(Alignment.TopStart).padding(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(nomVille, color = androidx.compose.ui.graphics.Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f).padding(start = 8.dp))
+                    androidx.compose.material3.IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Fermer la carte", tint = androidx.compose.ui.graphics.Color.White)
+                    }
+                }
+            }
+        }
+    }
 }

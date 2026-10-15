@@ -57,6 +57,8 @@ data class ArmeEnMain(
     val lancer: Boolean = false,
     // Exemplaires portés sur l'emplacement (pile de javelines dans le dos).
     val quantite: Int = 1,
+    // Plus petit d20 naturel qui donne un Coup critique (19 ou 18 pour le Champion).
+    val seuilCritique: Int = 20,
 ) {
     /** Arme à munitions sans munition : l'attaque est interdite. */
     val sansMunition: Boolean get() = munition != null && munitionsRestantes <= 0
@@ -121,7 +123,7 @@ object ArsenalPersonnage {
         niveau(c, "Barbare").let { n -> when { n >= 10 -> 4; n >= 4 -> 3; n >= 1 -> 2; else -> 0 } },
         niveau(c, "Guerrier").let { n -> when { n >= 16 -> 6; n >= 10 -> 5; n >= 4 -> 4; n >= 1 -> 3; else -> 0 } },
         if (niveau(c, "Paladin", "Rôdeur", "Roublard", "Voleur") >= 1) 2 else 0,
-    ).max()
+    ).max() + Dons.bottesEnPlus(c)
 
     /**
      * Armes dont la botte est active : le choix enregistré ([Character.weaponMasteries]), sinon le
@@ -205,7 +207,7 @@ object ArsenalPersonnage {
         val aptitudes = texteAptitudes(c)
         val modFor = mod(c.strength)
         val modDex = mod(c.dexterity)
-        val bottes = classesAvecBottes.any { cl -> niveau(c, cl) > 0 }
+        val bottes = classesAvecBottes.any { cl -> niveau(c, cl) > 0 } || Dons.bottesEnPlus(c) > 0
         val bottesChoisies = bottesActives(c)
         fun trouver(nom: String?) = nom?.let { n ->
             armesSrd.firstOrNull { it.nom.equals(n, ignoreCase = true) }
@@ -220,32 +222,47 @@ object ArsenalPersonnage {
         fun calculer(arme: ArmeSrd, nomAffiche: String, main: String, secondaireMain: Boolean, slot: EquipmentSlot): ArmeEnMain? {
             val m = Regex("""(\d+d\d+)\s*(\p{L}+)?""").find(arme.degats) ?: return null
             val finesse = arme.proprietes.contains("Finesse", ignoreCase = true)
+            val modPacte = Occultiste.modArmeDePacte(c, nomAffiche)
             val (caracLabel, modCarac) = when {
+                // Pacte de la lame : l'arme de pacte (corps à corps) peut utiliser le Charisme.
+                !arme.aDistance && modPacte != null && modPacte > maxOf(modFor, if (finesse) modDex else modFor) -> "Cha (Pacte de la lame)" to modPacte
                 arme.aDistance -> "Dex" to modDex
                 finesse && modDex > modFor -> "Dex" to modDex
                 else -> "For" to modFor
             }
-            val maitrisee = maitrise(c, arme)
+            // L'arme de pacte est toujours maîtrisée.
+            val maitrisee = maitrise(c, arme) || Occultiste.estArmeDePacte(c, nomAffiche)
             val magie = ArmesPersonnage.bonusMagique(arme.copy(nom = nomAffiche))
             val notes = mutableListOf<String>()
             var toucher = modCarac + magie + if (maitrisee) c.proficiencyBonus else 0
             notes += "$caracLabel ${signe(modCarac)}" + (if (maitrisee) ", maîtrise +${c.proficiencyBonus}" else ", non maîtrisée") +
                 if (magie != 0) ", magie ${signe(magie)}" else ""
-            if (arme.aDistance && aptitudes.contains("archerie")) {
+            if (arme.aDistance && Guerrier.aStyle(c, "Archerie")) {
                 toucher += 2
                 notes += "Style Archerie : +2 au toucher"
             }
+            // Serment de Dévotion — Arme sacrée : arme de corps à corps tenue en main principale.
+            val armeSacree = Paladin.bonusArmeSacree(c)
+            if (armeSacree > 0 && !arme.aDistance && slot == EquipmentSlot.MAIN_HAND) {
+                toucher += armeSacree
+                notes += "Arme sacrée : +$armeSacree au toucher, lumière vive, dégâts radiants au choix"
+            }
+            if (!arme.aDistance && Paladin.aFrappesRadiantes(c)) notes += "Frappes radiantes : +1d8 radiants si l'attaque touche"
             // Arme de la main secondaire : attaque en action bonus (propriété Légère), sans le
             // modificateur aux dégâts sauf style Combat à deux armes.
-            val ajouterModDegats = !secondaireMain || aptitudes.contains("deux armes") || modCarac < 0
+            val ajouterModDegats = !secondaireMain || Guerrier.aStyle(c, "Combat à deux armes") || modCarac < 0
             var bonusDegats = magie + if (ajouterModDegats) modCarac else 0
-            if (!arme.aDistance && !deuxArmes && aptitudes.contains("duel") && !arme.proprietes.contains("Deux mains", ignoreCase = true)) {
+            if (!arme.aDistance && !deuxArmes && Guerrier.aStyle(c, "Duel") && !arme.proprietes.contains("Deux mains", ignoreCase = true)) {
                 bonusDegats += 2
                 notes += "Style Duel : +2 aux dégâts"
             }
+            // Dons : Armes de lancer, Cogneur lourd (+ dégâts), Tireur d'élite, Perforateur… (rappels).
+            val effetDons = Dons.effetArme(c, nomAffiche, arme.proprietes, arme.aDistance, m.groupValues.getOrNull(2))
+            bonusDegats += effetDons.bonusDegats
+            notes += effetDons.notes
             if (secondaireMain) notes += "Attaque en action bonus (arme Légère)" + if (!ajouterModDegats) ", sans modificateur aux dégâts" else ""
-            if (arme.proprietes.contains("Deux mains", ignoreCase = true) && aptitudes.contains("deux mains")) {
-                notes += "Style Armes à deux mains : relancez les 1 et 2 aux dégâts"
+            if (arme.proprietes.contains("Deux mains", ignoreCase = true) && Guerrier.aStyle(c, "Armes à deux mains")) {
+                notes += "Style Armes à deux mains : un 1 ou un 2 aux dés de dégâts compte comme un 3"
             }
             Regex("""\((\d+)\s*/\s*(\d+)""").find(arme.proprietes)?.let { notes += "Portée ${it.groupValues[1]}/${it.groupValues[2]} m" }
             val munition = typeMunition(arme.proprietes)
@@ -268,6 +285,7 @@ object ArsenalPersonnage {
                 munitionsRestantes = munition?.let { munitionsDisponibles(c, it) } ?: 0,
                 lancer = lancer,
                 quantite = c.stackCount(slot),
+                seuilCritique = Guerrier.seuilCritique(c),
             )
         }
 
@@ -285,8 +303,10 @@ object ArsenalPersonnage {
             },
             secondaire?.let { calculer(it, secondaireNom!!, "Main secondaire", secondaireMain = principale != null, EquipmentSlot.OFF_HAND) },
         )
-        if (enMain.isNotEmpty()) return enMain + armesDeDos
-        return armesDeDos + listOf(frappeMainsNues(c))
+        // Âme acérée : Lames psychiques, manifestées dans une main libre.
+        val lames = Roublard.lamesPsychiques(c)
+        if (enMain.isNotEmpty()) return enMain + armesDeDos + lames
+        return armesDeDos + lames + listOf(frappeMainsNues(c))
     }
 
     const val MAINS_NUES = "Mains nues"
@@ -299,7 +319,10 @@ object ArsenalPersonnage {
         val modDex = mod(c.dexterity)
         val moine = niveau(c, "Moine")
         val (carac, modCarac) = if (moine > 0 && modDex > modFor) "Dex" to modDex else "For" to modFor
-        val de = if (moine > 0) desArtsMartiaux(moine) else null
+        // Arts martiaux du Moine, ou dé d'un don (Combat à mains nues 1d6/1d8, Bagarreur de tavernes 1d4) : le meilleur.
+        val mainsLibres = c.equippedSlots[EquipmentSlot.MAIN_HAND] == null && c.equippedSlots[EquipmentSlot.OFF_HAND] == null
+        val de = listOfNotNull(if (moine > 0) desArtsMartiaux(moine) else null, Dons.deMainsNues(c, mainsLibres))
+            .maxByOrNull { it.substringAfter("d").toIntOrNull() ?: 0 }
         return ArmeEnMain(
             nom = MAINS_NUES,
             main = MAINS_NUES,
@@ -311,6 +334,7 @@ object ArsenalPersonnage {
             maitrisee = true,
             aDistance = false,
             notes = listOf("$carac ${signe(modCarac)}, maîtrise +${c.proficiencyBonus}"),
+            seuilCritique = Guerrier.seuilCritique(c),
         )
     }
 
@@ -323,16 +347,18 @@ object ArsenalPersonnage {
     /** Attaques par action Attaquer (Attaque supplémentaire). */
     fun nbAttaques(c: Character): Int {
         val guerrier = niveau(c, "Guerrier")
-        return when {
+        val classes = when {
             guerrier >= 20 -> 4
             guerrier >= 11 -> 3
             guerrier >= 5 || listOf("Barbare", "Paladin", "Rôdeur", "Moine").any { niveau(c, it) >= 5 } -> 2
             else -> 1
         }
+        // Occultiste : Lame assoiffée (2 attaques) / Lame dévorante (3) avec l'arme de pacte.
+        return maxOf(classes, Occultiste.attaquesArmeDePacte(c))
     }
 
-    /** Fougue (Guerrier niveau 2) : une action supplémentaire par repos court. */
-    fun aFougue(c: Character): Boolean = niveau(c, "Guerrier") >= 2
+    /** Fougue (Guerrier niveau 2) : une action supplémentaire, s'il reste une utilisation (repos court). */
+    fun aFougue(c: Character): Boolean = Guerrier.restantes(c, Guerrier.FOUGUE) > 0
 
     private fun desArtsMartiaux(niveau: Int) = when {
         niveau >= 17 -> "1d12"
@@ -348,11 +374,22 @@ object ArsenalPersonnage {
         val guerrier = niveau(c, "Guerrier")
         val nbAttaques = nbAttaques(c)
         if (nbAttaques > 1) liste += CapaciteAttaque("Attaque supplémentaire", "$nbAttaques attaques quand vous prenez l'action Attaquer")
-        val roublard = niveau(c, "Roublard", "Voleur")
+        val roublard = Roublard.niveau(c)
         if (roublard > 0) {
             liste += CapaciteAttaque(
                 "Attaque sournoise",
-                "+${(roublard + 1) / 2}d6 une fois par tour, arme Finesse ou à distance, avec l'Avantage ou un allié au contact de la cible"
+                "+${Roublard.desAttaqueSournoise(c)}d6 une fois par tour, arme Finesse ou à distance, avec l'Avantage ou un allié au contact de la cible " +
+                    "(bouton dans « Aptitudes du Roublard »)"
+            )
+            if (roublard >= 5) liste += CapaciteAttaque(
+                "Frappe malicieuse",
+                "Sacrifiez des d6 d'Attaque sournoise pour un effet (${Roublard.effetsMax(c)} par attaque, DD ${Roublard.dd(c)}) : " +
+                    Roublard.optionsFrappeMalicieuse(c).joinToString { "${it.nom} (${it.cout}d6)" }
+            )
+            if (Roublard.niveauAssassin(c) >= 3) liste += CapaciteAttaque(
+                "Assassinat",
+                "1er round : Avantage contre les créatures qui n'ont pas encore joué ; Attaque sournoise : +$roublard dégâts" +
+                    if (Roublard.niveauAssassin(c) >= 17) " et Coup meurtrier (JS Con DD ${Roublard.dd(c)} ou dégâts doublés)." else "."
             )
         }
         val barbare = niveau(c, "Barbare")
@@ -366,8 +403,9 @@ object ArsenalPersonnage {
         }
         val moine = niveau(c, "Moine")
         if (moine > 0) liste += CapaciteAttaque("Arts martiaux", "Mains nues ${desArtsMartiaux(moine)} ; frappe à mains nues en action bonus")
-        if (guerrier >= 3 && aptitudes.contains("champion")) {
-            liste += CapaciteAttaque("Critique amélioré", "Coup critique sur 19 ou 20" + if (guerrier >= 15) " (18–20 au niveau 15)" else "")
+        // Champion : zone de critique élargie, appliquée aux jets d'attaque (Guerrier.seuilCritique).
+        Guerrier.seuilCritique(c).takeIf { it < 20 }?.let { seuil ->
+            liste += CapaciteAttaque(if (seuil <= 18) "Critique supérieur" else "Critique amélioré", "Coup critique sur un d20 de $seuil à 20 (appliqué aux jets)")
         }
         if (aChatimentDePaladin(c)) {
             liste += CapaciteAttaque(
@@ -377,36 +415,56 @@ object ArsenalPersonnage {
                     if (c.divineSmiteFreeUsed) " (déjà utilisée)." else " (disponible)."
             )
         }
+        if (Paladin.aFrappesRadiantes(c)) {
+            liste += CapaciteAttaque(
+                "Frappes radiantes",
+                "+1d8 dégâts radiants quand vous touchez avec une arme de corps à corps ou à mains nues (bouton dans « Aptitudes du Paladin »)."
+            )
+        }
+        Paladin.bonusArmeSacree(c).takeIf { it > 0 }?.let { b ->
+            liste += CapaciteAttaque("Arme sacrée", "Active : +$b au toucher avec l'arme de corps à corps en main principale, dégâts radiants au choix.")
+        }
         if (aSauvagerieMartiale(c)) {
             liste += CapaciteAttaque(
                 "Sauvagerie martiale",
                 "Une fois par tour, quand vous touchez avec une arme : lancez deux fois les dés de dégâts de l'arme et gardez le meilleur résultat."
             )
         }
-        if (guerrier >= 2) liste += CapaciteAttaque("Fougue", "Une action supplémentaire (repos court)")
+        Guerrier.ressource(c, Guerrier.FOUGUE)?.let { r ->
+            liste += CapaciteAttaque("Fougue", "Une action supplémentaire : ${Guerrier.restantes(c, r)}/${r.max} (repos court)")
+        }
+        liste += Dons.capacites(c)
         return liste
     }
 
     /**
      * Sorts prêts : sorts mineurs, puis sorts préparés — pour Clerc, Druide, Magicien et Paladin,
      * ceux cochés dans l'écran de repos ([Character.preparedSpells], tous tant qu'aucune
-     * préparation n'a été faite), pour les autres classes tous les sorts connus.
+     * préparation n'a été faite), pour les autres classes tous les sorts connus. Les sorts de
+     * [sortsDeSousClasse] (table de sorts du Serment…) sont toujours prêts, comme Châtiment divin.
      */
-    fun sortsPrets(c: Character, sortsSrd: List<SortSrd>, effets: List<EffetCombatClasse> = emptyList()): List<SortPret> {
+    fun sortsPrets(
+        c: Character,
+        sortsSrd: List<SortSrd>,
+        effets: List<EffetCombatClasse> = emptyList(),
+        sortsDeSousClasse: List<String> = emptyList(),
+    ): List<SortPret> {
         val prepares = c.preparedSpells?.toSet()
         // Châtiment de paladin : Châtiment divin toujours préparé, hors limite de sorts préparés.
-        val toujoursPrepares = sortsToujoursPreparesClasse(c)
-        return (c.spells + toujoursPrepares).distinctBy { it.lowercase() }.mapNotNull { nom ->
-            val srd = sortsSrd.firstOrNull { it.nom.equals(nom, ignoreCase = true) } ?: return@mapNotNull null
-            val toujours = toujoursPrepares.any { it.equals(nom, ignoreCase = true) }
-            val classe = c.spellClasses[nom] ?: if (memeSort(nom, SORT_CHATIMENT_DIVIN) && toujours) "Paladin" else c.characterClass
+        val toujoursPrepares = sortsToujoursPreparesClasse(c) + sortsDeSousClasse
+        return (c.spells + toujoursPrepares).distinctBy { normaliserNomSort(it) }.mapNotNull { nom ->
+            // Apostrophe droite ou typographique (« Lueur d'espoir » importé, « Lueur d’espoir » du SRD).
+            val srd = sortsSrd.firstOrNull { memeSort(it.nom, nom) } ?: return@mapNotNull null
+            val toujours = toujoursPrepares.any { memeSort(it, nom) }
+            val classe = c.spellClasses[nom] ?: if (Paladin.estSortDePaladin(nom) && toujours) Paladin.CLASSE else c.characterClass
             val doitEtrePrepare = srd.niveau > 0 && classesQuiPreparent.any { it.equals(classe, ignoreCase = true) }
             if (doitEtrePrepare && !toujours && prepares != null && nom !in prepares) return@mapNotNull null
-            val mode = c.sortsSpeciaux.entries.firstOrNull { memeSort(it.key, nom) }?.value
+            val mode = sortsSpeciaux(c).entries.firstOrNull { memeSort(it.key, nom) }?.value
             sortPret(c, srd, classe, effets).copy(
                 lancementGratuit = mode,
                 gratuitDisponible = mode == SORT_A_VOLONTE ||
-                    (mode == SORT_PREDILECTION && c.sortsPredilectionUtilises.none { memeSort(it, nom) }),
+                    (mode == SORT_PREDILECTION && c.sortsPredilectionUtilises.none { memeSort(it, nom) }) ||
+                    (mode == SORT_ARCANUM && c.sortsArcanumUtilises.none { memeSort(it, nom) }),
             )
         }.sortedWith(compareBy<SortPret> { it.niveau }.thenBy { it.nom })
     }
@@ -418,17 +476,38 @@ object ArsenalPersonnage {
     const val SORT_PREDILECTION = "predilection"
 
     /**
+     * Mode de Character.sortsSpeciaux : une fois sans emplacement par repos long seulement (Arcanum
+     * mystique et Communication avec le protecteur de l'Occultiste, Présent des profondeurs).
+     */
+    const val SORT_ARCANUM = "arcanum"
+
+    /**
+     * Sorts lançables sans emplacement : ceux de la fiche, plus ceux des manifestations occultes
+     * choisies et du Fidèle destrier du Paladin.
+     */
+    fun sortsSpeciaux(c: Character): Map<String, String> = Occultiste.sortsDesManifestations(c) + Paladin.sortsSpeciaux(c) + c.sortsSpeciaux
+
+    /** Un sort spécial est-il encore lançable sans emplacement (prédilection / arcanum non utilisés) ? */
+    fun gratuitDisponible(c: Character, nom: String): Boolean = when (sortsSpeciaux(c).entries.firstOrNull { memeSort(it.key, nom) }?.value) {
+        SORT_A_VOLONTE -> true
+        SORT_PREDILECTION -> c.sortsPredilectionUtilises.none { memeSort(it, nom) }
+        SORT_ARCANUM -> c.sortsArcanumUtilises.none { memeSort(it, nom) }
+        else -> false
+    }
+
+    /**
      * Sorts toujours préparés par une aptitude de classe, hors limite de sorts préparés : Châtiment
      * divin (Châtiment de paladin) et sorts lançables sans emplacement (Maîtrise des sorts, Sorts de
      * prédilection). Les sorts de sous-classe s'y ajoutent ailleurs (sortsDeSousClasse).
      */
     fun sortsToujoursPreparesClasse(c: Character): List<String> =
-        (if (aChatimentDePaladin(c)) listOf(SORT_CHATIMENT_DIVIN) else emptyList()) + c.sortsSpeciaux.keys
+        (if (aChatimentDePaladin(c)) listOf(SORT_CHATIMENT_DIVIN) else emptyList()) + sortsSpeciaux(c).keys
 
     /** Libellé court du mode d'un sort spécial (badge de la fiche, choix d'emplacement). */
     fun libelleSortSpecial(mode: String?): String? = when (mode) {
         SORT_A_VOLONTE -> "À volonté"
         SORT_PREDILECTION -> "Prédilection"
+        SORT_ARCANUM -> "1/repos long"
         else -> null
     }
 
@@ -452,7 +531,9 @@ object ArsenalPersonnage {
                 }
         }
 
-    private val zoneRegex = Regex("""\b(rayon|cône|cube|ligne|sphère|cylindre|émanation)\b""", RegexOption.IGNORE_CASE)
+    // IGNORE_CASE et \b ne couvrent que l'ASCII : « Émanation » (terme de règle, avec majuscule)
+    // est écrit explicitement, et les limites de mot sont testées sur les lettres Unicode.
+    private val zoneRegex = Regex("""(?<!\p{L})(rayon|cône|cube|ligne|sphère|cylindre|[éÉ]manation)(?!\p{L})""", RegexOption.IGNORE_CASE)
 
     private fun valeurCarac(c: Character, carac: String?): Int? = when (carac?.lowercase()) {
         "force" -> c.strength
@@ -471,7 +552,9 @@ object ArsenalPersonnage {
     private val soinRegex = Regex("""(?:récupère|regagne)[^.]*?(\d+d\d+)(\s*\+\s*votre modificateur)?""")
 
     internal fun sortPret(c: Character, srd: SortSrd, classe: String, effets: List<EffetCombatClasse> = emptyList()): SortPret {
+        // Classe lanceuse, ou incantation de sous-classe (Guerrier Chevalier occulte : Intelligence).
         val caracIncantation = spellcastingAbilityByClass.entries.firstOrNull { it.key.equals(classe, ignoreCase = true) }?.value
+            ?: com.jc2.jdrcompagnon.ui.screens.joueur.character.creation.incantationDeSousClasse(c, classe)?.caracteristique
         val modIncantation = mod(
             when (caracIncantation) {
                 "Intelligence" -> c.intelligence
@@ -495,10 +578,22 @@ object ArsenalPersonnage {
         val notesClasse = mutableListOf<String>()
         // Évocation améliorée : modificateur de la caractéristique ajouté à un jet de dégâts (pas déjà compris dans la formule).
         val bonusCarac = effetsSort.firstOrNull { it.type == EffetCombatClasse.BONUS_DEGATS_CARAC }
+        // Occultiste — Décharge déchirante : Charisme ajouté aux dégâts de Décharge occulte.
+        val dechirante = Occultiste.bonusDechargeDechirante(c, srd.nom)
         val degats = degatsRegex.find(description)?.let { m ->
             val des = "${m.groupValues[1].toInt() * paliers}d${m.groupValues[2]}"
             val formuleDegats = when {
                 m.groupValues[3].isNotEmpty() -> formule(des, modIncantation)
+                dechirante != null -> {
+                    notesClasse += "Décharge déchirante : ${signe(dechirante)} aux dégâts"
+                    formule(des, dechirante)
+                }
+                // Occultiste Céleste — Âme radiante : Charisme ajouté aux dégâts radiants ou de feu (une cible par tour).
+                Occultiste.bonusAmeRadiante(c, m.groupValues[4]) != null -> {
+                    val bonusAme = Occultiste.bonusAmeRadiante(c, m.groupValues[4])!!
+                    notesClasse += "Âme radiante : ${signe(bonusAme)} aux dégâts (une seule cible par tour)"
+                    formule(des, bonusAme)
+                }
                 bonusCarac != null -> {
                     val bonusMod = mod(valeurCarac(c, bonusCarac.carac) ?: 10)
                     notesClasse += "${bonusCarac.source} : ${signe(bonusMod)} aux dégâts"
@@ -527,7 +622,11 @@ object ArsenalPersonnage {
         val resume = buildList {
             when (jet) {
                 JetSort.ATTAQUE -> add("Attaque de sort ${signe(bonus)}")
-                JetSort.SAUVEGARDE -> add("JS ${sauvegarde ?: ""} DD $dd".replace("  ", " "))
+                // Réussite : moitié des dégâts si le sort le dit, sinon aucun (le MJ applique d'après ce résumé).
+                JetSort.SAUVEGARDE -> add(
+                    "JS ${sauvegarde ?: ""} DD $dd".replace("  ", " ") +
+                        if (degats != null && description.contains("moitié", ignoreCase = true)) " (${Sauvegardes.MOITIE_SI_REUSSI})" else ""
+                )
                 JetSort.AUCUN -> {}
             }
             degats?.let { add("${it.first} ${it.second}") }

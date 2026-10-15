@@ -732,8 +732,18 @@ Convocation de dragon sans composante matérielle, une fois sans emplacement par
 ### Aptitudes de classe
 
 #### Niveau 1 : Style de combat
-<!-- id: style-de-combat; type: automatique -->
-Don de Style de combat (Défense recommandé), remplaçable à chaque niveau de Guerrier.
+<!-- id: style-de-combat; type: choix-effet -->
+Un don de Style de combat au choix (Défense recommandé), remplaçable à chaque niveau de Guerrier :
+- **Archerie** <!-- id: archerie --> : +2 aux jets d'attaque avec une arme à distance.
+- **Armes à deux mains** <!-- id: armes-a-deux-mains --> : avec une arme Deux mains ou Polyvalente tenue à deux mains, un 1 ou un 2 sur un dé de dégâts compte comme un 3.
+- **Combat à deux armes** <!-- id: combat-a-deux-armes --> : modificateur de caractéristique ajouté aux dégâts de l'attaque supplémentaire d'une arme Légère.
+- **Défense** <!-- id: defense --> : +1 à la CA en portant une armure.
+- **Duel** <!-- id: duel --> : +2 aux dégâts avec une arme de corps à corps tenue d'une main, sans autre arme.
+- **Armes de lancer** <!-- id: armes-de-lancer --> : +2 aux dégâts d'une attaque à distance avec une arme dotée de la propriété Lancer.
+- **Combat à mains nues** <!-- id: combat-a-mains-nues --> : frappes à mains nues 1d6 + For (1d8 sans arme ni bouclier) ; 1d4 contondants au début du tour à une créature agrippée.
+- **Combat en aveugle** <!-- id: combat-en-aveugle --> : Vision aveugle sur 3 m.
+- **Interception** <!-- id: interception --> : Réaction, réduit de 1d10 + bonus de maîtrise les dégâts subis par une autre créature à 1,50 m (bouclier ou arme en main).
+- **Protection** <!-- id: protection --> : Réaction, Désavantage aux attaques contre une créature à 1,50 m (bouclier requis).
 
 #### Niveau 1 : Second souffle
 <!-- id: second-souffle; type: automatique -->
@@ -811,8 +821,18 @@ Coup critique sur 19-20 aux jets d'attaque avec une arme ou à mains nues.
 Avantage à l'Initiative et aux tests de Force (Athlétisme) ; après un Coup critique, déplacement de la moitié de votre Vitesse sans provoquer d'attaque d'Opportunité.
 
 #### Niveau 7 : Style de combat supplémentaire
-<!-- id: style-de-combat-supplementaire; type: automatique -->
-Un don de Style de combat supplémentaire au choix.
+<!-- id: style-de-combat-supplementaire; type: choix-effet -->
+Un don de Style de combat supplémentaire au choix (différent du premier) :
+- **Archerie** <!-- id: archerie --> : +2 aux jets d'attaque avec une arme à distance.
+- **Armes à deux mains** <!-- id: armes-a-deux-mains --> : avec une arme Deux mains ou Polyvalente tenue à deux mains, un 1 ou un 2 sur un dé de dégâts compte comme un 3.
+- **Combat à deux armes** <!-- id: combat-a-deux-armes --> : modificateur de caractéristique ajouté aux dégâts de l'attaque supplémentaire d'une arme Légère.
+- **Défense** <!-- id: defense --> : +1 à la CA en portant une armure.
+- **Duel** <!-- id: duel --> : +2 aux dégâts avec une arme de corps à corps tenue d'une main, sans autre arme.
+- **Armes de lancer** <!-- id: armes-de-lancer --> : +2 aux dégâts d'une attaque à distance avec une arme dotée de la propriété Lancer.
+- **Combat à mains nues** <!-- id: combat-a-mains-nues --> : frappes à mains nues 1d6 + For (1d8 sans arme ni bouclier) ; 1d4 contondants au début du tour à une créature agrippée.
+- **Combat en aveugle** <!-- id: combat-en-aveugle --> : Vision aveugle sur 3 m.
+- **Interception** <!-- id: interception --> : Réaction, réduit de 1d10 + bonus de maîtrise les dégâts subis par une autre créature à 1,50 m (bouclier ou arme en main).
+- **Protection** <!-- id: protection --> : Réaction, Désavantage aux attaques contre une créature à 1,50 m (bouclier requis).
 
 #### Niveau 10 : Guerrier héroïque
 <!-- id: guerrier-heroique; type: automatique -->
@@ -1158,9 +1178,69 @@ Après une action Bonus autre que Porté par le vent, utilisation immédiate de 
 
 ### Aptitudes de classe
 
-#### Niveau 1 : Manifestations occultes
-<!-- id: manifestations-occultes; type: automatique -->
-Choix d'une Manifestation (ex. Pacte du grimoire, Pacte de la lame, Pacte de la chaîne) ; d'autres reçues aux niveaux indiqués dans la table. Remplaçables à chaque niveau (sauf prérequis d'une autre manifestation).
+#### Niveau 1, 2, 5, 7, 9, 12, 15, 18 : Manifestation occulte
+<!-- id: manifestation-occulte; type: choix-effet -->
+Une manifestation au niveau 1, puis une de plus aux niveaux 2, 5, 7, 9, 12, 15 et 18 (deux de plus aux niveaux 2 et 5, voir Manifestation occulte supplémentaire) : 10 au niveau 18. Prérequis entre parenthèses ; à chaque niveau d’Occultiste, une manifestation peut être remplacée par une autre dont vous remplissez les prérequis.
+- **Armure d’ombres** <!-- id: armure-d-ombres --> : lancer armure du mage sur vous-même sans emplacement de sort (à volonté).
+- **Buveuse de vie** <!-- id: buveuse-de-vie --> : (niv. 9+, Pacte de la lame) une fois par tour, arme de pacte : +1d6 dégâts nécrotiques, psychiques ou radiants, et dépense possible d'un dé de vie pour regagner son résultat + mod. Constitution.
+- **Décharge déchirante** <!-- id: decharge-dechirante --> : (niv. 2+, sort mineur à dégâts) mod. Charisme ajouté aux dégâts de décharge occulte (appliqué par l'appli). Répétable (autre sort mineur).
+- **Décharge répulsive** <!-- id: decharge-repulsive --> : (niv. 2+, sort mineur à jet d'attaque) une créature de taille G ou moins touchée est repoussée de 3 m au plus. Répétable.
+- **Engagement du maître des chaînes** <!-- id: engagement-du-maitre-des-chaines --> : (niv. 5+, Pacte de la chaîne) familier : vol ou nage 12 m, attaque par votre action Bonus, dégâts radiants/nécrotiques, votre DD, Résistance par votre Réaction.
+- **Enseignement des Premiers-Nés** <!-- id: enseignement-des-premiers-nes --> : (niv. 2+) un don d'origines de votre choix. Répétable.
+- **Esprit occulte** <!-- id: esprit-occulte --> : Avantage aux JS de Constitution pour maintenir la Concentration.
+- **Frappe occulte** <!-- id: frappe-occulte --> : (niv. 5+, Pacte de la lame) une fois par tour, arme de pacte : dépensez un emplacement de pacte pour +1d8 force +1d8 par niveau d'emplacement, et la cible (TG ou moins) est À terre.
+- **Lame assoiffée** <!-- id: lame-assoiffee --> : (niv. 5+, Pacte de la lame) Attaque supplémentaire avec l'arme de pacte : deux attaques par action Attaque (appliqué par l'appli).
+- **Lame dévorante** <!-- id: lame-devorante --> : (niv. 12+, Lame assoiffée) trois attaques par action Attaque avec l'arme de pacte (appliqué par l'appli).
+- **Lance occulte** <!-- id: lance-occulte --> : (niv. 2+, sort mineur à dégâts de portée 3 m ou plus) portée du sort augmentée de 9 m par niveau d'Occultiste. Répétable.
+- **Maître des formes** <!-- id: maitre-des-formes --> : (niv. 5+) lancer modification d’apparence sans emplacement de sort.
+- **Maître des ombres** <!-- id: maitre-des-ombres --> : (niv. 5+) en Lumière faible ou Ténèbres, lancer invisibilité sur vous-même sans emplacement de sort.
+- **Mille visages** <!-- id: mille-visages --> : (niv. 2+) lancer déguisement sans emplacement de sort.
+- **Murmures de la tombe** <!-- id: murmures-de-la-tombe --> : (niv. 7+) lancer communication avec les morts sans emplacement de sort.
+- **Pacte de la chaîne** <!-- id: pacte-de-la-chaine --> : appel de familier par l'action Magie sans emplacement (formes spéciales : diablotin, esprit follet, pseudodragon, quasit, sphinx merveilleux, serpent venimeux, squelette) ; renoncez à une attaque pour que le familier attaque par sa Réaction.
+- **Pacte de la lame** <!-- id: pacte-de-la-lame --> : action Bonus : invoquer une arme de pacte de corps à corps (ou se lier à une arme magique) ; maîtrisée, focaliseur, Charisme pour l'attaque et les dégâts (appliqué par l'appli), dégâts nécrotiques, psychiques ou radiants au choix.
+- **Pacte du grimoire** <!-- id: pacte-du-grimoire --> : Codex des Ombres à chaque repos : trois sorts mineurs et deux rituels du 1er niveau de n'importe quelle liste, préparés comme sorts d'Occultiste ; sert de focaliseur.
+- **Pas aérien** <!-- id: pas-aerien --> : (niv. 5+) lancer lévitation sur vous-même sans emplacement de sort.
+- **Perception transférée** <!-- id: perception-transferee --> : (niv. 5+) action Bonus : percevoir par les sens d'une créature consentante touchée, et lancer des sorts depuis son espace (18 m max).
+- **Présent des profondeurs** <!-- id: present-des-profondeurs --> : (niv. 5+) Vitesse de nage égale à votre Vitesse, respiration sous l'eau, et respiration aquatique une fois sans emplacement par repos long.
+- **Présent des sauveurs** <!-- id: present-des-sauveurs --> : (niv. 9+, Pacte du grimoire) une page du Codex accueille mod. Charisme noms ; une créature inscrite qui tombe à 0 pv reste à 1 pv (une fois par repos long).
+- **Royaumes lointains** <!-- id: royaumes-lointains --> : (niv. 9+) lancer œil du mage sans emplacement de sort.
+- **Saut d’outre-monde** <!-- id: saut-d-outre-monde --> : (niv. 2+) lancer saut sur vous-même sans emplacement de sort.
+- **Vigueur fiélonne** <!-- id: vigueur-fielonne --> : (niv. 2+) lancer simulacre de vie sur vous-même sans emplacement, PV temporaires au maximum du dé.
+- **Vision du diable** <!-- id: vision-du-diable --> : (niv. 2+) vous voyez normalement en Lumière faible et dans les Ténèbres, même magiques, à 36 m.
+- **Vision sorcière** <!-- id: vision-sorciere --> : (niv. 15+) Vision lucide sur 9 m.
+- **Visions embrumées** <!-- id: visions-embrumees --> : (niv. 2+) lancer image silencieuse sans emplacement de sort.
+
+#### Niveau 2, 5 : Manifestation occulte supplémentaire
+<!-- id: manifestation-occulte-supplementaire; type: choix-effet -->
+Seconde manifestation reçue aux niveaux 2 et 5 (3 manifestations au niveau 2, 5 au niveau 5).
+- **Armure d’ombres** <!-- id: armure-d-ombres --> : lancer armure du mage sur vous-même sans emplacement de sort (à volonté).
+- **Buveuse de vie** <!-- id: buveuse-de-vie --> : (niv. 9+, Pacte de la lame) une fois par tour, arme de pacte : +1d6 dégâts nécrotiques, psychiques ou radiants, et dépense possible d'un dé de vie pour regagner son résultat + mod. Constitution.
+- **Décharge déchirante** <!-- id: decharge-dechirante --> : (niv. 2+, sort mineur à dégâts) mod. Charisme ajouté aux dégâts de décharge occulte (appliqué par l'appli). Répétable (autre sort mineur).
+- **Décharge répulsive** <!-- id: decharge-repulsive --> : (niv. 2+, sort mineur à jet d'attaque) une créature de taille G ou moins touchée est repoussée de 3 m au plus. Répétable.
+- **Engagement du maître des chaînes** <!-- id: engagement-du-maitre-des-chaines --> : (niv. 5+, Pacte de la chaîne) familier : vol ou nage 12 m, attaque par votre action Bonus, dégâts radiants/nécrotiques, votre DD, Résistance par votre Réaction.
+- **Enseignement des Premiers-Nés** <!-- id: enseignement-des-premiers-nes --> : (niv. 2+) un don d'origines de votre choix. Répétable.
+- **Esprit occulte** <!-- id: esprit-occulte --> : Avantage aux JS de Constitution pour maintenir la Concentration.
+- **Frappe occulte** <!-- id: frappe-occulte --> : (niv. 5+, Pacte de la lame) une fois par tour, arme de pacte : dépensez un emplacement de pacte pour +1d8 force +1d8 par niveau d'emplacement, et la cible (TG ou moins) est À terre.
+- **Lame assoiffée** <!-- id: lame-assoiffee --> : (niv. 5+, Pacte de la lame) Attaque supplémentaire avec l'arme de pacte : deux attaques par action Attaque (appliqué par l'appli).
+- **Lame dévorante** <!-- id: lame-devorante --> : (niv. 12+, Lame assoiffée) trois attaques par action Attaque avec l'arme de pacte (appliqué par l'appli).
+- **Lance occulte** <!-- id: lance-occulte --> : (niv. 2+, sort mineur à dégâts de portée 3 m ou plus) portée du sort augmentée de 9 m par niveau d'Occultiste. Répétable.
+- **Maître des formes** <!-- id: maitre-des-formes --> : (niv. 5+) lancer modification d’apparence sans emplacement de sort.
+- **Maître des ombres** <!-- id: maitre-des-ombres --> : (niv. 5+) en Lumière faible ou Ténèbres, lancer invisibilité sur vous-même sans emplacement de sort.
+- **Mille visages** <!-- id: mille-visages --> : (niv. 2+) lancer déguisement sans emplacement de sort.
+- **Murmures de la tombe** <!-- id: murmures-de-la-tombe --> : (niv. 7+) lancer communication avec les morts sans emplacement de sort.
+- **Pacte de la chaîne** <!-- id: pacte-de-la-chaine --> : appel de familier par l'action Magie sans emplacement (formes spéciales : diablotin, esprit follet, pseudodragon, quasit, sphinx merveilleux, serpent venimeux, squelette) ; renoncez à une attaque pour que le familier attaque par sa Réaction.
+- **Pacte de la lame** <!-- id: pacte-de-la-lame --> : action Bonus : invoquer une arme de pacte de corps à corps (ou se lier à une arme magique) ; maîtrisée, focaliseur, Charisme pour l'attaque et les dégâts (appliqué par l'appli), dégâts nécrotiques, psychiques ou radiants au choix.
+- **Pacte du grimoire** <!-- id: pacte-du-grimoire --> : Codex des Ombres à chaque repos : trois sorts mineurs et deux rituels du 1er niveau de n'importe quelle liste, préparés comme sorts d'Occultiste ; sert de focaliseur.
+- **Pas aérien** <!-- id: pas-aerien --> : (niv. 5+) lancer lévitation sur vous-même sans emplacement de sort.
+- **Perception transférée** <!-- id: perception-transferee --> : (niv. 5+) action Bonus : percevoir par les sens d'une créature consentante touchée, et lancer des sorts depuis son espace (18 m max).
+- **Présent des profondeurs** <!-- id: present-des-profondeurs --> : (niv. 5+) Vitesse de nage égale à votre Vitesse, respiration sous l'eau, et respiration aquatique une fois sans emplacement par repos long.
+- **Présent des sauveurs** <!-- id: present-des-sauveurs --> : (niv. 9+, Pacte du grimoire) une page du Codex accueille mod. Charisme noms ; une créature inscrite qui tombe à 0 pv reste à 1 pv (une fois par repos long).
+- **Royaumes lointains** <!-- id: royaumes-lointains --> : (niv. 9+) lancer œil du mage sans emplacement de sort.
+- **Saut d’outre-monde** <!-- id: saut-d-outre-monde --> : (niv. 2+) lancer saut sur vous-même sans emplacement de sort.
+- **Vigueur fiélonne** <!-- id: vigueur-fielonne --> : (niv. 2+) lancer simulacre de vie sur vous-même sans emplacement, PV temporaires au maximum du dé.
+- **Vision du diable** <!-- id: vision-du-diable --> : (niv. 2+) vous voyez normalement en Lumière faible et dans les Ténèbres, même magiques, à 36 m.
+- **Vision sorcière** <!-- id: vision-sorciere --> : (niv. 15+) Vision lucide sur 9 m.
+- **Visions embrumées** <!-- id: visions-embrumees --> : (niv. 2+) lancer image silencieuse sans emplacement de sort.
 
 #### Niveau 1 : Magie de pacte
 <!-- id: magie-de-pacte; type: automatique -->
@@ -1168,7 +1248,7 @@ Caractéristique d'incantation : Charisme. Tous les emplacements de sort de Magi
 
 #### Niveau 2 : Rouerie magique
 <!-- id: rouerie-magique; type: automatique -->
-1 minute de rite : récupération de la moitié (arrondi au-dessus) des emplacements de Magie de pacte dépensés. 1/Repos long.
+Rite de 1 minute : vous regagnez des emplacements de Magie de pacte dépensés, à concurrence de la moitié du maximum (arrondie au supérieur). 1/Repos long (bouton « Rouerie magique » de la fiche, section Sorts).
 
 #### Niveau 3 : Sous-classe d'Occultiste
 <!-- id: sous-classe-d-occultiste; type: choix-sousclasse -->
@@ -1179,11 +1259,13 @@ Choix de la sous-classe (Protecteur Fiélon dans le SRD).
 
 #### Niveau 9 : Communication avec le protecteur
 <!-- id: communication-avec-le-protecteur; type: automatique -->
-contact avec les plans toujours préparé, lançable sans emplacement (réussite automatique du JS). 1/Repos long.
+<!-- id: communication-avec-le-protecteur-sort; sorts-speciaux: arcanum; sort: Contact avec les plans -->
+contact avec les plans toujours préparé, lançable sans emplacement pour contacter votre protecteur (réussite automatique du JS du sort). 1/Repos long.
 
 #### Niveau 11, 13, 15, 17 : Arcanum mystique
 <!-- id: arcanum-mystique; type: automatique -->
-Sorts de haut niveau (6e à 9e) lançables une fois sans emplacement, 1/Repos long chacun.
+<!-- id: arcanum-mystique-choix; sorts-speciaux: arcanum; niveaux: 6, 7, 8, 9; un-par-niveau: 11, 13, 15, 17; source: liste -->
+Un sort d'Occultiste du 6e niveau (niveau 11), puis du 7e (13), du 8e (15) et du 9e (17) : chacun lançable une fois sans emplacement, récupéré à un Repos long.
 
 #### Niveau 19 : Faveur épique
 <!-- id: faveur-epique; type: automatique -->
@@ -1214,7 +1296,7 @@ Rouerie magique récupère désormais tous les emplacements de Magie de pacte d�
 
 #### Niveau 3 : Bénédiction du ténébreux
 <!-- id: benediction-du-tenebreux; type: automatique -->
-Quand un ennemi tombe à 0 pv près de vous (ou d'un allié à 3 m), points de vie temporaires = mod. Charisme + niveau d'Occultiste (min. 1).
+Quand vous réduisez un adversaire à 0 pv, ou qu'autrui le fait dans un rayon de 3 m de vous : points de vie temporaires = mod. Charisme + niveau d'Occultiste (min. 1). Appliqué automatiquement en combat.
 
 #### Niveau 3 : Sorts du Fiélon
 <!-- id: sorts-du-fielon; type: automatique -->
@@ -1222,15 +1304,15 @@ Sorts toujours préparés selon le niveau d'Occultiste (voir la table).
 
 #### Niveau 6 : Chance du ténébreux
 <!-- id: chance-du-tenebreux; type: automatique -->
-+1d10 à un test de caractéristique ou un JS, nombre d'utilisations = mod. Charisme (min. 1)/Repos long, une fois par jet.
++1d10 à un test de caractéristique ou un JS, après le jet mais avant ses effets ; nombre d'utilisations = mod. Charisme (min. 1)/Repos long, une fois par jet. En combat, l'appli l'utilise d'office sur un JS raté que le d10 peut encore sauver.
 
 #### Niveau 10 : Résistance fiélonne
 <!-- id: resistance-fielonne; type: automatique -->
-À chaque Repos court ou long, Résistance à un type de dégâts choisi (hors force) jusqu'au prochain changement.
+À chaque Repos court ou long, Résistance à un type de dégâts choisi (hors force) jusqu'au prochain changement (choix dans l'écran Repos, appliqué en combat).
 
 #### Niveau 14 : Traversée des enfers
 <!-- id: traversee-des-enfers; type: automatique -->
-Après avoir touché une créature : JS Charisme, sinon projetée dans les Plans Inférieurs jusqu'à la fin de votre prochain tour et 8d10 dégâts psychiques. 1/Repos long.
+Une fois par tour, quand vous touchez une créature avec un jet d'attaque : JS Charisme contre votre DD des sorts, sinon elle est projetée dans les Plans Inférieurs, subit 8d10 dégâts psychiques (sauf un Fiélon) et l'état Neutralisé jusqu'à la fin de votre tour suivant. 1/Repos long, ou récupérée en dépensant un emplacement de Magie de pacte (option du MJ en combat).
 
 ---
 
@@ -1297,8 +1379,22 @@ châtiment divin toujours préparé, lançable une fois sans emplacement (1/Repo
 
 #### Niveau 2 : Style de combat
 <!-- id: style-de-combat; type: choix-effet -->
-Choix entre deux options :
-- **Style de combat** <!-- id: style-de-combat-don --> : Don de Style de combat, remplaçable à chaque niveau de Paladin.
+Un don de Style de combat (remplaçable à chaque niveau de Paladin) ou Combattant béni :
+- **Archerie** <!-- id: archerie --> : don de Style de combat, +2 aux jets d'attaque avec une arme à distance.
+- **Armes à deux mains** <!-- id: armes-a-deux-mains --> : don de Style de combat, avec une arme Deux mains ou Polyvalente tenue à deux mains, un 1 ou un 2 sur un dé de dégâts compte comme un 3.
+- **Combat à deux armes** <!-- id: combat-a-deux-armes --> : don de Style de combat, modificateur de caractéristique ajouté aux dégâts de l'attaque supplémentaire d'une arme Légère.
+- **Défense** <!-- id: defense --> : don de Style de combat, +1 à la CA en portant une armure.
+- **Duel** <!-- id: duel --> : don de Style de combat, +2 aux dégâts avec une arme de corps à corps tenue d'une main, sans autre arme.
+- **Armes de lancer** <!-- id: armes-de-lancer --> : don de Style de combat, +2 aux dégâts d'une attaque à distance avec une arme dotée de la propriété Lancer.
+- **Combat à mains nues** <!-- id: combat-a-mains-nues --> : don de Style de combat, frappes à mains nues 1d6 + For (1d8 sans arme ni bouclier) ; 1d4 contondants au début du tour à une créature agrippée.
+- **Combat en aveugle** <!-- id: combat-en-aveugle --> : don de Style de combat, Vision aveugle sur 3 m.
+- **Interception** <!-- id: interception --> : don de Style de combat, Réaction, réduit de 1d10 + bonus de maîtrise les dégâts subis par une autre créature à 1,50 m (bouclier ou arme en main).
+- **Protection** <!-- id: protection --> : don de Style de combat, Réaction, Désavantage aux attaques contre une créature à 1,50 m (bouclier requis).
+- **Armes de lancer** <!-- id: don de Style de combat, armes-de-lancer --> : don de Style de combat, +2 aux dégâts d'une attaque à distance avec une arme dotée de la propriété Lancer.
+- **Combat à mains nues** <!-- id: don de Style de combat, combat-a-mains-nues --> : don de Style de combat, frappes à mains nues 1d6 + For (1d8 sans arme ni bouclier) ; 1d4 contondants au début du tour à une créature agrippée.
+- **Combat en aveugle** <!-- id: don de Style de combat, combat-en-aveugle --> : don de Style de combat, Vision aveugle sur 3 m.
+- **Interception** <!-- id: don de Style de combat, interception --> : don de Style de combat, Réaction, réduit de 1d10 + bonus de maîtrise les dégâts subis par une autre créature à 1,50 m (bouclier ou arme en main).
+- **Protection** <!-- id: don de Style de combat, protection --> : don de Style de combat, Réaction, Désavantage aux attaques contre une créature à 1,50 m (bouclier requis).
 - **Combattant béni** <!-- id: combattant-beni --> : deux sorts mineurs de Clerc.
 
 #### Niveau 3 : Conduit divin
@@ -1381,7 +1477,7 @@ Vous et vos alliés dans votre Aura de protection êtes immunisés contre l'éta
 
 #### Niveau 15 : Châtiment protecteur
 <!-- id: chatiment-protecteur; type: automatique -->
-En lançant Châtiment divin, abri important pour vous et vos alliés dans votre aura jusqu'au début de votre prochain tour.
+En lançant Châtiment divin, abri partiel pour vous et vos alliés dans votre aura jusqu'au début de votre prochain tour.
 
 #### Niveau 20 : Nimbe sacré
 <!-- id: nimbe-sacre; type: automatique -->
@@ -1452,8 +1548,22 @@ Expertise dans une compétence maîtrisée ; deux langues supplémentaires.
 
 #### Niveau 2 : Style de combat
 <!-- id: style-de-combat; type: choix-effet -->
-Choix entre deux options :
-- **Style de combat** <!-- id: style-de-combat-don --> : Don de Style de combat, remplaçable à chaque niveau de Rôdeur.
+Un don de Style de combat (remplaçable à chaque niveau de Rôdeur) ou Combattant druidique :
+- **Archerie** <!-- id: archerie --> : don de Style de combat, +2 aux jets d'attaque avec une arme à distance.
+- **Armes à deux mains** <!-- id: armes-a-deux-mains --> : don de Style de combat, avec une arme Deux mains ou Polyvalente tenue à deux mains, un 1 ou un 2 sur un dé de dégâts compte comme un 3.
+- **Combat à deux armes** <!-- id: combat-a-deux-armes --> : don de Style de combat, modificateur de caractéristique ajouté aux dégâts de l'attaque supplémentaire d'une arme Légère.
+- **Défense** <!-- id: defense --> : don de Style de combat, +1 à la CA en portant une armure.
+- **Duel** <!-- id: duel --> : don de Style de combat, +2 aux dégâts avec une arme de corps à corps tenue d'une main, sans autre arme.
+- **Armes de lancer** <!-- id: armes-de-lancer --> : don de Style de combat, +2 aux dégâts d'une attaque à distance avec une arme dotée de la propriété Lancer.
+- **Combat à mains nues** <!-- id: combat-a-mains-nues --> : don de Style de combat, frappes à mains nues 1d6 + For (1d8 sans arme ni bouclier) ; 1d4 contondants au début du tour à une créature agrippée.
+- **Combat en aveugle** <!-- id: combat-en-aveugle --> : don de Style de combat, Vision aveugle sur 3 m.
+- **Interception** <!-- id: interception --> : don de Style de combat, Réaction, réduit de 1d10 + bonus de maîtrise les dégâts subis par une autre créature à 1,50 m (bouclier ou arme en main).
+- **Protection** <!-- id: protection --> : don de Style de combat, Réaction, Désavantage aux attaques contre une créature à 1,50 m (bouclier requis).
+- **Armes de lancer** <!-- id: don de Style de combat, armes-de-lancer --> : don de Style de combat, +2 aux dégâts d'une attaque à distance avec une arme dotée de la propriété Lancer.
+- **Combat à mains nues** <!-- id: don de Style de combat, combat-a-mains-nues --> : don de Style de combat, frappes à mains nues 1d6 + For (1d8 sans arme ni bouclier) ; 1d4 contondants au début du tour à une créature agrippée.
+- **Combat en aveugle** <!-- id: don de Style de combat, combat-en-aveugle --> : don de Style de combat, Vision aveugle sur 3 m.
+- **Interception** <!-- id: don de Style de combat, interception --> : don de Style de combat, Réaction, réduit de 1d10 + bonus de maîtrise les dégâts subis par une autre créature à 1,50 m (bouclier ou arme en main).
+- **Protection** <!-- id: don de Style de combat, protection --> : don de Style de combat, Réaction, Désavantage aux attaques contre une créature à 1,50 m (bouclier requis).
 - **Combattant druidique** <!-- id: combattant-druidique --> : deux sorts mineurs de Druide.
 
 #### Niveau 3 : Sous-classe de Rôdeur
@@ -1538,6 +1648,7 @@ Réaction après avoir subi des dégâts : Résistance à ce type de dégâts ju
 - maitcompA : 4 au choix parmi Acrobaties, Athlétisme, Discrétion, Escamotage, Intimidation, Intuition, Investigation, Perception, Persuasion, Tromperie
 - maitarme : Armes courantes et armes de guerre dotées de la propriété Finesse ou Légère
 - maitoutils : Outils de voleur
+<!-- id: roublard-expertise; choix: 2; effet: expertise; options: toutes; libelle: Expertise (niveau 1) -->
 - formarm : Armures légères
 - equipdepA : Armure de cuir, 2 dagues, épée courte, arc court, 20 flèches, carquois, outils de voleur, paquetage de cambrioleur et 8 po
 - equipdepB : 100 po

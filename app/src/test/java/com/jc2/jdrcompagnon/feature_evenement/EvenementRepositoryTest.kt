@@ -33,6 +33,7 @@ class EvenementRepositoryTest {
             lignes.value = lignes.value - id
         }
         override suspend fun compterPourMonde(worldId: String) = lignes.value.values.count { it.worldId == worldId }
+        override suspend fun getIdsParCampagne(campagneId: String) = lignes.value.values.filter { it.campagneId == campagneId }.map { it.id }
     }
 
     @Test

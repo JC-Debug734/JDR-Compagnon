@@ -27,7 +27,14 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.res.imageResource
 import com.jc2.jdrcompagnon.ui.screens.joueur.characterPortraitOptions
+import com.jc2.jdrcompagnon.ui.screens.joueur.skillIconRes
+import com.jc2.jdrcompagnon.ui.screens.joueur.portraitsPourRace
+import com.jc2.jdrcompagnon.ui.components.FilePortraits
+import com.jc2.jdrcompagnon.ui.components.ImporterPortraitBouton
+import com.jc2.jdrcompagnon.ui.components.rememberCharacterPortraitPainter
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdEntry
 
 /**
@@ -286,7 +293,8 @@ private fun EtapeCompetencesClasse(state: CharacterCreationUiState, holder: Char
                 val titre = if (competencesHistorique.any { it.equals(competence, ignoreCase = true) }) {
                     "$competence (déjà maîtrisée → Expertise)"
                 } else competence
-                ChoixCard(titre, DESCRIPTIONS_COMPETENCES[competence], choisie) {
+                val icone = skillIconRes(competence)?.let { ImageBitmap.imageResource(it) }
+                ChoixCard(titre, DESCRIPTIONS_COMPETENCES[competence], choisie, icone = icone) {
                     val nouvelle = if (choisie) selection - competence
                     else if (selection.size < choix.nombre) selection + competence else selection
                     holder.mettreAJourSelection(nouvelle)
@@ -360,10 +368,20 @@ private fun EtapeHistorique(state: CharacterCreationUiState, holder: CharacterCr
         )
         Spacer(Modifier.height(12.dp))
         historiques.forEach { h ->
+            // Illustration d'un historique importé (champ "- Image :", résolu en chemin absolu par
+            // CustomBookImages.resolveHistoriques), décodée hors du thread principal.
+            val banniere by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, h.image) {
+                value = h.image?.let { chemin ->
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { historiqueImageBitmap(chemin) }
+                }
+            }
             ChoixCard(
                 titre = h.nom,
-                // Avantages sur trois lignes : don, caractéristiques, compétences.
-                sousTitre = listOf(
+                banniere = banniere,
+                // Avantages sur trois lignes : don, caractéristiques, compétences (précédés de
+                // la présentation de l'historique quand le fichier en fournit une).
+                sousTitre = listOfNotNull(
+                    h.description.ifBlank { null },
                     "Don : ${h.don}",
                     "Caractéristiques : ${h.caracteristiques.joinToString(", ") { it.label }}",
                     "Compétences : ${h.maitrisesCompetence.joinToString(", ").ifBlank { "—" }}",
@@ -401,6 +419,17 @@ private fun EtapeHistorique(state: CharacterCreationUiState, holder: CharacterCr
     }
 }
 
+/** Décode l'illustration d'un historique (fichier extrait d'un livre .zip importé), réduite pour l'affichage. */
+private fun historiqueImageBitmap(chemin: String): androidx.compose.ui.graphics.ImageBitmap? = runCatching {
+    val fichier = java.io.File(chemin).takeIf { it.isFile } ?: return null
+    val bornes = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    android.graphics.BitmapFactory.decodeFile(fichier.path, bornes)
+    var echantillon = 1
+    while (bornes.outWidth / (echantillon * 2) >= 1024) echantillon *= 2
+    android.graphics.BitmapFactory.decodeFile(fichier.path, android.graphics.BitmapFactory.Options().apply { inSampleSize = echantillon })
+        ?.asImageBitmap()
+}.getOrNull()
+
 /** Courte présentation par espèce (aucune source SRD ne fournit ce texte : especes_srd521.md
  * ne contient que des champs structurés et des traits, cf. EspeceParser). */
 private val DESCRIPTIONS_ESPECES: Map<String, String> = mapOf(
@@ -415,9 +444,34 @@ private val DESCRIPTIONS_ESPECES: Map<String, String> = mapOf(
     "Tieffelin" to "Marqués par un héritage infernal, ils portent cornes ou queue et une résistance au feu."
 )
 
+/** Portrait affiché à gauche de chaque espèce (assets/dnd/icone/espece), clé = Espece.nom. */
+private val ESPECE_PORTRAIT_ASSET: Map<String, String> = mapOf(
+    "Drakéide" to "dnd/icone/espece/drakeide.png",
+    "Elfe" to "dnd/icone/espece/elfe.png",
+    "Gnome" to "dnd/icone/espece/gnome.png",
+    "Goliath" to "dnd/icone/espece/goliath.png",
+    "Halfelin" to "dnd/icone/espece/halfelin.png",
+    "Humain" to "dnd/icone/espece/humain.png",
+    "Nain" to "dnd/icone/espece/nain.png",
+    "Orc" to "dnd/icone/espece/orc.png",
+    "Tieffelin" to "dnd/icone/espece/tieffelin.png",
+    "Kinder" to "dnd/icone/espece/kinder.png",
+    // Espèce importée avec la campagne Dragonlance (« ## Kender »).
+    "Kender" to "dnd/icone/espece/kinder.png",
+)
+
+private fun especePortraitBitmap(context: android.content.Context, nomEspece: String): androidx.compose.ui.graphics.ImageBitmap? {
+    val chemin = ESPECE_PORTRAIT_ASSET[nomEspece] ?: return null
+    return runCatching {
+        context.assets.open(chemin).use { android.graphics.BitmapFactory.decodeStream(it) }
+            ?.asImageBitmap()
+    }.getOrNull()
+}
+
 @Composable
 private fun EtapeEspece(state: CharacterCreationUiState, holder: CharacterCreationStateHolder, especes: List<Espece>) {
     val selection = state.selectionEnAttente as? Espece
+    val context = androidx.compose.ui.platform.LocalContext.current
     Column {
         Text(
             "L'espèce détermine notamment la catégorie de taille et la Vitesse du personnage.",
@@ -426,8 +480,10 @@ private fun EtapeEspece(state: CharacterCreationUiState, holder: CharacterCreati
         Spacer(Modifier.height(12.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(especes) { e ->
+                val portrait = remember(e.nom) { especePortraitBitmap(context, e.nom) }
                 ChoixCard(
                     titre = e.nom,
+                    icone = portrait,
                     sousTitre = listOfNotNull(
                         // Espèce importée : première phrase de sa présentation.
                         DESCRIPTIONS_ESPECES[e.nom] ?: e.description.takeIf { it.isNotBlank() }
@@ -1180,12 +1236,35 @@ private fun EtapePortrait(state: CharacterCreationUiState, holder: CharacterCrea
     Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
         Text("Choisissez le portrait de votre personnage.", color = Color.White)
         Spacer(Modifier.height(12.dp))
+        // Photo personnelle : copiée dans l'app, sélectionnée d'office.
+        ImporterPortraitBouton(onImporte = { holder.mettreAJourSelection(it) }, modifier = Modifier.fillMaxWidth())
+        if (FilePortraits.isFilePortrait(selection)) {
+            rememberCharacterPortraitPainter(selection)?.let { painter ->
+                Spacer(Modifier.height(12.dp))
+                Column(horizontalAlignment = UiAlignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                    Image(
+                        painter = painter,
+                        contentDescription = "Photo importée",
+                        modifier = Modifier
+                            .width(96.dp)
+                            .height(123.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .border(3.dp, COULEUR_SELECTION, RoundedCornerShape(8.dp)),
+                        contentScale = ContentScale.Crop
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text("Photo importée", style = MaterialTheme.typography.labelSmall, color = Color.White)
+                }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
         FlowRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            characterPortraitOptions.forEach { option ->
+            // Seuls les portraits de l'espèce choisie (tous si aucun ne correspond).
+            portraitsPourRace(state.draft.espece?.nom.orEmpty()).forEach { option ->
                 val choisi = option.id == selection
                 Column(
                     horizontalAlignment = UiAlignment.CenterHorizontally,
@@ -1338,7 +1417,11 @@ private fun EtapeRecapitulatif(
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
             Column(modifier = Modifier.padding(12.dp)) {
                 RecapLigne("Nom", draft.nomPersonnage)
-                RecapLigne("Portrait", characterPortraitOptions.firstOrNull { it.id == draft.portrait }?.label)
+                RecapLigne(
+                    "Portrait",
+                    if (FilePortraits.isFilePortrait(draft.portrait)) "Photo importée"
+                    else characterPortraitOptions.firstOrNull { it.id == draft.portrait }?.label
+                )
                 RecapLigne("Classe", draft.classe?.nom)
                 RecapLigne("Compétences de classe", draft.competencesClasse.joinToString(", ").ifBlank { null })
                 RecapLigne("Historique", draft.historique?.nom)
@@ -1421,6 +1504,9 @@ private fun ChoixCard(
     // Icône optionnelle affichée à gauche du titre (ex. icône de classe, cf. classeIconeAsset
     // dans EtapeClasse) — absente pour les cartes qui n'en ont pas besoin.
     icone: androidx.compose.ui.graphics.ImageBitmap? = null,
+    // Illustration optionnelle en pleine largeur au-dessus du titre (ex. historique importé
+    // avec son image, cf. historiqueImageBitmap dans EtapeHistorique).
+    banniere: androidx.compose.ui.graphics.ImageBitmap? = null,
     onDoubleClick: (() -> Unit)? = null,
     onClick: () -> Unit
 ) {
@@ -1441,6 +1527,14 @@ private fun ChoixCard(
         colors = CardDefaults.cardColors(containerColor = couleurFond, contentColor = couleurTexte),
         modifier = Modifier.fillMaxWidth().then(modifierClic)
     ) {
+        if (banniere != null) {
+            Image(
+                bitmap = banniere,
+                contentDescription = titre,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxWidth().aspectRatio(2.6f)
+            )
+        }
         Row(modifier = Modifier.padding(12.dp), verticalAlignment = UiAlignment.CenterVertically) {
             if (icone != null) {
                 Image(

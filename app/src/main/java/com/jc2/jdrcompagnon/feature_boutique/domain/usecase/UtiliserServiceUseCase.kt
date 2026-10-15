@@ -4,7 +4,7 @@ import com.jc2.jdrcompagnon.di.BoutiqueDependencies
 import com.jc2.jdrcompagnon.feature_boutique.domain.model.Boutique
 
 /**
- * Un personnage a utilisé un service de boutique (depuis le menu joueur, cf. ServicesLieuDialog) :
+ * Un personnage a utilisé un service de boutique (depuis le menu joueur, cf. CommerceLieuDialog) :
  * une place est décomptée si le service est limité, et il est désactivé quand il n'en reste plus
  * (ex. chambres toutes prises). Le paiement, lui, est fait sur la fiche du personnage.
  */

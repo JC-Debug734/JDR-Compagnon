@@ -15,6 +15,10 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * Export/import "à plat" des données d'une campagne (scénarios attachés, carte + points
@@ -245,9 +249,9 @@ object CampagneFileStore {
             ?.forEach { fichier ->
                 val texte = fichier.readTextOrNull(context) ?: return@forEach
                 try {
-                    val boutique = json.decodeFromString<Boutique>(texte)
+                    val boutique = json.decodeFromJsonElement(Boutique.serializer(), boutiqueEnPc(json.parseToJsonElement(texte)))
                     val nouveauVilleId = boutique.villeId?.let { ancienVersNouveauPointId[it] }
-                    val nouvelleBoutique = boutique.copy(id = java.util.UUID.randomUUID().toString(), villeId = nouveauVilleId)
+                    val nouvelleBoutique = boutique.copy(id = java.util.UUID.randomUUID().toString(), villeId = nouveauVilleId, campagneId = nouvelId)
                     BoutiqueDependencies.repository.sauvegarderBoutique(nouvelleBoutique)
                     if (nouveauVilleId != null) {
                         boutiquesParNouveauPoint.getOrPut(nouveauVilleId) { mutableListOf() }.add(nouvelleBoutique.id)
@@ -276,4 +280,33 @@ object CampagneFileStore {
 
         return Result.success(nouvelleCampagne to resume)
     }
+}
+
+/**
+ * Boutique exportée avant le passage des prix en pièces de cuivre (champs « argentDisponibleEnPo »,
+ * « coutBaseEnPo », « prixApplique », « prixEnPo », en po) : champs renommés et montants × 100.
+ * Une boutique déjà en pc est rendue telle quelle.
+ */
+internal fun boutiqueEnPc(element: JsonElement): JsonElement {
+    val boutique = element as? JsonObject ?: return element
+    if ("argentDisponibleEnPo" !in boutique) return element
+    fun JsonObject.enPc(ancien: String, nouveau: String): JsonObject {
+        val po = (this[ancien] as? JsonPrimitive)?.content?.toDoubleOrNull() ?: return this
+        return JsonObject(this - ancien + (nouveau to JsonPrimitive(kotlin.math.round(po * Monnaie.PC_PAR_PO).toInt())))
+    }
+    fun JsonElement.chaqueObjet(transformer: (JsonObject) -> JsonObject) =
+        JsonArray((this as? JsonArray).orEmpty().map { (it as? JsonObject)?.let(transformer) ?: it })
+
+    var b = boutique.enPc("argentDisponibleEnPo", "argentDisponibleEnPc")
+    b["inventaire"]?.let { inventaire ->
+        b = JsonObject(b + ("inventaire" to inventaire.chaqueObjet { article ->
+            val a = article.enPc("prixApplique", "prixEnPc")
+            val equipement = a["equipement"] as? JsonObject ?: return@chaqueObjet a
+            JsonObject(a + ("equipement" to equipement.enPc("coutBaseEnPo", "coutBaseEnPc")))
+        }))
+    }
+    b["services"]?.let { services ->
+        b = JsonObject(b + ("services" to services.chaqueObjet { it.enPc("prixEnPo", "prixEnPc") }))
+    }
+    return b
 }

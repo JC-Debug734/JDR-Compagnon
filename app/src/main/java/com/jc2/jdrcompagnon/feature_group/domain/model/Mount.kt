@@ -34,4 +34,9 @@ data class Mount(
     val transportId: String? = null,
     val location: String = "",
     val bagages: List<String> = emptyList(),
+    // Points de vie (null = non renseignés) ; PV max pré-remplis depuis le bestiaire ([species]).
+    val pvMax: Int? = null,
+    val pv: Int? = null,
+    // État libre (« Blessé à la patte », « Effrayé »...), affiché aux joueurs.
+    val etat: String = "",
 )

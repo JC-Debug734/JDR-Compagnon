@@ -45,7 +45,7 @@ object ImportHistorique {
      */
     data class ElementImporte(val type: String, val id: String, val libelle: String, val worldId: String? = null)
 
-    val TYPES = listOf("scenario", "campagne", "personnage", "livre", "univers", "musique", "epreuve")
+    val TYPES = listOf("scenario", "campagne", "personnage", "livre", "univers", "musique", "epreuve", "evenement", "etat", "lieu")
 
     private const val PREFS_NAME = "import_historique"
     private const val KEY_ENTREES = "entrees_json"

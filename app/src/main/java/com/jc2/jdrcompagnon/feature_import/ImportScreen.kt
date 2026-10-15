@@ -57,7 +57,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jc2.jdrcompagnon.ui.WorldState
 import com.jc2.jdrcompagnon.ui.GameState
+import com.jc2.jdrcompagnon.ui.components.CategorieContenu
+import com.jc2.jdrcompagnon.ui.components.FiltreCategoriesContenu
+import com.jc2.jdrcompagnon.ui.components.categoriesDuLivre
+import com.jc2.jdrcompagnon.ui.components.correspondAuFiltre
+import com.jc2.jdrcompagnon.ui.components.resumeCategories
+import com.jc2.jdrcompagnon.ui.screens.mj.CustomBooksStore
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.DateFormat
 import java.util.Date
 
@@ -87,14 +95,18 @@ fun ImportScreen(
     val campagnes by GameState.mjCampaigns.collectAsState()
     val personnages by GameState.characters.collectAsState()
     val musiques by com.jc2.jdrcompagnon.ui.ImportedMusicStore.tracks.collectAsState()
-    var presents by remember { mutableStateOf<List<Pair<ImportHistorique.Entree, List<ImportHistorique.ElementImporte>>>?>(null) }
+    var presents by remember { mutableStateOf<List<ImportPresent>?>(null) }
     LaunchedEffect(entrees, scenarios, campagnes, personnages, musiques, enCours) {
         if (enCours) return@LaunchedEffect
         presents = entrees
             .filter { it.succes && !it.supprime }
             .map { it to ImportCentral.elementsPresents(context, it) }
             .filter { it.second.isNotEmpty() }
+            .map { (entree, elements) -> ImportPresent(entree, elements, categoriesImport(context, elements)) }
     }
+    // Les imports sont souvent mixtes (sous-classes, sorts et scénarios dans une même archive) :
+    // filtre sur ce qu'ils contiennent, un import passant s'il contient l'un des types choisis.
+    var filtre by remember { mutableStateOf(emptySet<CategorieContenu>()) }
 
     fun lancer(action: suspend () -> ImportHistorique.Entree) {
         enCours = true
@@ -196,6 +208,7 @@ fun ImportScreen(
                             "Scénario .md" to "fichier de scénario (scènes, images, lieux, PNJ).",
                             "Fiche .json" to "personnage exporté depuis JDRCompagnon.",
                             "Musique" to "mp3, ogg, wav, m4a, flac…",
+                            "Lieux" to "fichier lieux.json dans un .zip (avec leurs images et commerces) : ajoutés à la campagne sélectionnée.",
                             "Dossier" to "campagne (avec campagne.json) ou dossier de scénarios avec Personnages/ et Bibliotheque/.",
                             "Autre fichier" to "PDF… ajouté comme livre à consulter.",
                         ).forEach { (titre, detail) ->
@@ -218,17 +231,32 @@ fun ImportScreen(
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
                     )
+                    val liste = presents
                     when {
-                        presents == null -> CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                        presents!!.isEmpty() -> Text("Aucun import dans l'app.", color = Color.White.copy(alpha = 0.8f))
-                        else -> presents!!.forEach { (entree, elements) ->
-                            LigneImport(
-                                entree = entree,
-                                elements = elements,
-                                onSupprimer = if (!enCours) {
-                                    { aSupprimer = entree.copy(elements = elements) }
-                                } else null,
+                        liste == null -> CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        liste.isEmpty() -> Text("Aucun import dans l'app.", color = Color.White.copy(alpha = 0.8f))
+                        else -> {
+                            val disponibles = liste.flatMap { it.categories.keys }.toSet()
+                            // Un type choisi qui n'existe plus (import supprimé) ne filtre plus rien.
+                            val filtreActif = filtre intersect disponibles
+                            FiltreCategoriesContenu(
+                                disponibles = disponibles,
+                                selection = filtreActif,
+                                onSelectionChange = { filtre = it },
+                                couleurTexte = Color.White,
                             )
+                            val visibles = liste.filter { correspondAuFiltre(it.categories.keys, filtreActif) }
+                            if (visibles.isEmpty()) Text("Aucun import ne contient ce type de contenu.", color = Color.White.copy(alpha = 0.8f))
+                            visibles.forEach { present ->
+                                LigneImport(
+                                    entree = present.entree,
+                                    elements = present.elements,
+                                    contenu = resumeCategories(present.categories),
+                                    onSupprimer = if (!enCours) {
+                                        { aSupprimer = present.entree.copy(elements = present.elements) }
+                                    } else null,
+                                )
+                            }
                         }
                     }
                 }
@@ -269,6 +297,39 @@ fun ImportScreen(
     }
 }
 
+/** Import encore présent, avec ce qu'il en reste et le contenu correspondant par type. */
+private data class ImportPresent(
+    val entree: ImportHistorique.Entree,
+    val elements: List<ImportHistorique.ElementImporte>,
+    val categories: Map<CategorieContenu, Int>,
+)
+
+/**
+ * Contenu d'un import par type : celui de ses livres (sous-classes, sorts, objets... lus dans
+ * leur fichier) et ses autres éléments (scénarios, fiches, musiques...).
+ */
+private suspend fun categoriesImport(context: Context, elements: List<ImportHistorique.ElementImporte>): Map<CategorieContenu, Int> =
+    withContext(Dispatchers.IO) {
+        val total = mutableMapOf<CategorieContenu, Int>()
+        fun ajouter(c: CategorieContenu, n: Int = 1) { total[c] = (total[c] ?: 0) + n }
+        elements.forEach { e ->
+            when (e.type) {
+                "livre" -> CustomBooksStore.list(context, e.worldId).firstOrNull { it.id == e.id }
+                    ?.let { livre -> categoriesDuLivre(context, livre).forEach { (c, n) -> ajouter(c, n) } }
+                "scenario" -> ajouter(CategorieContenu.SCENARIOS)
+                "campagne" -> ajouter(CategorieContenu.CAMPAGNES)
+                "personnage" -> ajouter(CategorieContenu.FICHES)
+                "univers" -> ajouter(CategorieContenu.UNIVERS)
+                "musique" -> ajouter(CategorieContenu.MUSIQUES)
+                "epreuve" -> ajouter(CategorieContenu.EPREUVES)
+                "evenement" -> ajouter(CategorieContenu.EVENEMENTS)
+                "etat" -> ajouter(CategorieContenu.ETATS)
+                "lieu" -> ajouter(CategorieContenu.LIEUX)
+            }
+        }
+        total
+    }
+
 private fun libelleType(type: String): String = when (type) {
     "scenario" -> "Scénarios"
     "campagne" -> "Campagnes"
@@ -277,6 +338,9 @@ private fun libelleType(type: String): String = when (type) {
     "univers" -> "Univers"
     "musique" -> "Musiques"
     "epreuve" -> "Épreuves"
+    "evenement" -> "Événements"
+    "etat" -> "Illustrations d'états"
+    "lieu" -> "Lieux"
     else -> type
 }
 
@@ -362,6 +426,7 @@ private fun LigneHistorique(
 private fun LigneImport(
     entree: ImportHistorique.Entree,
     elements: List<ImportHistorique.ElementImporte>,
+    contenu: String,
     onSupprimer: (() -> Unit)?,
 ) {
     var deplie by remember(entree.date, entree.fichier) { mutableStateOf(false) }
@@ -378,6 +443,9 @@ private fun LigneImport(
                 style = MaterialTheme.typography.labelSmall,
                 color = Color.White.copy(alpha = 0.7f),
             )
+            if (contenu.isNotBlank()) {
+                Text(contenu, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.85f))
+            }
             if (deplie) {
                 elements.groupBy { it.type }.forEach { (type, liste) ->
                     Text(

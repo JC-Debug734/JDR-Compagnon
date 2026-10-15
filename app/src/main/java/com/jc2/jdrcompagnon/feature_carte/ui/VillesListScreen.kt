@@ -10,12 +10,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.LocationCity
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -108,7 +108,7 @@ fun VillesListScreen(
                             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                             modifier = Modifier.padding(16.dp)
                         ) {
-                            Icon(Icons.Default.LocationCity, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
+                            EmblemeVille(ville, Modifier.size(48.dp))
                             Column(modifier = Modifier.padding(start = 12.dp)) {
                                 Text(ville.nom, style = MaterialTheme.typography.titleMedium)
                                 Text(

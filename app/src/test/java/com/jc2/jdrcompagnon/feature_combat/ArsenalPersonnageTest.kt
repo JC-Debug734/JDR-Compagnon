@@ -90,6 +90,31 @@ class ArsenalPersonnageTest {
     }
 
     @Test
+    fun `torse reserve aux armures, dos aux capes et carquois, exterieur du sac sans equipement`() {
+        val regles = com.jc2.jdrcompagnon.ui.screens.joueur.character.ArmorRules
+        assertTrue(regles.itemAllowedInSlot("Cotte de mailles", EquipmentSlot.TORSO))
+        assertTrue(regles.itemAllowedInSlot("Armure de cuir +1", EquipmentSlot.TORSO))
+        assertTrue(!regles.itemAllowedInSlot("Potion de guérison", EquipmentSlot.TORSO))
+        assertTrue(!regles.itemAllowedInSlot("Corde en chanvre", EquipmentSlot.TORSO))
+        assertTrue(!regles.itemAllowedInSlot("Cotte de mailles", EquipmentSlot.ACCESSORY))
+
+        assertTrue(regles.itemAllowedInSlot("Cape elfique", EquipmentSlot.BACK))
+        assertTrue(regles.itemAllowedInSlot("Carquois", EquipmentSlot.BACK))
+        assertTrue(!regles.itemAllowedInSlot("Corde en chanvre", EquipmentSlot.BACK))
+        assertTrue(!regles.itemAllowedInSlot("Bouclier", EquipmentSlot.BACK))
+
+        assertTrue(regles.isBackExteriorItem("Sac de couchage"))
+        assertTrue(regles.isBackExteriorItem("Lanterne à capuchon"))
+        assertTrue(regles.isBackExteriorItem("Potion de guérison"))
+        assertTrue(!regles.isBackExteriorItem("Épée longue"))
+        assertTrue(!regles.isBackExteriorItem("Cotte de mailles"))
+        assertTrue(!regles.isBackExteriorItem("Bouclier"))
+        assertTrue(!regles.isBackExteriorItem("Beaux habits"))
+        assertTrue(!regles.isBackExteriorItem("Cape elfique"))
+        assertTrue(!regles.isBackExteriorItem("Anneau de protection"))
+    }
+
+    @Test
     fun `nom au pluriel ramene au nom de la bibliotheque`() {
         val regles = com.jc2.jdrcompagnon.ui.screens.joueur.character.ArmorRules
         val noms = listOf("Dague", "Javeline", "Flèches", "Huile (flasque)")

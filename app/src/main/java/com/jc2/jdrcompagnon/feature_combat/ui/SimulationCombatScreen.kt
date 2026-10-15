@@ -576,7 +576,7 @@ private fun EtatSimulation.versJoueur(): CombatJoueurData {
         id = "simulation",
         titre = "Simulation",
         round = round,
-        phase = PhaseCombat.DECLARATION.name,
+        phase = PhaseCombat.EN_COURS.name,
         ordre = ordre.mapNotNull { parId[it] }.map { c ->
             CombattantJoueurData(
                 id = c.id,
@@ -592,8 +592,6 @@ private fun EtatSimulation.versJoueur(): CombatJoueurData {
             )
         },
         actifId = heros.id,
-        nbDeclares = 0,
-        nbAttendus = 1,
         monCombattantId = heros.id,
     )
 }
@@ -712,15 +710,17 @@ private fun herosDepuisPersonnage(personnage: Character, arsenal: ArsenalJoueur,
     val armes = arsenal.armes.filter { !it.sansMunition } + listOfNotNull(arsenal.mainsNues)
     val maitrise = personnage.proficiencyBonus
     fun sauvegarde(nom: String, valeur: Int): Pair<String, Int> {
-        val maitrisee = personnage.savingThrowProficiencies.any { it.equals(nom, ignoreCase = true) }
-        return nom.lowercase() to Math.floorDiv(valeur - 10, 2) + if (maitrisee) maitrise else 0
+        val maitrisee = com.jc2.jdrcompagnon.feature_combat.domain.model.Sauvegardes.maitrisee(personnage, nom)
+        // Aura de protection du Paladin (niv. 6) : + mod. Charisme à ses propres JS.
+        return nom.lowercase() to Math.floorDiv(valeur - 10, 2) + (if (maitrisee) maitrise else 0) +
+            com.jc2.jdrcompagnon.feature_combat.domain.model.Paladin.bonusAuraProtection(personnage)
     }
     return HerosSimule(
         nom = personnage.name,
-        ca = personnage.armorClass,
+        ca = com.jc2.jdrcompagnon.ui.GameState.caCombat(personnage),
         pvMax = personnage.maxHitPoints.coerceAtLeast(1),
         pvDepart = if (pvPleins) personnage.maxHitPoints else personnage.currentHitPoints,
-        bonusInitiative = personnage.initiativeBonus,
+        bonusInitiative = com.jc2.jdrcompagnon.feature_combat.domain.model.Dons.initiative(personnage),
         attaques = armes.distinctBy { it.nom }.map { it.versAttaqueHeros() },
         nbAttaques = arsenal.nbAttaques,
         emplacements = arsenal.restants(personnage),

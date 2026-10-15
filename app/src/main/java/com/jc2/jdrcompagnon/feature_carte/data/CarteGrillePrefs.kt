@@ -72,7 +72,9 @@ object CarteGrillePrefs {
         prefs(context).getBoolean("afficher_noms_$campagneId", true)
 
     fun setAfficherNoms(context: Context, campagneId: String, afficher: Boolean) {
+        if (afficherNoms(context, campagneId) == afficher) return
         prefs(context).edit().putBoolean("afficher_noms_$campagneId", afficher).apply()
+        _version.value++
     }
 
     /** Affiche ou non le quadrillage en mode édition (jamais tracé en mode mesure). */

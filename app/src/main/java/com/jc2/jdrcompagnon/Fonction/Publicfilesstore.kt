@@ -30,7 +30,11 @@ object PublicFilesStore {
         if (subfolder.isNullOrBlank()) "Téléchargements/$ROOT" else "Téléchargements/$ROOT/${subfolder.trim('/')}"
 
     /** Liste les fichiers d'une extension donnée dans le sous-dossier, triés par nom. */
-    fun list(context: Context, subfolder: String? = null, extension: String = "md"): List<FileEntry> {
+    fun list(context: Context, subfolder: String? = null, extension: String = "md"): List<FileEntry> =
+        listAll(context, subfolder).filter { it.name.endsWith(".$extension", ignoreCase = true) }
+
+    /** Liste tous les fichiers (visibles de l'app) du sous-dossier, triés par nom. */
+    fun listAll(context: Context, subfolder: String? = null): List<FileEntry> {
         val resolver = context.contentResolver
         val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
         val projection = arrayOf(MediaStore.Downloads._ID, MediaStore.Downloads.DISPLAY_NAME, MediaStore.Downloads.SIZE)
@@ -43,8 +47,7 @@ object PublicFilesStore {
                 val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Downloads.DISPLAY_NAME)
                 val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Downloads.SIZE)
                 while (cursor.moveToNext()) {
-                    val name = cursor.getString(nameCol)
-                    if (!name.endsWith(".$extension", ignoreCase = true)) continue
+                    val name = cursor.getString(nameCol) ?: continue
                     val id = cursor.getLong(idCol)
                     val size = cursor.getLong(sizeCol)
                     result += FileEntry(name, ContentUris.withAppendedId(collection, id), size)
@@ -56,23 +59,63 @@ object PublicFilesStore {
         return result
     }
 
-    fun findUri(context: Context, displayName: String, subfolder: String? = null): Uri? {
+    fun findUri(context: Context, displayName: String, subfolder: String? = null): Uri? =
+        findUris(context, displayName, subfolder).firstOrNull()
+
+    /**
+     * Le fichier [displayName] et ses copies « nom (1).ext », « nom (2).ext »... qu'Android crée
+     * quand un fichier du même nom existe déjà sans être visible de l'app (fichier d'une
+     * installation précédente, ou déposé par un gestionnaire de fichiers). Le nom exact vient en
+     * premier s'il existe.
+     */
+    private fun findUris(context: Context, displayName: String, subfolder: String?): List<Uri> {
         val resolver = context.contentResolver
         val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
-        val projection = arrayOf(MediaStore.Downloads._ID)
-        val selection = "${MediaStore.Downloads.DISPLAY_NAME} = ? AND ${MediaStore.Downloads.RELATIVE_PATH} = ?"
-        val args = arrayOf(displayName, relativePath(subfolder))
+        val projection = arrayOf(MediaStore.Downloads._ID, MediaStore.Downloads.DISPLAY_NAME)
+        val base = displayName.substringBeforeLast('.')
+        val extension = displayName.substringAfterLast('.', "").let { if (it.isEmpty()) "" else ".$it" }
+        val copie = Regex("^" + Regex.escape(base) + """ \(\d+\)""" + Regex.escape(extension) + "$")
+        val selection = "(${MediaStore.Downloads.DISPLAY_NAME} = ? OR ${MediaStore.Downloads.DISPLAY_NAME} LIKE ?) AND ${MediaStore.Downloads.RELATIVE_PATH} = ?"
+        val args = arrayOf(displayName, "$base (%)$extension", relativePath(subfolder))
+        val exacts = mutableListOf<Uri>()
+        val copies = mutableListOf<Uri>()
         try {
-            resolver.query(collection, projection, selection, args, null)?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Downloads._ID))
-                    return ContentUris.withAppendedId(collection, id)
+            resolver.query(collection, projection, selection, args, "${MediaStore.Downloads.DISPLAY_NAME} ASC")?.use { cursor ->
+                val idCol = cursor.getColumnIndexOrThrow(MediaStore.Downloads._ID)
+                val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Downloads.DISPLAY_NAME)
+                while (cursor.moveToNext()) {
+                    val name = cursor.getString(nameCol)
+                    val uri = ContentUris.withAppendedId(collection, cursor.getLong(idCol))
+                    when {
+                        name == displayName -> exacts += uri
+                        copie.matches(name) -> copies += uri
+                    }
                 }
             }
         } catch (e: Exception) {
             android.util.Log.e("PublicFilesStore", "Impossible de chercher $displayName", e)
         }
-        return null
+        return exacts + copies
+    }
+
+    /**
+     * Supprime le fichier [displayName] du sous-dossier, copies « (n) » comprises. Retourne
+     * true si au moins un fichier a été supprimé.
+     */
+    fun delete(context: Context, displayName: String, subfolder: String? = null): Boolean =
+        findUris(context, displayName, subfolder).count { uri ->
+            runCatching { context.contentResolver.delete(uri, null, null) > 0 }.getOrDefault(false)
+        } > 0
+
+    /** Lit le contenu binaire d'un fichier du dossier public, ou null s'il n'est pas lisible. */
+    fun readBytes(context: Context, displayName: String, subfolder: String? = null): ByteArray? {
+        val uri = findUri(context, displayName, subfolder) ?: return null
+        return try {
+            context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+        } catch (e: Exception) {
+            android.util.Log.e("PublicFilesStore", "Impossible de lire $displayName", e)
+            null
+        }
     }
 
     /** Lit le contenu texte d'un fichier du dossier public, ou null s'il n'existe pas encore. */
@@ -95,7 +138,12 @@ object PublicFilesStore {
     fun writeBytes(context: Context, displayName: String, content: ByteArray, subfolder: String? = null, mimeType: String = "application/octet-stream") {
         try {
             val resolver = context.contentResolver
-            val existingUri = findUri(context, displayName, subfolder)
+            // Réécrit le fichier existant (ou sa copie « (n) » si le nom exact est pris par un
+            // fichier invisible de l'app), et supprime les autres copies : sans ça, chaque
+            // écriture ajoutait un « nom (n) » de plus dans le dossier.
+            val existants = findUris(context, displayName, subfolder)
+            existants.drop(1).forEach { runCatching { resolver.delete(it, null, null) } }
+            val existingUri = existants.firstOrNull()
             val uri = existingUri ?: run {
                 val values = ContentValues().apply {
                     put(MediaStore.Downloads.DISPLAY_NAME, displayName)

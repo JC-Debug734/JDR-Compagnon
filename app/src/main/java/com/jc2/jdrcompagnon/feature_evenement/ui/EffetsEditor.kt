@@ -41,6 +41,7 @@ fun effetLabel(effet: EffetEvenement): String {
         CategorieEffet.OR -> "$signe${effet.quantite} po"
         CategorieEffet.REPUTATION -> "$signe${effet.quantite} réputation (${effet.cible.ifBlank { "?" }})"
         CategorieEffet.OBJET -> "${if (effet.gain) "Gagne" else "Perd"} ${effet.quantite}x ${effet.cible.ifBlank { "?" }}"
+        CategorieEffet.LIEU -> "Révèle le lieu : ${effet.cible.ifBlank { "?" }}" + effet.description.takeIf { it.isNotBlank() }?.let { " ($it)" }.orEmpty()
         CategorieEffet.AUTRE -> effet.description.ifBlank { "Autre" }
     }
 }
@@ -64,11 +65,13 @@ fun EffetsEditor(
     var description by remember { mutableStateOf("") }
     var categorieExpanded by remember { mutableStateOf(false) }
 
-    val besoinCible = categorie == CategorieEffet.REPUTATION || categorie == CategorieEffet.OBJET
-    val peutAjouter = if (categorie == CategorieEffet.AUTRE) {
-        description.isNotBlank()
-    } else {
-        (quantite.toIntOrNull() ?: 0) > 0 && (!besoinCible || cible.isNotBlank())
+    val besoinCible = categorie == CategorieEffet.REPUTATION || categorie == CategorieEffet.OBJET || categorie == CategorieEffet.LIEU
+    // Révéler un lieu : ni gain/perte ni quantité, seulement le nom du lieu.
+    val avecQuantite = categorie != CategorieEffet.AUTRE && categorie != CategorieEffet.LIEU
+    val peutAjouter = when (categorie) {
+        CategorieEffet.AUTRE -> description.isNotBlank()
+        CategorieEffet.LIEU -> cible.isNotBlank()
+        else -> (quantite.toIntOrNull() ?: 0) > 0 && (!besoinCible || cible.isNotBlank())
     }
 
     Column(
@@ -103,25 +106,37 @@ fun EffetsEditor(
                 }
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = gain, onClick = { gain = true }, label = { Text("Gain") })
-            FilterChip(selected = !gain, onClick = { gain = false }, label = { Text("Perte") })
+        if (categorie != CategorieEffet.LIEU) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = gain, onClick = { gain = true }, label = { Text("Gain") })
+                FilterChip(selected = !gain, onClick = { gain = false }, label = { Text("Perte") })
+            }
         }
         if (categorie != CategorieEffet.AUTRE) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = quantite,
-                    onValueChange = { quantite = it.filter(Char::isDigit) },
-                    label = { Text("Quantité") },
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.width(110.dp),
-                    singleLine = true
-                )
+                if (avecQuantite) {
+                    OutlinedTextField(
+                        value = quantite,
+                        onValueChange = { quantite = it.filter(Char::isDigit) },
+                        label = { Text("Quantité") },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.width(110.dp),
+                        singleLine = true
+                    )
+                }
                 if (besoinCible) {
                     OutlinedTextField(
                         value = cible,
                         onValueChange = { cible = it },
-                        label = { Text(if (categorie == CategorieEffet.REPUTATION) "Faction" else "Nom de l'objet") },
+                        label = {
+                            Text(
+                                when (categorie) {
+                                    CategorieEffet.REPUTATION -> "Faction"
+                                    CategorieEffet.LIEU -> "Nom du lieu"
+                                    else -> "Nom de l'objet"
+                                }
+                            )
+                        },
                         modifier = Modifier.weight(1f),
                         singleLine = true
                     )
@@ -140,8 +155,8 @@ fun EffetsEditor(
                 onEffetsChanged(
                     effets + EffetEvenement(
                         categorie = categorie,
-                        gain = gain,
-                        quantite = quantite.toIntOrNull() ?: 1,
+                        gain = gain || categorie == CategorieEffet.LIEU,
+                        quantite = if (avecQuantite) quantite.toIntOrNull() ?: 1 else 1,
                         cible = cible,
                         description = description
                     )

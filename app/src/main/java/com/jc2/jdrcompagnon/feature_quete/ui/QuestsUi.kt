@@ -391,7 +391,7 @@ private fun QuestEditorDialog(
 /** Saisie d'une récompense : les champs demandés dépendent du type (voir QuestReward). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun RewardEditorDialog(
+internal fun RewardEditorDialog(
     initial: QuestReward?,
     worldId: String,
     pnjs: List<com.jc2.jdrcompagnon.ui.Character>,

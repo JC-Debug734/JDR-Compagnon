@@ -1,5 +1,6 @@
 package com.jc2.jdrcompagnon.feature_boutique.ui
 
+import com.jc2.jdrcompagnon.ui.Monnaie
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -7,6 +8,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Surface
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -22,7 +26,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -40,10 +43,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.jc2.jdrcompagnon.feature_boutique.data.BoutiqueImageStore
+import com.jc2.jdrcompagnon.ui.components.VignetteImage
 import com.jc2.jdrcompagnon.feature_boutique.domain.model.Boutique
 import com.jc2.jdrcompagnon.feature_boutique.domain.model.TypeBoutique
 import com.jc2.jdrcompagnon.feature_boutique.presentation.BoutiqueListUiState
 import com.jc2.jdrcompagnon.feature_boutique.presentation.BoutiqueViewModel
+import com.jc2.jdrcompagnon.ui.theme.ForcedDarkPalette
 
 /**
  * Vue "idiote" : observe l'état du ViewModel, route les événements, ne décide de rien.
@@ -73,17 +79,15 @@ fun BoutiqueListScreen(
                         Icon(Icons.Default.Menu, contentDescription = "Menu")
                     }
                 },
+                actions = {
+                    IconButton(onClick = { afficherDialogCreation = true }) {
+                        Icon(Icons.Default.Add, contentDescription = "Nouvelle boutique", tint = ForcedDarkPalette.AccentGold)
+                    }
+                },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent),
             )
         },
         containerColor = Color.Transparent,
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { afficherDialogCreation = true },
-                icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("Nouvelle boutique") }
-            )
-        }
     ) { padding ->
         Box(modifier = Modifier.padding(padding)) {
             when (val state = uiState) {
@@ -138,6 +142,7 @@ fun BoutiqueListScreen(
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.onSupprimerBoutique(boutique.id)
+                    BoutiqueImageStore.supprimer(context, boutique.image)
                     forgetCollapsibleSections(context, "boutique:${boutique.id}")
                     boutiqueASupprimer = null
                 }) {
@@ -200,6 +205,10 @@ private fun BoutiqueCard(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp)
         ) {
+            boutique.image?.let {
+                VignetteImage(BoutiqueImageStore, it, Modifier.size(56.dp), contentDescription = boutique.nom)
+                Spacer(Modifier.width(12.dp))
+            }
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = boutique.nom, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text(
@@ -208,10 +217,10 @@ private fun BoutiqueCard(
                     color = Color.White.copy(alpha = 0.8f)
                 )
                 Text(
-                    text = if (boutique.type == TypeBoutique.MARCHAND)
-                        "${boutique.inventaire.size} articles · ${boutique.employes.size} employés · ${boutique.argentDisponibleEnPo} po"
+                    text = if (boutique.type.vendDesObjets)
+                        "${boutique.inventaire.size} articles · ${boutique.employes.size} employés · ${Monnaie.libelle(boutique.argentDisponibleEnPc, zero = "0 po")}"
                     else
-                        "${boutique.services.size} services · ${boutique.employes.size} employés · ${boutique.argentDisponibleEnPo} po",
+                        "${boutique.services.size} services · ${boutique.employes.size} employés · ${Monnaie.libelle(boutique.argentDisponibleEnPc, zero = "0 po")}",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.8f)
                 )

@@ -114,7 +114,7 @@ fun CampaignOverviewScreen(
             // Ordre de jeu : par chapitre puis par numéro (ordre de la campagne sinon).
             val attaches = ChapitresScenarios.trier(attachesBruts)
             val avecChapitres = ChapitresScenarios.aDesChapitres(attaches)
-            CollapsibleSectionCard(ownerKey = ownerKey, title = "Scénarios") {
+            CollapsibleSectionCard(ownerKey = ownerKey, title = "Scénarios", count = attaches.size) {
                 if (attaches.isEmpty()) {
                     Text("Aucun scénario attaché à cette campagne.", style = MaterialTheme.typography.bodyMedium, color = OverviewHintColor)
                 } else {
@@ -167,6 +167,7 @@ fun CampaignOverviewScreen(
             CollapsibleSectionCard(
                 ownerKey = ownerKey,
                 title = "Bestiaire",
+                count = campaign.monsterIds.size,
                 headerActions = {
                     if (campaign.monsterIds.isNotEmpty()) {
                         Text("${campaign.monsterIds.size}", color = OverviewHintColor, style = MaterialTheme.typography.labelLarge)
@@ -203,6 +204,7 @@ fun CampaignOverviewScreen(
             CollapsibleSectionCard(
                 ownerKey = ownerKey,
                 title = "Quêtes",
+                count = total,
                 headerActions = {
                     if (total > 0) {
                         Text("$terminees/$total", color = OverviewHintColor, style = MaterialTheme.typography.labelLarge)
@@ -232,7 +234,7 @@ private fun CarteDeLaZoneSection(
 ) {
     val cartes by remember(campagneId) { CarteDependencies.repository.observerCartes(campagneId) }
         .collectAsState(initial = emptyList())
-    CollapsibleSectionCard(ownerKey = ownerKey, title = if (cartes.size > 1) "Cartes de la zone" else "Carte de la zone") {
+    CollapsibleSectionCard(ownerKey = ownerKey, title = if (cartes.size > 1) "Cartes de la zone" else "Carte de la zone", count = cartes.size) {
         if (cartes.isEmpty()) {
             Text(
                 "Aucune carte. Créez-en une depuis l'éditeur de campagne.",

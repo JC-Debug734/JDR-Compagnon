@@ -6,6 +6,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.*
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Casino
@@ -49,7 +51,6 @@ import androidx.compose.ui.text.style.TextDecoration
 import com.jc2.jdrcompagnon.ui.AdvantageState
 import com.jc2.jdrcompagnon.ui.DicePoolEntry
 import com.jc2.jdrcompagnon.ui.DiceRollResult
-import com.jc2.jdrcompagnon.ui.DiceSkin
 import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.WorldState
 import com.jc2.jdrcompagnon.ui.theme.ForcedDarkPalette
@@ -65,25 +66,27 @@ fun DiceOverlay(
     val diceState by GameState.diceState.collectAsState()
     val isDndWorld = currentWorld?.id == "donjon_et_dragon"
 
-    val skinColors = rememberDiceSkinColors(diceState.diceSkin)
+    val skinColors = CouleursDes
 
-    // Auto-hide résultat dé simple - only for result auto-hide, not state reset
-    LaunchedEffect(diceState.showResult) {
-        if (diceState.showResult) {
-            delay(3000.milliseconds)
-            GameState.hideDiceResult()
-        }
-    }
-
-    // Auto-hide résultat pool - only for result auto-hide, not state reset
-    LaunchedEffect(diceState.showPoolResult) {
-        if (diceState.showPoolResult) {
-            delay(4000.milliseconds)
-            GameState.hidePoolResult()
-        }
-    }
+    // Le résultat reste affiché jusqu'à un appui n'importe où sur l'écran (plus de disparition
+    // automatique au bout de quelques secondes).
+    val resultatAffiche = (diceState.showResult && diceState.lastResult != null && diceState.dicePool.isEmpty()) ||
+        (diceState.showPoolResult && diceState.lastPoolResults.isNotEmpty())
 
     Box(modifier = Modifier.fillMaxSize()) {
+        // Couche qui capte l'appui de fermeture tant qu'un résultat est affiché.
+        if (resultatAffiche) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectTapGestures {
+                            GameState.hideDiceResult()
+                            GameState.hidePoolResult()
+                        }
+                    }
+            )
+        }
         // 1. Résultats du dé
         if (diceState.showResult && (diceState.lastResult != null) && diceState.dicePool.isEmpty()) {
             Box(
@@ -121,7 +124,6 @@ fun DiceOverlay(
                 modifier = diceState.modifier,
                 advantageState = diceState.advantageState,
                 soundEnabled = diceState.soundEnabled,
-                diceSkin = diceState.diceSkin,
                 isDndWorld = isDndWorld,
                 onDismiss = { GameState.setDiceOverlayVisible(visible = false) },
                 onAddDice = { sides: Int -> GameState.addDiceToPool(sides) },
@@ -130,7 +132,6 @@ fun DiceOverlay(
                 onDecrementModifier = { GameState.decrementModifier() },
                 onSetAdvantageState = { state: AdvantageState -> GameState.setAdvantageState(state) },
                 onToggleSound = { GameState.toggleSound() },
-                onSetDiceSkin = { skin: DiceSkin -> GameState.setDiceSkin(skin) },
             ) { GameState.resetDicePool() }
         }
     }
@@ -141,7 +142,7 @@ fun DiceResultDisplay(
     result: Int,
     sides: Int,
     advantageState: AdvantageState = AdvantageState.NORMAL,
-    skinColors: DiceSkinColors = rememberDiceSkinColors(DiceSkin.CLASSIC)
+    skinColors: DiceSkinColors = CouleursDes
 ) {
     Box(
         modifier = Modifier
@@ -194,6 +195,30 @@ fun DiceResultDisplay(
     }
 }
 
+/** Formule du jet : « 2d6 + 1d20 + 3 » (dés regroupés par type, modificateur à la fin). */
+fun formuleDuJet(results: List<DiceRollResult>, modifier: Int): String {
+    val des = results.groupBy { it.sides }.toSortedMap().map { (faces, lances) -> "${lances.size}d$faces" }
+    val mod = when {
+        modifier > 0 -> listOf("+ $modifier")
+        modifier < 0 -> listOf("− ${-modifier}")
+        else -> emptyList()
+    }
+    return (listOf(des.joinToString(" + ")) + mod).joinToString(" ")
+}
+
+/** Détail du calcul : « 4 + 6 + 15 + 3 = 28 » (dés retenus puis modificateur) ; null pour un seul dé sans modificateur. */
+fun detailDuJet(results: List<DiceRollResult>, modifier: Int, total: Int): String? {
+    val termes = results.filterNot { it.isDiscarded }.map { it.value.toString() } +
+        listOfNotNull(modifier.takeIf { it != 0 }?.let { if (it > 0) "+ $it" else "− ${-it}" })
+    val somme = termes.mapIndexed { i, t -> if (i == 0 || t.startsWith("+") || t.startsWith("−")) t else "+ $t" }.joinToString(" ")
+    return if (termes.size <= 1) null else "$somme = $total"
+}
+
+/**
+ * Résultat d'un jet de plusieurs dés (ou d'un dé avec modificateur) : la fenêtre s'adapte à son
+ * contenu, et indique les dés lancés (« 2d6 + 1d20 + 3 »), l'avantage éventuel, chaque dé (le d20
+ * écarté par l'avantage barré) et le détail du calcul jusqu'au total.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun DicePoolResultDisplay(
@@ -201,40 +226,53 @@ fun DicePoolResultDisplay(
     modifier: Int,
     total: Int,
     advantageState: AdvantageState = AdvantageState.NORMAL,
-    skinColors: DiceSkinColors = rememberDiceSkinColors(DiceSkin.CLASSIC)
+    skinColors: DiceSkinColors = CouleursDes
 ) {
     Surface(
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-        shape = RoundedCornerShape(32.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+        shape = RoundedCornerShape(24.dp),
+        border = BorderStroke(1.dp, com.jc2.jdrcompagnon.ui.components.IconesAsset.LisereDore),
         tonalElevation = 12.dp,
         modifier = Modifier
             .padding(24.dp)
-            .widthIn(max = 340.dp)
+            .widthIn(min = 200.dp, max = 340.dp)
     ) {
         Column(
-            modifier = Modifier.padding(24.dp),
+            // Pas de largeur imposée : la fenêtre prend la taille de son contenu.
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "RÉSULTAT DU POOL",
+                text = "RÉSULTAT",
                 style = MaterialTheme.typography.labelMedium,
                 letterSpacing = 2.sp,
                 fontWeight = FontWeight.Bold,
                 color = skinColors.primary
             )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            if (advantageState != AdvantageState.NORMAL) {
-                AdvantageBadge(state = advantageState)
-                Spacer(modifier = Modifier.height(8.dp))
+            // Ce qui a été lancé.
+            Text(
+                text = formuleDuJet(results, modifier),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+            if (advantageState != AdvantageState.NORMAL && results.any { it.isDiscarded }) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    AdvantageBadge(state = advantageState)
+                    Text(
+                        if (advantageState == AdvantageState.ADVANTAGE) "meilleur d20 gardé" else "pire d20 gardé",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.8f),
+                    )
+                }
             }
 
+            Spacer(modifier = Modifier.height(10.dp))
             FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
                 maxItemsInEachRow = 5
             ) {
                 results.forEach { roll ->
@@ -246,55 +284,49 @@ fun DicePoolResultDisplay(
                             color = if (roll.isDiscarded)
                                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                             else
-                                MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+                                skinColors.primary.copy(alpha = 0.25f),
                             shape = CircleShape,
-                            modifier = Modifier.padding(4.dp)
+                            border = if (roll.isCritical && !roll.isDiscarded) BorderStroke(1.dp, skinColors.primary) else null,
                         ) {
                             Text(
                                 text = roll.value.toString(),
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Bold,
+                                color = Color.White,
                                 textDecoration = if (roll.isDiscarded) TextDecoration.LineThrough else TextDecoration.None
                             )
                         }
                         Text(
                             text = "d${roll.sides}",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline
+                            color = Color.White.copy(alpha = 0.7f)
                         )
                     }
                 }
             }
 
-            if (modifier != 0) {
-                Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
+            HorizontalDivider(modifier = Modifier.width(140.dp), thickness = 1.dp, color = com.jc2.jdrcompagnon.ui.components.IconesAsset.LisereDore)
+            Spacer(modifier = Modifier.height(6.dp))
+            // D'où vient le total : dés retenus et modificateur.
+            detailDuJet(results, modifier, total)?.let {
                 Text(
-                    text = "Modificateur ${if (modifier > 0) "+$modifier" else modifier}",
+                    text = it,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.outline
+                    color = Color.White.copy(alpha = 0.85f),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 )
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
-            HorizontalDivider(thickness = 0.5.dp)
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (advantageState != AdvantageState.NORMAL) {
-                    AdvantageBadge(state = advantageState)
-                    Spacer(modifier = Modifier.width(8.dp))
-                }
-                Text(
-                    text = total.toString(),
-                    style = MaterialTheme.typography.displayMedium.copy(
-                        fontWeight = FontWeight.Black,
-                        brush = Brush.verticalGradient(
-                            listOf(skinColors.primary, skinColors.secondary),
-                        ),
+            Text(
+                text = total.toString(),
+                style = MaterialTheme.typography.displayMedium.copy(
+                    fontWeight = FontWeight.Black,
+                    brush = Brush.verticalGradient(
+                        listOf(skinColors.primary, skinColors.secondary),
                     ),
-                )
-            }
+                ),
+            )
         }
     }
 }
@@ -306,7 +338,6 @@ fun DiceSettingsDialog(
     modifier: Int,
     advantageState: AdvantageState,
     soundEnabled: Boolean,
-    diceSkin: DiceSkin,
     isDndWorld: Boolean,
     onDismiss: () -> Unit,
     onAddDice: (Int) -> Unit,
@@ -315,7 +346,6 @@ fun DiceSettingsDialog(
     onDecrementModifier: () -> Unit,
     onSetAdvantageState: (AdvantageState) -> Unit,
     onToggleSound: () -> Unit,
-    onSetDiceSkin: (DiceSkin) -> Unit,
     onReset: () -> Unit
 ) {
     Dialog(
@@ -456,50 +486,6 @@ fun DiceSettingsDialog(
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
-                Text(
-                    "Apparence du dé",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = ForcedDarkPalette.AccentGold
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    DiceSkin.entries.forEach { skin ->
-                        val skinColors = rememberDiceSkinColors(skin)
-                        val selected = diceSkin == skin
-                        Surface(
-                            onClick = { onSetDiceSkin(skin) },
-                            shape = RoundedCornerShape(16.dp),
-                            color = if (selected) skinColors.primary else skinColors.primary.copy(alpha = 0.15f),
-                            border = if (selected) BorderStroke(2.dp, skinColors.primary) else null,
-                            modifier = Modifier.animateContentSize()
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Casino,
-                                    contentDescription = null,
-                                    tint = if (selected) skinColors.onPrimary else skinColors.primary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = skin.name.lowercase().replaceFirstChar { it.uppercase() },
-                                    color = if (selected) skinColors.onPrimary else skinColors.primary,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
                 HorizontalDivider(thickness = 0.5.dp, color = ForcedDarkPalette.Content.copy(alpha = 0.3f))
                 Spacer(modifier = Modifier.height(20.dp))
 
@@ -581,31 +567,12 @@ fun DiceSettingsDialog(
     }
 }
 
-@Composable
-fun rememberDiceSkinColors(skin: DiceSkin): DiceSkinColors {
-    return when (skin) {
-        DiceSkin.CLASSIC -> DiceSkinColors(
-            primary = MaterialTheme.colorScheme.primary,
-            onPrimary = MaterialTheme.colorScheme.onPrimary,
-            secondary = MaterialTheme.colorScheme.secondary
-        )
-        DiceSkin.SHADOW -> DiceSkinColors(
-            primary = Color(0xFF37474F),
-            onPrimary = Color.White,
-            secondary = Color(0xFF263238)
-        )
-        DiceSkin.ICE -> DiceSkinColors(
-            primary = Color(0xFF4FC3F7),
-            onPrimary = Color(0xFF01579B),
-            secondary = Color(0xFF0288D1)
-        )
-        DiceSkin.FIRE -> DiceSkinColors(
-            primary = Color(0xFFFF7043),
-            onPrimary = Color.White,
-            secondary = Color(0xFFE64A19)
-        )
-    }
-}
+/** Couleurs du dé (apparence « feu », la seule proposée). */
+val CouleursDes = DiceSkinColors(
+    primary = Color(0xFFFF7043),
+    onPrimary = Color.White,
+    secondary = Color(0xFFE64A19)
+)
 
 data class DiceSkinColors(
     val primary: Color,

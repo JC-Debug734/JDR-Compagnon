@@ -35,6 +35,7 @@ class ModifierBoutiqueUseCase(
             inventaire = when {
                 !standingOuTypeAChange -> boutiqueExistante.inventaire
                 type == TypeBoutique.MARCHAND -> genererInventaire(nouveauStanding, monde)
+                type == TypeBoutique.VENDEUR_AMBULANT -> genererInventaire(nouveauStanding, monde, nbArticles = 5)
                 else -> emptyList()
             },
             services = when {

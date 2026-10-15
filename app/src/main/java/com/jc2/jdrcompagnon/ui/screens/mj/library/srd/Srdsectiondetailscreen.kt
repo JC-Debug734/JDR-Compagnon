@@ -42,7 +42,7 @@ import com.jc2.jdrcompagnon.ui.components.SrdMarkdownAvecTables
  * (contrairement aux sorts/monstres/équipement qui ont leur propre écran).
  *
  * @param kind Identifie la collection dans laquelle chercher l'entrée :
- * "don", "arme_magique", "classe", "espece", "historique", "regle", "glossaire" ou "etat".
+ * "don", "arme_magique", "classe", "espece", "historique", "regle", "glossaire", "etat" ou "monture".
  * @param entryName Nom exact de l'entrée à afficher.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -77,6 +77,7 @@ fun SrdSectionDetailScreen(
                 "regle" -> SrdRepository.getRuleEntryByName(context, entryName, currentWorld?.id)
                 "glossaire" -> SrdRepository.getGlossaryEntryByName(context, entryName, currentWorld?.id)
                 "etat" -> SrdRepository.getEtatByName(context, entryName, currentWorld?.id)
+                "monture" -> SrdRepository.getMontureEntryByName(context, entryName, currentWorld?.id)
                 else -> null
             }
             if (entry == null) {
@@ -152,6 +153,8 @@ fun SrdSectionDetailScreen(
                                     modifier = Modifier.padding(bottom = 8.dp),
                                 )
                             }
+                            // Illustration de l'état importée avec une campagne (dossier Etats/), s'il y en a une.
+                            if (kind == "etat") com.jc2.jdrcompagnon.ui.screens.mj.library.srd.EtatImage(entry!!.name, modifier = Modifier.padding(bottom = 12.dp))
                             SrdMarkdownAvecTables(markdown = entry!!.rawMarkdown)
                         }
                     }

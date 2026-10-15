@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Backpack
+import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -35,7 +36,6 @@ import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -168,18 +168,12 @@ fun TableAleatoireListScreen(
                             }
                         }
                     }
+                    IconButton(onClick = { showCreateDialog = true }) {
+                        Icon(Icons.Default.Add, contentDescription = "Nouvelle table", tint = ForcedDarkPalette.AccentGold)
+                    }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showCreateDialog = true },
-                containerColor = ForcedDarkPalette.AccentGold,
-                contentColor = ForcedDarkPalette.Background
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Nouvelle table")
-            }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = Color.Transparent
@@ -311,7 +305,11 @@ private fun TableAleatoireListItem(
 ) {
     // Titre seul : le type se lit à l'icône, une table prête est entourée d'or, une table
     // désactivée est grisée. Le détail (intervalle, entrées) reste dans l'écran de la table.
-    val icon = if (table.type == TypeTable.LOOT) Icons.Default.Backpack else Icons.Default.Casino
+    val icon = when (table.type) {
+        TypeTable.LOOT -> Icons.Default.Backpack
+        TypeTable.NOMS -> Icons.Default.Badge
+        TypeTable.EVENEMENTS -> Icons.Default.Casino
+    }
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = MaterialTheme.shapes.medium,

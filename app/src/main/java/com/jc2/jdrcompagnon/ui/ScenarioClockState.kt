@@ -73,6 +73,26 @@ data class ClimatMois(
             listOf(ScenarioTemperature.FROID, ScenarioTemperature.FRAIS, ScenarioTemperature.DOUX),
         )
         val saisons: List<ClimatMois> = listOf(hiver, printemps, ete, automne)
+
+        /**
+         * Climat mois par mois d'une année tempérée de l'hémisphère nord (saisons météorologiques :
+         * hiver = décembre à février, printemps = mars à mai, été = juin à août, automne =
+         * septembre à novembre), températures resserrées selon le mois. Index 0 = janvier.
+         */
+        val anneeHemisphereNord: List<ClimatMois> = listOf(
+            hiver.copy(temperatures = listOf(ScenarioTemperature.FROID_INTENSE, ScenarioTemperature.FROID)),
+            hiver.copy(temperatures = listOf(ScenarioTemperature.FROID_INTENSE, ScenarioTemperature.FROID, ScenarioTemperature.FRAIS)),
+            printemps.copy(temperatures = listOf(ScenarioTemperature.FROID, ScenarioTemperature.FRAIS)),
+            printemps.copy(temperatures = listOf(ScenarioTemperature.FRAIS, ScenarioTemperature.DOUX)),
+            printemps.copy(temperatures = listOf(ScenarioTemperature.DOUX, ScenarioTemperature.CHAUD)),
+            ete.copy(temperatures = listOf(ScenarioTemperature.DOUX, ScenarioTemperature.CHAUD)),
+            ete.copy(temperatures = listOf(ScenarioTemperature.CHAUD, ScenarioTemperature.FORTE_CHALEUR)),
+            ete.copy(temperatures = listOf(ScenarioTemperature.DOUX, ScenarioTemperature.CHAUD, ScenarioTemperature.FORTE_CHALEUR)),
+            automne.copy(temperatures = listOf(ScenarioTemperature.FRAIS, ScenarioTemperature.DOUX, ScenarioTemperature.CHAUD)),
+            automne.copy(temperatures = listOf(ScenarioTemperature.FRAIS, ScenarioTemperature.DOUX)),
+            automne.copy(temperatures = listOf(ScenarioTemperature.FROID, ScenarioTemperature.FRAIS)),
+            hiver.copy(temperatures = listOf(ScenarioTemperature.FROID_INTENSE, ScenarioTemperature.FROID)),
+        )
     }
 }
 
@@ -143,39 +163,80 @@ data class CalendarConfig(
         val defaultMonthNames: List<String> = (1..12).map { "Mois $it" }
         val defaultDayNames: List<String> = (1..7).map { "Jour $it" }
 
+        const val NOM_CLASSIQUE = "Calendrier classique"
+        const val NOM_HARPTOS = "Calendrier des Harpistes (Faerûn)"
+
+        /**
+         * Calendrier classique (grégorien, année non bissextile de 365 jours) : 12 mois de
+         * janvier à décembre, semaine de 7 jours, saisons et températures d'une région tempérée
+         * de l'hémisphère nord, et jours fériés à date fixe. Calendrier par défaut de l'app.
+         */
+        fun calendrierClassique(): CalendarConfig = CalendarConfig(
+            nom = NOM_CLASSIQUE,
+            monthNames = listOf(
+                "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
+                "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre",
+            ),
+            daysPerMonth = listOf(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31),
+            dayNames = listOf("Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"),
+            startYear = 1,
+            climatParMois = ClimatMois.anneeHemisphereNord,
+            joursFeries = listOf(
+                JourFerie("Jour de l'an", 0, 1),
+                JourFerie("Équinoxe de printemps", 2, 20),
+                JourFerie("Fête du Travail", 4, 1),
+                JourFerie("Solstice d'été", 5, 21),
+                JourFerie("Fête nationale", 6, 14),
+                JourFerie("Assomption", 7, 15),
+                JourFerie("Équinoxe d'automne", 8, 22),
+                JourFerie("Toussaint", 10, 1),
+                JourFerie("Armistice", 10, 11),
+                JourFerie("Solstice d'hiver", 11, 21),
+                JourFerie("Noël", 11, 25),
+            ),
+        )
+
         /**
          * Calendrier des Harpistes (Calendar of Harptos) : calendrier standard des Royaumes
-         * Oubliés (Forgotten Realms), cadre de campagne par défaut de D&D 5e. 12 mois de 30 jours
-         * entrecoupés de 5 jours de fête (Solstice d'hiver, Verdeprêt, Solstice d'été,
-         * Grandmoisson, Fête de la Lune) — modélisés ici comme des "mois" d'un seul jour, pour
-         * rester compatible avec le modèle mois/jours existant (total 365 jours, comme la
-         * véritable année de Faerûn hors Shieldmeet, jour bissextile tous les 4 ans non
-         * modélisé ici). Semaines de 10 jours ("décades"), pas de 7 comme le calendrier
-         * générique par défaut.
+         * Oubliés (Forgotten Realms), cadre de campagne par défaut de D&D 5e. 12 mois de 30 jours ;
+         * les 5 jours de fête qui s'intercalent entre les mois (Mi-hiver, Verdeprêt, Mi-été,
+         * Grandmoisson, Fête de la Lune) sont comptés comme 31e jour du mois qui les précède et
+         * marqués comme jours fériés, avec les équinoxes et solstices (365 jours, Shieldmeet
+         * non modélisé). Semaines de 10 jours (« décades »). Saisons de l'hémisphère nord de
+         * Faerûn : l'hiver commence au solstice de Nightal, le printemps à l'équinoxe de Ches...
          */
         fun calendrierHarptos(): CalendarConfig = CalendarConfig(
-            nom = "Calendrier des Harpistes (Faerûn)",
+            nom = NOM_HARPTOS,
             monthNames = listOf(
-                "Hammer", "Solstice d'hiver", "Alturiak", "Ches", "Tarsakh", "Verdeprêt",
-                "Mirtul", "Kythorn", "Flamerule", "Solstice d'été", "Eleasis", "Eleint",
-                "Grandmoisson", "Marpenoth", "Uktar", "Fête de la Lune", "Nightal"
+                "Hammer", "Alturiak", "Ches", "Tarsakh", "Mirtul", "Kythorn",
+                "Flamerule", "Eleasis", "Eleint", "Marpenoth", "Uktar", "Nightal",
             ),
-            daysPerMonth = listOf(30, 1, 30, 30, 30, 1, 30, 30, 30, 1, 30, 30, 1, 30, 30, 1, 30),
+            daysPerMonth = listOf(31, 30, 30, 31, 30, 30, 31, 30, 31, 30, 31, 30),
             dayNames = (1..10).map { "Jour $it" },
             startYear = 1492,
-            climatParMois = listOf(
-                ClimatMois.hiver, ClimatMois.hiver, ClimatMois.hiver, ClimatMois.printemps, ClimatMois.printemps,
-                ClimatMois.printemps, ClimatMois.printemps, ClimatMois.ete, ClimatMois.ete, ClimatMois.ete,
-                ClimatMois.ete, ClimatMois.automne, ClimatMois.automne, ClimatMois.automne, ClimatMois.hiver,
-                ClimatMois.hiver, ClimatMois.hiver,
-            ),
+            // Hammer « plein hiver » (janvier), Ches « fonte des neiges » (mars), Flamerule « plein
+            // été » (juillet), Uktar « le pourrissement » (novembre) : mois pour mois comme le
+            // calendrier classique.
+            climatParMois = ClimatMois.anneeHemisphereNord,
             joursFeries = listOf(
-                JourFerie("Solstice d'hiver", 1, 1),
-                JourFerie("Verdeprêt", 5, 1),
-                JourFerie("Solstice d'été", 9, 1),
-                JourFerie("Grandmoisson", 12, 1),
-                JourFerie("Fête de la Lune", 15, 1),
+                JourFerie("Mi-hiver", 0, 31),
+                JourFerie("Équinoxe de printemps", 2, 19),
+                JourFerie("Verdeprêt", 3, 31),
+                JourFerie("Solstice d'été", 5, 20),
+                JourFerie("Mi-été", 6, 31),
+                JourFerie("Équinoxe d'automne", 8, 21),
+                JourFerie("Grandmoisson", 8, 31),
+                JourFerie("Fête de la Lune", 10, 31),
+                JourFerie("Solstice d'hiver", 11, 20),
             ),
+        )
+
+        // Ancienne version du calendrier des Harpistes (17 « mois », fêtes comptées comme des mois
+        // d'un jour) : migrée vers [calendrierHarptos], même suite de jours donc mêmes dates.
+        internal val anciensMoisHarptos = listOf(
+            "Hammer", "Solstice d'hiver", "Alturiak", "Ches", "Tarsakh", "Verdeprêt",
+            "Mirtul", "Kythorn", "Flamerule", "Solstice d'été", "Eleasis", "Eleint",
+            "Grandmoisson", "Marpenoth", "Uktar", "Fête de la Lune", "Nightal"
         )
     }
 }
@@ -207,10 +268,9 @@ object ScenarioClockState {
     private val json = Json { ignoreUnknownKeys = true }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    // Calendrier des Harpistes (Faerûn) par défaut : c'est le calendrier standard de D&D 5e
-    // (Forgotten Realms, cadre de campagne officiel par défaut), plus pertinent pour un nouveau
-    // MJ que le calendrier générique "Mois 1, Mois 2...".
-    private val _calendars = MutableStateFlow(listOf(CalendarConfig.calendrierHarptos()))
+    // Calendrier classique (janvier à décembre, hémisphère nord) par défaut ; le calendrier des
+    // Harpistes (D&D) s'ajoute d'un bouton dans le réglage de l'horloge.
+    private val _calendars = MutableStateFlow(listOf(CalendarConfig.calendrierClassique()))
     val calendars: StateFlow<List<CalendarConfig>> = _calendars.asStateFlow()
 
     private val _activeCalendarId = MutableStateFlow(_calendars.value.first().id)
@@ -313,7 +373,11 @@ object ScenarioClockState {
         if (calendarsJson.isNotBlank()) {
             try {
                 val loaded = json.decodeFromString<List<CalendarConfig>>(calendarsJson)
-                if (loaded.isNotEmpty()) _calendars.value = loaded
+                if (loaded.isNotEmpty()) {
+                    val migres = loaded.map(::migrer)
+                    _calendars.value = migres
+                    if (migres != loaded) saveCalendars()
+                }
             } catch (_: Exception) { }
         } else {
             // Migration depuis l'ancien calendrier unique (avant la prise en charge de plusieurs
@@ -321,13 +385,30 @@ object ScenarioClockState {
             val legacyJson = prefs?.getString(KEY_CALENDAR_CONFIG_LEGACY, "") ?: ""
             if (legacyJson.isNotBlank()) {
                 try {
-                    _calendars.value = listOf(json.decodeFromString<CalendarConfig>(legacyJson).copy(nom = "Calendrier par défaut"))
+                    _calendars.value = listOf(migrer(json.decodeFromString<CalendarConfig>(legacyJson).copy(nom = "Calendrier par défaut")))
                 } catch (_: Exception) { }
             }
             saveCalendars()
         }
         val savedActiveId = prefs?.getString(KEY_ACTIVE_CALENDAR_ID, null)
         _activeCalendarId.value = _calendars.value.find { it.id == savedActiveId }?.id ?: _calendars.value.first().id
+    }
+
+    /**
+     * Calendriers enregistrés par une version précédente, jamais retouchés par le MJ :
+     * - ancien calendrier des Harpistes à 17 « mois » → version à 12 mois (même suite de jours,
+     *   les dates en cours ne bougent pas) ;
+     * - calendrier générique « Mois 1… Mois 12 » de 30 jours → calendrier classique.
+     * L'id, le nom et l'année de départ sont conservés.
+     */
+    private fun migrer(config: CalendarConfig): CalendarConfig {
+        val modele = when {
+            config.monthNames == CalendarConfig.anciensMoisHarptos -> CalendarConfig.calendrierHarptos()
+            config.monthNames == CalendarConfig.defaultMonthNames && config.daysPerMonth == List(12) { 30 } &&
+                config.dayNames == CalendarConfig.defaultDayNames -> CalendarConfig.calendrierClassique().copy(nom = config.nom)
+            else -> return config
+        }
+        return modele.copy(id = config.id, startYear = config.startYear)
     }
 
     private fun saveCalendars() {
@@ -344,19 +425,23 @@ object ScenarioClockState {
         }
     }
 
-    /** Crée un nouveau calendrier (copie des valeurs par défaut) et le retourne. */
+    /** Crée un nouveau calendrier (copie du calendrier classique, à personnaliser) et le retourne. */
     fun addCalendar(nom: String): CalendarConfig {
-        val newCalendar = CalendarConfig(nom = nom.ifBlank { "Nouveau calendrier" })
+        val newCalendar = CalendarConfig.calendrierClassique().copy(id = java.util.UUID.randomUUID().toString(), nom = nom.ifBlank { "Nouveau calendrier" })
         _calendars.value = _calendars.value + newCalendar
         saveCalendars()
         return newCalendar
     }
 
-    /**
-     * Ajoute le calendrier des Harpistes (Faerûn/D&D) préréglé, pour un MJ qui a déjà d'autres
-     * calendriers et veut l'ajouter sans repartir du générique (celui-ci n'est le calendrier de
-     * départ que pour une toute nouvelle installation, voir [_calendars]).
-     */
+    /** Ajoute le calendrier classique préréglé (12 mois, hémisphère nord). */
+    fun addClassicCalendar(): CalendarConfig {
+        val newCalendar = CalendarConfig.calendrierClassique().copy(id = java.util.UUID.randomUUID().toString())
+        _calendars.value = _calendars.value + newCalendar
+        saveCalendars()
+        return newCalendar
+    }
+
+    /** Ajoute le calendrier des Harpistes (Faerûn/D&D) préréglé (12 mois, fêtes en jours fériés). */
     fun addHarptosCalendar(): CalendarConfig {
         val newCalendar = CalendarConfig.calendrierHarptos().copy(id = java.util.UUID.randomUUID().toString())
         _calendars.value = _calendars.value + newCalendar

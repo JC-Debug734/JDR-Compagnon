@@ -17,6 +17,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -96,6 +97,15 @@ fun SceneProfileActionsHost(onOpenInternalLink: (type: String, name: String) -> 
     var ajoutGroupe by remember { mutableStateOf<Pair<SceneProfile, String?>?>(null) }
     var butin by remember { mutableStateOf<Pair<SceneProfile, String?>?>(null) }
     val groupeId by GameState.currentGroupId.collectAsState()
+
+    // « Retourner à la discussion » du menu latéral MJ : la discussion en cours est rouverte ici.
+    val discussionARouvrir by DiscussionEnCours.aRouvrir.collectAsState()
+    LaunchedEffect(discussionARouvrir) {
+        if (discussionARouvrir) {
+            DiscussionEnCours.enCours.value?.let { briefing = it.character to it.discussion }
+            DiscussionEnCours.rouverte()
+        }
+    }
 
     request?.let { req ->
         val profile = req.profile

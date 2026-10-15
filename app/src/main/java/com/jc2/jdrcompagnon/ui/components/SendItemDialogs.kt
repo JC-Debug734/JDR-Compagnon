@@ -31,19 +31,33 @@ fun SendItemToCharacterDialog(
     onDismiss: () -> Unit,
     // Appelé quand l'objet est réellement remis (pas sur Annuler).
     onSent: (characterId: String) -> Unit = {},
+    // Vrai : seuls les personnages joueurs (PJ) du groupe sélectionné sont proposés.
+    seulementPjDuGroupe: Boolean = false,
 ) {
     val characters by GameState.characters.collectAsState()
     val claimedCharacters by NetworkSessionManager.claimedCharacters.collectAsState()
-    val worldCharacters = remember(characters, worldId) {
-        characters.filter { it.worldId == worldId && (it.type == "PJ" || it.type == "PNJ") }
+    val groupes by GameState.mjGroups.collectAsState()
+    val groupeId by GameState.currentGroupId.collectAsState()
+    val worldCharacters = remember(characters, worldId, groupes, groupeId, seulementPjDuGroupe) {
+        if (seulementPjDuGroupe) {
+            val membres = groupes.firstOrNull { it.id == groupeId }?.memberIds.orEmpty()
+            characters.filter { it.id in membres && it.type == "PJ" }
+        } else {
+            characters.filter { it.worldId == worldId && (it.type == "PJ" || it.type == "PNJ") }
+        }
     }
+    // « 3x Potion de guérison » : trois vrais objets « Potion de guérison » (un par exemplaire).
+    val objets = remember(itemName) { objetsDuLibelle(itemName) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Envoyer « $itemName » à…", fontWeight = FontWeight.Bold) },
         text = {
             Column {
                 if (worldCharacters.isEmpty()) {
-                    Text("Aucun personnage dans ce monde.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        if (seulementPjDuGroupe) "Aucun personnage joueur dans le groupe sélectionné." else "Aucun personnage dans ce monde.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
                 worldCharacters.forEach { character ->
                     val clientId = claimedCharacters[character.id]
@@ -53,10 +67,9 @@ fun SendItemToCharacterDialog(
                             @Composable { Text("Connecté", color = MaterialTheme.colorScheme.primary) }
                         } else null,
                         modifier = Modifier.clickable {
-                            if (clientId != null) {
-                                NetworkSessionManager.sendItemToClient(clientId, itemName)
-                            } else {
-                                GameState.addItemToBackpack(character.id, itemName)
+                            objets.forEach { objet ->
+                                if (clientId != null) NetworkSessionManager.sendItemToClient(clientId, objet)
+                                else GameState.addItemToBackpack(character.id, objet)
                             }
                             onSent(character.id)
                             onDismiss()
@@ -76,7 +89,8 @@ fun SendItemToGroupDialog(
     itemName: String,
     worldId: String?,
     onDismiss: () -> Unit,
-) = SendItemsToGroupDialog(listOf(itemName), worldId, onDismiss)
+    onSent: () -> Unit = {},
+) = SendItemsToGroupDialog(listOf(itemName), worldId, onDismiss, onSent)
 
 /**
  * Propose un ou plusieurs objets à un groupe : une offre "je le veux" par objet, que chaque
@@ -107,7 +121,8 @@ fun SendItemsToGroupDialog(
                     ListItem(
                         headlineContent = { Text(group.name) },
                         modifier = Modifier.clickable {
-                            itemNames.forEach { NetworkSessionManager.sendLootOfferToGroup(group.id, it) }
+                            // Une offre par exemplaire : « 3x Potion » = trois potions à se répartir.
+                            itemNames.flatMap(::objetsDuLibelle).forEach { NetworkSessionManager.sendLootOfferToGroup(group.id, it) }
                             onSent()
                             onDismiss()
                         }
@@ -118,4 +133,21 @@ fun SendItemsToGroupDialog(
         confirmButton = {},
         dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } }
     )
+}
+
+private val QuantiteAvant = Regex("""^(\d+)\s*[x×]\s*(.+)$""", RegexOption.IGNORE_CASE)
+private val QuantiteApres = Regex("""^(.+?)\s*[x×]\s*(\d+)$""", RegexOption.IGNORE_CASE)
+
+/**
+ * Objets réels désignés par un libellé : « 3x Potion de guérison » ou « Potion de guérison x3 »
+ * donnent trois fois « Potion de guérison » (le sac compte un exemplaire par entrée, et le nom
+ * reste celui de l'équipement du SRD, donc reconnu). Sans quantité : le libellé tel quel.
+ */
+fun objetsDuLibelle(libelle: String): List<String> {
+    val texte = libelle.trim()
+    val (nom, quantite) = QuantiteAvant.find(texte)?.let { it.groupValues[2] to it.groupValues[1] }
+        ?: QuantiteApres.find(texte)?.let { it.groupValues[1] to it.groupValues[2] }
+        ?: return listOf(texte)
+    val n = quantite.toIntOrNull()?.coerceIn(1, 99) ?: 1
+    return List(n) { nom.trim() }
 }

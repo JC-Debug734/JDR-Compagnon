@@ -22,5 +22,7 @@ data class EvenementEntity(
     val objectif: String = "",
     val issuesJson: String = "[]",
     // Ajoutée en version 20 (AppDatabase.MIGRATION_19_20) : monstres et PNJ impliqués.
-    val profilsJson: String = "[]"
+    val profilsJson: String = "[]",
+    // Ajoutée en version 26 (AppDatabase.MIGRATION_25_26) : illustration montrée sur la table.
+    val imageFileName: String? = null
 )

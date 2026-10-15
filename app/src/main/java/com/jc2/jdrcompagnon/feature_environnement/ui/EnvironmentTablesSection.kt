@@ -132,7 +132,8 @@ internal fun TablesAleatoiresSection(
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
-                    TypeTable.entries.forEach { type ->
+                    // Les tables de noms se tirent depuis l'outil Tables aléatoires, pas depuis un lieu.
+                    TypeTable.entries.filter { it != TypeTable.NOMS }.forEach { type ->
                         val tablesDuType = tablesDisponibles.filter { it.type == type }
                         if (tablesDuType.isNotEmpty()) {
                             Text(
@@ -200,6 +201,7 @@ private fun TableLieeRow(
                 when (table.type) {
                     TypeTable.LOOT -> onTirerLoot()
                     TypeTable.EVENEMENTS -> menuTirage = true
+                    TypeTable.NOMS -> onOuvrir()
                 }
             }) {
                 Icon(Icons.Default.Casino, contentDescription = "Tirer")

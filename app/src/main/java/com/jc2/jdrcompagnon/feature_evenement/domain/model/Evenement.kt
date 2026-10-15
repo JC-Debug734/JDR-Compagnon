@@ -28,6 +28,9 @@ enum class CategorieEffet(val label: String) {
     OR("Or"),
     REPUTATION("Réputation"),
     OBJET("Objet"),
+    // Révèle aux joueurs le lieu de la campagne nommé [EffetEvenement.cible] (et donc ses
+    // scénarios), ex. une rumeur qui fait découvrir un lieu.
+    LIEU("Révéler un lieu"),
     AUTRE("Autre")
 }
 
@@ -35,7 +38,8 @@ enum class CategorieEffet(val label: String) {
  * Un gain ou une perte associé à un événement (ex. "+50 XP", "-10 réputation auprès des Gardes",
  * "trouve une dague"). [quantite] est toujours positif, [gain] porte le signe — évite d'avoir à se
  * souvenir si une quantité négative représente une perte ou une simple erreur de saisie. [cible]
- * précise la faction (RÉPUTATION) ou le nom de l'objet (OBJET) ; ignoré pour EXPERIENCE/OR/AUTRE.
+ * précise la faction (RÉPUTATION), le nom de l'objet (OBJET) ou celui du lieu (LIEU) ; ignoré
+ * pour EXPERIENCE/OR/AUTRE.
  * [description] est le texte libre affiché au MJ, obligatoire pour AUTRE (aucune action
  * automatique n'existe pour cette catégorie, purement informative).
  */
@@ -111,5 +115,8 @@ data class Evenement(
     val effets: List<EffetEvenement> = emptyList(),
     val objectif: String = "",
     val issues: List<IssueEvenement> = emptyList(),
-    val profils: List<ProfilEvenement> = emptyList()
+    val profils: List<ProfilEvenement> = emptyList(),
+    // Illustration (fichier de EvenementImageStore), affichée sur la page d'affichage table
+    // quand le MJ joue l'événement. null = aucune.
+    val imageFileName: String? = null
 )

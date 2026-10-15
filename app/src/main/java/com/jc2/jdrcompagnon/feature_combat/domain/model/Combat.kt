@@ -114,7 +114,8 @@ data class ZoneEffet(val forme: FormeZone, val metres: Double) {
 
     companion object {
         private val formeRegex = Regex(
-            """(sphère|cube|cylindre|cône|ligne|émanation)[^.;]{0,40}?(\d+(?:[,.]\d+)?)\s*(?:m\b|mètres?)""",
+            // IGNORE_CASE ne couvre que l'ASCII : « Émanation » avec majuscule écrit explicitement.
+            """(sphère|cube|cylindre|cône|ligne|[éÉ]manation)[^.;]{0,40}?(\d+(?:[,.]\d+)?)\s*(?:m\b|mètres?)""",
             RegexOption.IGNORE_CASE
         )
         private val rayonRegex = Regex("""rayon de (\d+(?:[,.]\d+)?)\s*(?:m\b|mètres?)""", RegexOption.IGNORE_CASE)
@@ -174,15 +175,51 @@ data class Combattant(
     // Capacités à usage limité déjà utilisées (nom → nombre), cf. IaMonstre.disponible.
     val capacitesUtilisees: Map<String, Int> = emptyMap(),
     // Vitesse de déplacement en mètres par tour (fiche ; 9 m par défaut).
-    val vitesse: Double = Distance.VITESSE_STANDARD
+    val vitesse: Double = Distance.VITESSE_STANDARD,
+    // Actions de la fiche (par nom) que le MJ a retirées : l'IA ne les choisit plus et elles ne
+    // sont plus proposées à la déclaration.
+    val actionsDesactivees: Set<String> = emptySet(),
+    // Comportement créé par le MJ (outil COMPORTEMENT) : prioritaire sur [profilIA] s'il est renseigné.
+    val comportementId: String? = null,
+    // Personnage incarné par un joueur connecté : il déclare lui-même, l'IA ne décide jamais pour lui
+    // (même pendant une courte déconnexion, pour qu'il retrouve sa place en se reconnectant).
+    val joueParJoueur: Boolean = false,
+    // Bonus aux jets de sauvegarde par caractéristique (« Dextérité » → +3), voir Sauvegardes.
+    val sauvegardes: Map<String, Int> = emptyMap(),
+    // Personnage à 0 PV : jets de sauvegarde contre la mort lancés à chacun de ses tours.
+    val succesMort: Int = 0,
+    val echecsMort: Int = 0,
+    val stable: Boolean = false,
+    val mort: Boolean = false,
+    // Type de créature (« Mort-vivant », « Humanoïde »…, voir TypesCreature) et défenses aux types de dégâts.
+    val typeCreature: String? = null,
+    val defenses: DefensesDegats = DefensesDegats(),
+    // Boss (BossCatalogue) : son état de boss vit dans CombatEnCours.boss.
+    val bossId: String? = null,
+    // Élément du décor à détruire (point faible d'un boss) : ne déclare ni ne joue de tour, et
+    // n'empêche pas la victoire.
+    val inerte: Boolean = false,
+    // Zone du champ de bataille (voir Terrain) ; null = zone de départ de son camp.
+    val zone: Int? = null,
 ) {
+    /** Actions de la fiche que le MJ autorise pour ce combattant. */
+    val attaquesAutorisees: List<AttaqueMonstre> get() = attaques.filter { it.nom !in actionsDesactivees }
+
     val horsCombat: Boolean get() = pv <= 0
 
-    /** Déclare seul ses actions : tout monstre, ou un personnage auquel le MJ a donné un profil. */
-    val piloteParIa: Boolean get() = estMonstre || profilIA != null
+    /**
+     * Déclare seul ses actions : tout monstre, ou un personnage doté d'un comportement (grille par
+     * classe, ou choix du MJ) que ne joue aucun joueur.
+     */
+    val piloteParIa: Boolean get() = !inerte && (estMonstre || (!joueParJoueur && (profilIA != null || comportementId != null)))
+
+    /** Comportement appliqué par l'IA : créé par le MJ, sinon celui du profil (Brute par défaut). */
+    val comportement: Comportement
+        get() = Comportements.parId(comportementId) ?: Comportements.pour(profilIA ?: ProfilIA.BRUTE)
 }
 
 /** Un groupe de monstres identiques d'un lien #combat:[Gobelin x3, Loup x2]. */
+@kotlinx.serialization.Serializable
 data class LigneCompositionCombat(val monstreNom: String, val quantite: Int)
 
 /**
@@ -223,6 +260,11 @@ data class ProfilCombatMonstre(
     val comportement: ProfilDeduit = ProfilIA.analyser(actions, ""),
     // Vitesse au sol en mètres (« **Vitesse :** 9 m, vol 18 m » → 9).
     val vitesse: Double = Distance.VITESSE_STANDARD,
+    // Bonus aux jets de sauvegarde (ligne « Caractéristiques » de la fiche).
+    val sauvegardes: Map<String, Int> = emptyMap(),
+    // Type de créature et défenses aux types de dégâts (voir TypesCreature).
+    val typeCreature: String? = null,
+    val defenses: DefensesDegats = DefensesDegats(),
 ) {
     companion object {
         private val caRegex = Regex("""\*\*CA :\*\*\s*(\d+)""")
@@ -247,9 +289,32 @@ data class ProfilCombatMonstre(
             val actions = ActionsMonstreParser.parser(rawMarkdown)
             val vitesse = vitesseRegex.find(rawMarkdown)?.groupValues?.get(1)?.replace(',', '.')?.toDoubleOrNull()
                 ?: Distance.VITESSE_STANDARD
-            return ProfilCombatMonstre(ca, pv.coerceAtLeast(1), formule, init, actions, ProfilIA.analyser(actions, rawMarkdown), vitesse)
+            return ProfilCombatMonstre(
+                ca, pv.coerceAtLeast(1), formule, init, actions, ProfilIA.analyser(actions, rawMarkdown), vitesse,
+                Sauvegardes.depuisFiche(rawMarkdown), TypesCreature.depuisFiche(rawMarkdown), TypesCreature.defensesDepuisFiche(rawMarkdown),
+            )
         }
     }
+
+    /** Combattant (monstre piloté par l'IA) tiré de ce profil, nommé [nom], avec [pv] PV. */
+    fun versCombattant(nom: String, monstreNom: String, pv: Int = pvMoyens): Combattant = Combattant(
+        id = java.util.UUID.randomUUID().toString(),
+        nom = nom,
+        estMonstre = true,
+        monstreNom = monstreNom,
+        ca = ca,
+        pvMax = pv,
+        pv = pv,
+        bonusInitiative = bonusInitiative,
+        attaques = actions.attaques,
+        nbAttaquesMultiples = actions.nbAttaquesMultiples,
+        profilIA = comportement.profil,
+        raisonProfil = comportement.raison,
+        vitesse = vitesse,
+        sauvegardes = sauvegardes,
+        typeCreature = typeCreature,
+        defenses = defenses,
+    )
 }
 
 /**

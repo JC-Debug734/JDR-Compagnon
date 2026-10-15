@@ -80,7 +80,6 @@ class EffetsEtTempsDeCombatTest {
         CombatSession.commencer()
         assertEquals("la préparation et le round 1 ne font pas avancer le temps", debut, ScenarioClockState.totalSeconds())
 
-        CombatSession.passerEnResolution()
         CombatSession.tourSuivant() // fin du round 1 → round 2
         assertEquals(2, CombatSession.etat.value!!.round)
         assertEquals(debut + 6, ScenarioClockState.totalSeconds())

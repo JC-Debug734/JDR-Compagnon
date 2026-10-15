@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -12,8 +13,14 @@ interface CarteDao {
     @Query("SELECT * FROM points_interet WHERE campagneId = :campagneId ORDER BY nom ASC")
     fun observerPoints(campagneId: String): Flow<List<PointInteretEntity>>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    // Upsert et non REPLACE : un REPLACE supprime d'abord la ligne, et avec elle (cascade) les
+    // lieux notables de la ville.
+    @Upsert
     suspend fun sauvegarderPoint(point: PointInteretEntity)
+
+    /** Villes de toutes les campagnes et de la bibliothèque (outil VILLES). */
+    @Query("SELECT * FROM points_interet WHERE type = 'VILLE' ORDER BY nom ASC")
+    fun observerToutesLesVilles(): Flow<List<PointInteretEntity>>
 
     @Query("DELETE FROM points_interet WHERE id = :id")
     suspend fun supprimerPoint(id: String)

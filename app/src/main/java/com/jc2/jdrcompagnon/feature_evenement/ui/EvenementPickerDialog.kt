@@ -1,7 +1,6 @@
 package com.jc2.jdrcompagnon.feature_evenement.ui
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,13 +10,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -85,21 +81,12 @@ fun EvenementPickerDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                Row(
-                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    FilterChip(selected = filtreType == null, onClick = { filtreType = null }, label = { Text("Tous") })
-                    TypeEvenement.entries.filter { type -> disponibles.any { it.type == type } }.forEach { type ->
-                        FilterChip(
-                            selected = filtreType == type,
-                            onClick = { filtreType = if (filtreType == type) null else type },
-                            label = { Text(type.label) },
-                            leadingIcon = { Icon(type.icone, contentDescription = null, tint = type.couleur, modifier = Modifier.size(18.dp)) },
-                            colors = FilterChipDefaults.filterChipColors(selectedContainerColor = type.couleur.copy(alpha = 0.3f))
-                        )
-                    }
-                }
+                FiltreCategorie(
+                    filtre = filtreType,
+                    total = disponibles.size,
+                    nombre = { type -> disponibles.count { it.type == type } },
+                    onChoix = { filtreType = it }
+                )
                 if (filtres.isEmpty()) {
                     Text(
                         if (disponibles.isEmpty()) "Aucun autre événement dans la bibliothèque. Créez-en un nouveau."
@@ -123,12 +110,7 @@ fun EvenementPickerDialog(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(evt.titre, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 if (evt.description.isNotBlank()) {
-                                    Text(
-                                        evt.description,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
+                                    ApercuDescriptionEvenement(evt.description, lignes = 1)
                                 }
                             }
                         }

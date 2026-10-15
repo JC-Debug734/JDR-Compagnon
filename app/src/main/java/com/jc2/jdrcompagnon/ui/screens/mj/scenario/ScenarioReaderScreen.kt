@@ -1,6 +1,7 @@
 package com.jc2.jdrcompagnon.ui.screens.mj.scenario
 
 import android.widget.Toast
+import kotlinx.coroutines.flow.first
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.view.KeyEvent
@@ -210,6 +211,8 @@ fun ScenarioReaderContent(
     var butinLien by remember { mutableStateOf<Pair<String, String>?>(null) }
     // Trésor écrit dans la scène (#butin:[450 pc; Longue-vue (100 po)]) : à donner aux joueurs.
     var tresorLien by remember { mutableStateOf<String?>(null) }
+    // Lien #table:[Nom] cliqué : tiré par l'effet placé après tirerTableParNom.
+    var tableATirer by remember { mutableStateOf<String?>(null) }
     // « Ajouter au groupe » d'un lien (type, nom) : voir AjouterAuGroupeDialog.
     var ajoutGroupeItem by remember { mutableStateOf<Pair<String, String>?>(null) }
 
@@ -222,6 +225,11 @@ fun ScenarioReaderContent(
 
     // Lien #combat:[Gobelin x3, Loup x2] : dialogue de préparation puis écran de suivi du combat.
     var combatALancer by remember { mutableStateOf<String?>(null) }
+    // Lien #epreuve:[Nom] : résolution affichée comme un événement, sans quitter le scénario.
+    var epreuveOuverte by remember { mutableStateOf(false) }
+    var epreuveADemarrer by remember { mutableStateOf<com.jc2.jdrcompagnon.feature_epreuve.domain.model.Epreuve?>(null) }
+    // Lien #boutique:[Nom] cliqué : aperçu de la boutique pour le MJ (joueurs invités en parallèle).
+    var boutiqueApercu by remember { mutableStateOf<com.jc2.jdrcompagnon.feature_boutique.domain.model.Boutique?>(null) }
 
     fun handleLinkClick(type: String, name: String) {
         when (type) {
@@ -235,10 +243,9 @@ fun ScenarioReaderContent(
                 if (epreuve != null) {
                     // Une autre épreuve en cours est remplacée ; la même reprend où elle en était.
                     val active = com.jc2.jdrcompagnon.feature_epreuve.presentation.EpreuveOutilSession.etat.value
-                    if (active?.epreuve?.id != epreuve.id) {
-                        com.jc2.jdrcompagnon.feature_epreuve.presentation.EpreuveOutilSession.demarrer(epreuve)
-                    }
-                    onOpenInternalLink("epreuve", epreuve.nom)
+                    // Nouvelle épreuve : difficulté demandée au MJ avant le lancement (sauf réussites fixes).
+                    if (active?.epreuve?.id != epreuve.id) epreuveADemarrer = epreuve
+                    else epreuveOuverte = true
                 } else {
                     Toast.makeText(context, "Épreuve \"$name\" introuvable dans l'outil ÉPREUVES", Toast.LENGTH_SHORT).show()
                 }
@@ -246,7 +253,12 @@ fun ScenarioReaderContent(
             // Lien #evenement:[Titre] : événement de la bibliothèque, affiché avec ses effets.
             "evenement" -> epreuveScope.launch {
                 val monde = scenario?.worldId?.takeIf { it.isNotBlank() } ?: GameState.currentWorldId() ?: "donjon_et_dragon"
-                val evenement = EvenementDependencies.trouverEvenement(monde, name, GameState.currentCampaignId.value)
+                // D'abord l'événement rattaché à la scène sous ce titre (celui du dernier import du scénario),
+                // puis la bibliothèque : un ancien homonyme laissé par un import précédent ne passe plus devant.
+                val evenement = currentScene?.evenementIds.orEmpty()
+                    .let { ids -> if (ids.isEmpty()) emptyList() else EvenementDependencies.repository.getEvenements(ids) }
+                    .firstOrNull { it.titre.trim().equals(name.trim(), ignoreCase = true) }
+                    ?: EvenementDependencies.trouverEvenement(monde, name, GameState.currentCampaignId.value)
                 if (evenement != null) {
                     resultatEvenement = evenement
                     afficherResultatEvenement = true
@@ -256,6 +268,28 @@ fun ScenarioReaderContent(
             }
             "combat" -> combatALancer = name
             "butin" -> tresorLien = name
+            // Lien #table:[Nom] : table aléatoire du monde, tirée selon son type (loot ou événement).
+            "table" -> tableATirer = name
+            // Lien #boutique:[Nom] : invitation des joueurs connectés à l'écran de la boutique,
+            // et aperçu (services, articles, tarifs) pour le MJ.
+            "boutique" -> epreuveScope.launch {
+                val campagne = GameState.currentCampaignId.value
+                val boutique = com.jc2.jdrcompagnon.di.BoutiqueDependencies.repository.observerToutesLesBoutiques().first()
+                    .filter { it.nom.trim().equals(name.trim(), ignoreCase = true) }
+                    .sortedBy { if (it.campagneId == campagne) 0 else if (it.campagneId == null) 1 else 2 }
+                    .firstOrNull()
+                if (boutique == null) {
+                    Toast.makeText(context, "Boutique \"$name\" introuvable", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+                val invites = NetworkSessionManager.inviterBoutique(boutique.id)
+                Toast.makeText(
+                    context,
+                    if (invites) "Invitation à « ${boutique.nom} » envoyée aux joueurs" else "Aucune partie en réseau : aperçu seulement",
+                    Toast.LENGTH_SHORT,
+                ).show()
+                boutiqueApercu = boutique
+            }
             // Règle : aucune autre action possible, on ouvre directement sa fiche (petite
             // fenêtre de détail) sans passer par le menu "Que faire ?".
             "rule" -> linkDetailItem = type to name
@@ -287,32 +321,24 @@ fun ScenarioReaderContent(
         )
     }
 
-    // Piste effective de la scène courante : celle propre à la scène (ancien contenu importé
-    // depuis un .md) sinon celle de son environnement.
+    // Piste effective de la scène courante : celle choisie pour la scène (éditeur, « Musique de la
+    // scène ») sinon celle de son environnement.
     val currentTrackId = currentScene?.musicTrackId ?: currentEnvironment?.musicTrackId
 
     // Tables aléatoires (feature_table_aleatoire) exploitables depuis la lecture : la table
-    // d'événements de la scène, avec repli sur celle du scénario entier si absente (voir
-    // MjScenario.tableEvenementsId), et la table de loot propre à la scène. Entre les deux, les
+    // d'événements et la table de loot propres à la scène, sinon les
     // tables liées à l'environnement de la scène (Environnement.tablesAleatoiresIds) : la
     // première de chaque type sert de repli quand la scène n'en désigne aucune.
     var tableEvenements by remember { mutableStateOf<TableAleatoire?>(null) }
     var tableLoot by remember { mutableStateOf<TableAleatoire?>(null) }
-    LaunchedEffect(currentScene?.tableAleatoireId, currentScene?.tableLootId, currentEnvironment, scenario?.tableEvenementsId) {
+    LaunchedEffect(currentScene?.tableAleatoireId, currentScene?.tableLootId, currentEnvironment) {
         val repository = TableAleatoireDependencies.repository
         val tablesEnvironnement = currentEnvironment?.tablesAleatoiresIds.orEmpty().mapNotNull { repository.getTable(it) }
         tableEvenements = currentScene?.tableAleatoireId?.let { repository.getTable(it) }
             ?: tablesEnvironnement.firstOrNull { it.type == TypeTable.EVENEMENTS }
-            ?: scenario?.tableEvenementsId?.let { repository.getTable(it) }
         tableLoot = currentScene?.tableLootId?.let { repository.getTable(it) }
             ?: tablesEnvironnement.firstOrNull { it.type == TypeTable.LOOT }
     }
-    // Boutique associée à la scène (services et tarifs consultables depuis la barre d'outils).
-    val boutiques by remember {
-        com.jc2.jdrcompagnon.di.BoutiqueDependencies.repository.observerToutesLesBoutiques()
-    }.collectAsState(initial = emptyList())
-    val boutiqueScene = currentScene?.boutiqueId?.let { id -> boutiques.find { it.id == id } }
-    var afficherBoutique by remember { mutableStateOf(false) }
     var afficherEvenementsScene by remember { mutableStateOf(false) }
     var resultatLoot by remember { mutableStateOf<Pair<String, List<ResultatLoot>>?>(null) }
     val tirageScope = rememberCoroutineScope()
@@ -336,6 +362,40 @@ fun ScenarioReaderContent(
         tableLoot = tableMiseAJour
         if (resultats.isNotEmpty()) tirageScope.launch { TableAleatoireDependencies.repository.sauvegarder(tableMiseAJour) }
         resultatLoot = "Loot — ${table.nom}" to resultats
+    }
+
+    suspend fun tirerTableParNom(nom: String) {
+        val monde = scenario?.worldId?.takeIf { it.isNotBlank() } ?: GameState.currentWorldId() ?: "donjon_et_dragon"
+        val table = TableAleatoireDependencies.repository.observerTables(monde).first()
+            .firstOrNull { it.nom.trim().equals(nom.trim(), ignoreCase = true) }
+        if (table == null) {
+            Toast.makeText(context, "Table \"$nom\" introuvable dans les tables aléatoires", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val minutes = LectureScenarioState.minutesEcouleesMaintenant()
+        if (table.type == TypeTable.NOMS) {
+            val nom = TableAleatoireDependencies.tirage.tirerNom(table)
+            Toast.makeText(
+                context,
+                nom?.texte ?: "Table \"${table.nom}\" vide",
+                Toast.LENGTH_LONG
+            ).show()
+        } else if (table.type == TypeTable.LOOT) {
+            val (tableMiseAJour, resultats) = TableAleatoireDependencies.tirage.tirerLoot(table, 3, minutes)
+            if (resultats.isNotEmpty()) TableAleatoireDependencies.repository.sauvegarder(tableMiseAJour)
+            resultatLoot = "Loot — ${table.nom}" to resultats
+        } else {
+            val (tableMiseAJour, resultat) = TableAleatoireDependencies.tirage.tirerEvenement(table, null, minutes)
+            if (resultat != null) TableAleatoireDependencies.repository.sauvegarder(tableMiseAJour)
+            resultatEvenement = resultat
+            afficherResultatEvenement = true
+        }
+    }
+
+    LaunchedEffect(tableATirer) {
+        val nom = tableATirer ?: return@LaunchedEffect
+        tirerTableParNom(nom)
+        tableATirer = null
     }
 
     // Coupure manuelle de la musique par le MJ (bouton son) : tenue par MusicManager et non par
@@ -373,13 +433,44 @@ fun ScenarioReaderContent(
         return
     }
 
-    Column(modifier = modifier) {
+    // Tablette en paysage (ou tout écran large) : liste des scènes affichée en permanence sur le
+    // côté, en-tête et barre d'outils sur une seule ligne (la hauteur est rare en paysage), et
+    // texte de la scène limité en largeur pour garder des lignes lisibles.
+    BoxWithConstraints(modifier = modifier) {
+    val ecranLarge = maxWidth >= 840.dp && maxWidth > maxHeight
+    Row(modifier = Modifier.fillMaxSize()) {
+    if (ecranLarge && scenes.size > 1) {
+        Surface(
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+            contentColor = Color.White,
+            modifier = Modifier.width(260.dp).fillMaxHeight(),
+        ) {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
+                Text(
+                    "Scènes",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+                SceneList(
+                    scenes = scenes,
+                    currentIndex = currentIndex,
+                    onSelect = ::goToScene,
+                    onToggleValidated = { scene -> GameState.setSceneValidated(scenario.id, scene.id, !scene.validated, context) },
+                    compact = true,
+                )
+            }
+        }
+        VerticalDivider(color = Color.White.copy(alpha = 0.15f))
+    }
+    Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+        @Composable
+        fun EnTeteScene(modifier: Modifier) {
         // En-tête : titre du scénario, scène courante, action musique. Fond plein (comme le
         // contenu) : sans ça, l'en-tête se retrouvait directement sur le fond d'écran global de
         // l'app, illisible.
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
+            modifier = modifier
                 .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.75f))
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -401,6 +492,7 @@ fun ScenarioReaderContent(
             // Liste des scènes, profils/liens et validation : déplacés dans la barre d'outils
             // de la scène ci-dessous, avec les autres icônes.
         }
+        }
 
         // Barre d'outils de la scène : toutes les icônes côte à côte (environnement, tables
         // aléatoires) plutôt qu'un bandeau par élément, et le son toujours visible à droite.
@@ -409,20 +501,26 @@ fun ScenarioReaderContent(
         val currentTrackDisplayName = currentTrackId?.let { id ->
             availableLoopTracks.firstOrNull { it.id.equals(id, ignoreCase = true) }?.displayName ?: id
         }
-        val sceneMusicPlaying = currentTrackId != null && isMusicPlaying &&
-            currentTrackName == currentTrackDisplayName && !musicManuallyStopped
-        SceneToolsBar(
+        // Scène sans musique : l'icône reflète la musique en cours, quelle qu'elle soit.
+        val sceneMusicPlaying = if (currentTrackId == null) isMusicPlaying && currentTrackName != null
+        else isMusicPlaying && currentTrackName == currentTrackDisplayName && !musicManuallyStopped
+        @Composable
+        fun BarreOutils(modifier: Modifier) = SceneToolsBar(
+            modifier = modifier,
             tableEvenementsNom = tableEvenements?.nom,
             tableLootNom = tableLoot?.nom,
             onTirerEvenement = ::tirerEvenement,
             onTirerLoot = ::tirerLoot,
-            boutiqueNom = boutiqueScene?.nom,
-            onOpenBoutique = { afficherBoutique = true },
-            nombreEvenements = currentScene?.evenementIds.orEmpty().size + currentEnvironment?.evenementIds.orEmpty().size,
+            nombreEvenements = currentEnvironment?.evenementIds.orEmpty().size,
             onOpenEvenements = { afficherEvenementsScene = true },
             musicPlaying = sceneMusicPlaying,
-            musicTrackName = currentTrackDisplayName,
-            onOpenScenes = if (scenes.size > 1) ({ showScenePanel = true }) else null,
+            musicTrackName = currentTrackDisplayName ?: currentTrackName,
+            // Écran large : la liste des scènes est déjà affichée sur le côté.
+            onOpenScenes = if (scenes.size > 1 && !ecranLarge) ({ showScenePanel = true }) else null,
+            // Flèches de scène en haut, avec les autres options (plus de pied de page).
+            showSceneArrows = scenes.size > 1,
+            onPreviousScene = if (currentIndex > 0) ({ goToScene(currentIndex - 1) }) else null,
+            onNextScene = if (currentIndex < scenes.size - 1) ({ goToScene(currentIndex + 1) }) else null,
             onOpenLinks = { showLinksPanel = true },
             sceneValidated = currentScene?.validated,
             onToggleValidated = {
@@ -431,12 +529,29 @@ fun ScenarioReaderContent(
             onToggleMusic = {
                 val trackId = currentTrackId
                 when {
+                    // Scène sans musique : l'icône agit sur la musique en cours (lancée par une
+                    // autre scène ou l'écran Musique) — pause, puis reprise au même endroit.
+                    trackId == null && currentTrackName != null && isMusicPlaying -> MusicManager.pauseByUser()
+                    trackId == null && currentTrackName != null -> MusicManager.resume()
                     trackId == null -> Toast.makeText(context, "Aucune musique pour cette scène (double appui : volume)", Toast.LENGTH_SHORT).show()
-                    sceneMusicPlaying -> MusicManager.stopByUser()
+                    // Pause (et non Stop) : un nouvel appui reprend la piste au même endroit.
+                    sceneMusicPlaying -> MusicManager.pauseByUser()
                     else -> playSceneMusic(context, trackId)
                 }
             },
         )
+        if (ecranLarge) {
+            Row(
+                modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                EnTeteScene(Modifier.weight(1f).fillMaxHeight())
+                BarreOutils(Modifier.weight(1f).fillMaxHeight())
+            }
+        } else {
+            EnTeteScene(Modifier.fillMaxWidth())
+            BarreOutils(Modifier.fillMaxWidth())
+        }
 
         val activeLootOffers by NetworkSessionManager.activeLootOffers.collectAsState()
         activeLootOffers.forEach { (offerId, offer) ->
@@ -519,11 +634,15 @@ fun ScenarioReaderContent(
                     label = "scene_transition"
                 ) { index ->
                     val scene = scenes[index]
+                    Box(
+                        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                        contentAlignment = Alignment.TopCenter,
+                    ) {
                     Column(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                            .verticalScroll(rememberScrollState())
+                            .widthIn(max = 920.dp)
+                            .fillMaxWidth()
+                            .padding(horizontal = if (ecranLarge) 32.dp else 16.dp, vertical = if (ecranLarge) 16.dp else 8.dp)
                     ) {
                         if (index == 0 && (scenario.lieuNom.isNotBlank() || scenario.lieuImageFileName != null)) {
                             LieuBanner(scenario = scenario, context = context)
@@ -563,42 +682,29 @@ fun ScenarioReaderContent(
                             onRevelerZone = ::revelerZone,
                         )
                     }
+                    }
                 }
+            }
+
+            // Éléments « partout » du scénario ({partout: Titre}…{/partout}) : menu flottant
+            // déplaçable, affiché par la racine de l'app par-dessus tout l'écran (barres
+            // comprises) tant que ce lecteur est ouvert.
+            val elementsPartout = remember(scenario.description, scenes) {
+                (listOf(scenario.description) + scenes.map { it.markdownContent })
+                    .flatMap { extraireElementsPartout(it) }
+                    .distinctBy { it.titre }
+            }
+            val partoutActif = remember(elementsPartout, zonesCarte) {
+                PartoutSession.Actif(elementsPartout, ::handleLinkClick, zonesCarte, ::revelerZone)
+            }
+            DisposableEffect(partoutActif) {
+                PartoutSession.afficher(partoutActif)
+                onDispose { PartoutSession.retirer(partoutActif) }
             }
         }
 
-        if (scenes.size > 1) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.75f))
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(
-                    onClick = { goToScene(currentIndex - 1) },
-                    enabled = currentIndex > 0,
-                    colors = IconButtonDefaults.iconButtonColors(
-                        contentColor = Color.White,
-                        disabledContentColor = Color.White.copy(alpha = 0.38f)
-                    )
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Scène précédente")
-                }
-                Text("${currentIndex + 1} / ${scenes.size}", style = MaterialTheme.typography.bodyMedium, color = Color.White)
-                IconButton(
-                    onClick = { goToScene(currentIndex + 1) },
-                    enabled = currentIndex < scenes.size - 1,
-                    colors = IconButtonDefaults.iconButtonColors(
-                        contentColor = Color.White,
-                        disabledContentColor = Color.White.copy(alpha = 0.38f)
-                    )
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Scène suivante")
-                }
-            }
-        }
+    }
+    }
     }
 
     if (showScenePanel) {
@@ -606,34 +712,18 @@ fun ScenarioReaderContent(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .padding(16.dp)
                     .padding(bottom = 32.dp)
             ) {
                 Text("Scènes", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(16.dp))
-                scenes.forEachIndexed { index, scene ->
-                    ListItem(
-                        headlineContent = { Text(scene.title) },
-                        leadingContent = if (index == currentIndex) {
-                            @Composable { Icon(Icons.Default.Check, contentDescription = null) }
-                        } else null,
-                        trailingContent = {
-                            IconButton(onClick = {
-                                GameState.setSceneValidated(scenario.id, scene.id, !scene.validated, context)
-                            }) {
-                                Icon(
-                                    imageVector = if (scene.validated) Icons.Default.CheckCircle else Icons.Default.CheckCircleOutline,
-                                    contentDescription = if (scene.validated) "Scène validée — retirer la validation" else "Marquer comme validée",
-                                    tint = if (scene.validated) MaterialTheme.colorScheme.primary else LocalContentColor.current
-                                )
-                            }
-                        },
-                        modifier = Modifier.clickable {
-                            goToScene(index)
-                            showScenePanel = false
-                        }
-                    )
-                }
+                SceneList(
+                    scenes = scenes,
+                    currentIndex = currentIndex,
+                    onSelect = { index -> goToScene(index); showScenePanel = false },
+                    onToggleValidated = { scene -> GameState.setSceneValidated(scenario.id, scene.id, !scene.validated, context) },
+                )
             }
         }
     }
@@ -646,6 +736,7 @@ fun ScenarioReaderContent(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .padding(16.dp)
                     .padding(bottom = 32.dp)
             ) {
@@ -674,6 +765,8 @@ fun ScenarioReaderContent(
                                         "evenement" -> "Événement"
                                         "combat" -> "Combat"
                                         "butin" -> "Trésor à donner"
+                                        "table" -> "Table aléatoire"
+                                        "boutique" -> "Boutique (inviter les joueurs)"
                                         else -> type
                                     }
                                 )
@@ -691,6 +784,8 @@ fun ScenarioReaderContent(
                                         "evenement" -> "🎲"
                                         "combat" -> "⚔️"
                                         "butin" -> "💰"
+                                        "table" -> "🎲"
+                                        "boutique" -> "🏪"
                                         else -> "🔗"
                                     },
                                     style = MaterialTheme.typography.titleLarge
@@ -707,8 +802,8 @@ fun ScenarioReaderContent(
         }
     }
 
-    // Événements de la bibliothèque liés à la scène et à son environnement : consultation et
-    // tirage (tap = résultat avec ses effets), l'édition se fait dans l'éditeur de scénario.
+    // Événements de la bibliothèque liés à l'environnement de la scène : consultation et tirage
+    // (tap = résultat avec ses effets), l'édition se fait dans l'outil Environnements.
     if (afficherEvenementsScene) {
         val mondeEvenements = scenario?.worldId?.takeIf { it.isNotBlank() } ?: GameState.currentWorldId() ?: "donjon_et_dragon"
         AlertDialog(
@@ -719,16 +814,6 @@ fun ScenarioReaderContent(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    currentScene?.takeIf { it.evenementIds.isNotEmpty() }?.let { scene ->
-                        EvenementsLiesSection(
-                            worldId = mondeEvenements,
-                            campagneId = null,
-                            evenementIds = scene.evenementIds,
-                            onChanger = {},
-                            readOnly = true,
-                            titre = "Scène"
-                        )
-                    }
                     currentEnvironment?.takeIf { it.evenementIds.isNotEmpty() }?.let { env ->
                         EvenementsLiesSection(
                             worldId = mondeEvenements,
@@ -745,18 +830,21 @@ fun ScenarioReaderContent(
         )
     }
 
+    if (epreuveOuverte) {
+        com.jc2.jdrcompagnon.feature_epreuve.ui.EpreuveResolutionDialog(onDismiss = { epreuveOuverte = false })
+    }
+    com.jc2.jdrcompagnon.feature_epreuve.ui.DemandeDifficulteEpreuve(
+        demande = epreuveADemarrer,
+        onLancee = { epreuveADemarrer = null; epreuveOuverte = true },
+        onDismiss = { epreuveADemarrer = null },
+    )
+
     if (afficherResultatEvenement) {
         EventResultDialog(
             evenement = resultatEvenement,
             worldId = scenario?.worldId,
             onDismiss = { afficherResultatEvenement = false }
         )
-    }
-
-    if (afficherBoutique) {
-        boutiqueScene?.let { boutique ->
-            com.jc2.jdrcompagnon.feature_boutique.ui.BoutiqueApercuDialog(boutique = boutique, onDismiss = { afficherBoutique = false })
-        }
     }
 
     resultatLoot?.let { (titreDialog, resultats) ->
@@ -781,6 +869,10 @@ fun ScenarioReaderContent(
         )
     }
 
+
+    boutiqueApercu?.let { boutique ->
+        com.jc2.jdrcompagnon.feature_boutique.ui.BoutiqueApercuDialog(boutique = boutique, onDismiss = { boutiqueApercu = null })
+    }
 
     combatALancer?.let { composition ->
         LancerCombatDialog(
@@ -903,6 +995,51 @@ fun ScenarioReaderContent(
 
     ajoutGroupeItem?.let { (type, name) ->
         AjouterAuGroupeDialog(type = type, nom = name, worldId = scenario.worldId, onDismiss = { ajoutGroupeItem = null })
+    }
+}
+
+/**
+ * Liste des scènes du scénario (scène courante marquée, validation à droite) : dans la feuille
+ * « Toutes les scènes » sur téléphone, ou en panneau latéral permanent sur écran large
+ * ([compact] : numéros, lignes en blanc, scène courante surlignée).
+ */
+@Composable
+private fun SceneList(
+    scenes: List<GameState.MjScene>,
+    currentIndex: Int,
+    onSelect: (Int) -> Unit,
+    onToggleValidated: (GameState.MjScene) -> Unit,
+    compact: Boolean = false,
+) {
+    scenes.forEachIndexed { index, scene ->
+        val courante = index == currentIndex
+        ListItem(
+            headlineContent = {
+                Text(
+                    if (compact) "${index + 1}. ${scene.title}" else scene.title,
+                    fontWeight = if (courante) FontWeight.Bold else null,
+                    style = if (compact) MaterialTheme.typography.bodyMedium else LocalTextStyle.current,
+                )
+            },
+            leadingContent = if (courante && !compact) {
+                @Composable { Icon(Icons.Default.Check, contentDescription = null) }
+            } else null,
+            trailingContent = {
+                IconButton(onClick = { onToggleValidated(scene) }) {
+                    Icon(
+                        imageVector = if (scene.validated) Icons.Default.CheckCircle else Icons.Default.CheckCircleOutline,
+                        contentDescription = if (scene.validated) "Scène validée — retirer la validation" else "Marquer comme validée",
+                        tint = if (scene.validated) MaterialTheme.colorScheme.primary else LocalContentColor.current
+                    )
+                }
+            },
+            colors = if (compact) ListItemDefaults.colors(
+                containerColor = if (courante) MaterialTheme.colorScheme.primary.copy(alpha = 0.3f) else Color.Transparent,
+                headlineColor = Color.White,
+                trailingIconColor = Color.White,
+            ) else ListItemDefaults.colors(),
+            modifier = Modifier.clickable { onSelect(index) }
+        )
     }
 }
 

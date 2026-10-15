@@ -1,5 +1,6 @@
 package com.jc2.jdrcompagnon.feature_boutique.ui
 
+import com.jc2.jdrcompagnon.ui.Monnaie
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.jc2.jdrcompagnon.feature_boutique.domain.model.Service
+import com.jc2.jdrcompagnon.feature_boutique.domain.model.EffetService
 
 /**
  * Ajout ou paramétrage d'un service de boutique : nom, description, tarif, nombre de places
@@ -35,10 +37,12 @@ fun ServiceFormDialog(
 ) {
     var nom by remember { mutableStateOf(initial?.nom ?: "") }
     var description by remember { mutableStateOf(initial?.description ?: "") }
-    var prix by remember { mutableStateOf(initial?.prixEnPo?.toString() ?: "") }
+    var prix by remember { mutableStateOf(initial?.prixEnPc?.let { Monnaie.libelle(it, zero = "0") } ?: "") }
     var quantite by remember { mutableStateOf(initial?.quantiteDisponible?.toString() ?: "") }
     var actif by remember { mutableStateOf(initial?.actif ?: true) }
-    val prixValide = prix.toIntOrNull()?.let { it >= 0 } == true
+    var effet by remember { mutableStateOf(initial?.effet ?: EffetService.AUTO) }
+    var menuEffet by remember { mutableStateOf(false) }
+    val prixValide = Monnaie.parser(prix)?.let { it >= 0 } == true
     val quantiteValide = quantite.isBlank() || quantite.toIntOrNull()?.let { it >= 0 } == true
 
     AlertDialog(
@@ -64,11 +68,10 @@ fun ServiceFormDialog(
                 )
                 OutlinedTextField(
                     value = prix,
-                    onValueChange = { prix = it.filter(Char::isDigit) },
-                    label = { Text("Tarif (po)") },
+                    onValueChange = { prix = it },
+                    label = { Text("Tarif (ex. 2 po, 5 pa, 0 = gratuit)") },
                     isError = prix.isNotEmpty() && !prixValide,
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
@@ -84,6 +87,18 @@ fun ServiceFormDialog(
                     Checkbox(checked = actif, onCheckedChange = { actif = it })
                     Text("Proposé actuellement")
                 }
+                // Action sur l'application quand un joueur utilise le service.
+                Text("Effet pour le joueur", style = androidx.compose.material3.MaterialTheme.typography.labelLarge)
+                androidx.compose.foundation.layout.Box {
+                    androidx.compose.material3.OutlinedButton(onClick = { menuEffet = true }, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (effet == EffetService.AUTO) "Automatique : ${EffetService.deduire(nom).label}" else effet.label)
+                    }
+                    androidx.compose.material3.DropdownMenu(expanded = menuEffet, onDismissRequest = { menuEffet = false }) {
+                        EffetService.entries.forEach { e ->
+                            androidx.compose.material3.DropdownMenuItem(text = { Text(e.label) }, onClick = { effet = e; menuEffet = false })
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
@@ -93,10 +108,11 @@ fun ServiceFormDialog(
                         Service(
                             nom = nom.trim(),
                             description = description.trim(),
-                            prixEnPo = prix.toInt(),
+                            prixEnPc = Monnaie.parser(prix) ?: 0,
                             quantiteDisponible = quantite.toIntOrNull(),
                             actif = actif,
                             personnalise = true,
+                            effet = effet,
                         )
                     )
                 },

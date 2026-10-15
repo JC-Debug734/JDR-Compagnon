@@ -27,6 +27,9 @@ interface EvenementDao {
     @Query("DELETE FROM evenements WHERE id = :id")
     suspend fun supprimer(id: String)
 
+    @Query("SELECT id FROM evenements WHERE campagneId = :campagneId")
+    suspend fun getIdsParCampagne(campagneId: String): List<String>
+
     @Query("SELECT COUNT(*) FROM evenements WHERE worldId = :worldId")
     suspend fun compterPourMonde(worldId: String): Int
 }

@@ -192,9 +192,14 @@ class CharacterCreationStateHolder {
                     EffetBalise.EQUIPEMENT -> "Équipement de départ de la classe ${classe!!.nom} : " +
                         classe.equipement.options.firstOrNull { o -> b["remplace"]?.let { o.texte.contains(it, ignoreCase = true) } == true }?.texte.orEmpty() +
                         " (s'applique si vous prenez ce lot)"
+                    EffetBalise.EXPERTISE -> "Expertise du ${classe!!.nom} (niveau 1) : bonus de maîtrise doublé pour deux compétences que vous maîtrisez."
                     else -> "Maîtrise d'outils de la classe ${classe!!.nom} : ${classe.maitrisesOutils.orEmpty()}"
                 }
-                construireChoix(b, classe.nom, raison, c, prefixeId = "classe:")
+                construireChoix(b, classe.nom, raison, c, prefixeId = "classe:")?.let { choix ->
+                    // Expertise : seulement parmi les compétences déjà acquises (classe, historique, espèce).
+                    if (choix.effet != EffetBalise.EXPERTISE) choix
+                    else choix.copy(options = competencesAcquisesCreation(draft), descriptions = emptyMap())
+                }
             }
         val dHistorique = historique?.balises.orEmpty().filter { it.containsKey("choix") }.mapNotNull { b ->
             construireChoix(b, historique!!.nom, "Maîtrise d'outils de l'historique ${historique.nom} : ${historique.maitriseOutils}", c, prefixeId = "historique:")
@@ -216,6 +221,11 @@ class CharacterCreationStateHolder {
             }
         }
     }
+
+    /** Compétences maîtrisées à ce stade de la création : classe, historique, espèce. */
+    fun competencesAcquisesCreation(draft: CharacterDraft): List<String> =
+        (draft.competencesClasse + draft.historique?.maitrisesCompetence.orEmpty() +
+            draft.espece?.let { effetsEspece(it, draft.especeChoix).competences }.orEmpty()).distinct()
 
     /** Dons reçus à la création (historique + espèce) avec leur origine lisible. */
     fun donsRecus(draft: CharacterDraft): List<Pair<Don, String>> {

@@ -20,5 +20,7 @@ data class TableAleatoireEntity(
     val active: Boolean = true,
     val derniereDeclenchementMinutes: Long? = null,
     val entreesEvenementsJson: String = "[]",
-    val entreesLootJson: String = "[]"
+    val entreesLootJson: String = "[]",
+    // Table de type NOMS : {"prenoms":[...],"noms":[...]}. Ajoutée en version 25 (AppDatabase.MIGRATION_24_25).
+    val entreesNomsJson: String = "{}"
 )

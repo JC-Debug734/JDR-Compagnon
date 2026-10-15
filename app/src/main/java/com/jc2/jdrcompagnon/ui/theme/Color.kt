@@ -157,18 +157,27 @@ val DndDarkColors = androidx.compose.material3.darkColorScheme(
     onError = OnErrorDark,
     errorContainer = ErrorContainerDark,
     onErrorContainer = OnErrorContainerDark,
-    background = Color(0xFF12141A),
+    // Bleu nuit du menu latéral et de la barre du bas (IconesAsset.FondIcones) pour tout le thème.
+    background = Color(0xFF0B1424),
     onBackground = PureWhite,
-    surface = Color(0xFF1B1E27),
+    surface = Color(0xFF111D30),
     onSurface = PureWhite,
-    surfaceVariant = Color(0xFF262A36),
-    onSurfaceVariant = Color(0xFFC2C6D2),
-    outline = Color(0xFF3C4150),
-    outlineVariant = Color(0xFF3C4150),
+    surfaceVariant = Color(0xFF1B2A44),
+    onSurfaceVariant = Color(0xFFC2CBDD),
+    outline = Color(0xFF34476A),
+    outlineVariant = Color(0xFF26375A),
     scrim = ScrimDark,
     inverseSurface = Color(0xFFF5E6E6),
     inverseOnSurface = DeepBlack,
-    inversePrimary = DndRedDark
+    inversePrimary = DndRedDark,
+    // Fenêtres, panneaux du bas, menus : mêmes bleus (sinon le gris par défaut de Material 3).
+    surfaceDim = Color(0xFF0B1424),
+    surfaceBright = Color(0xFF22324F),
+    surfaceContainerLowest = Color(0xFF09111F),
+    surfaceContainerLow = Color(0xFF0F1A2C),
+    surfaceContainer = Color(0xFF132036),
+    surfaceContainerHigh = Color(0xFF17263F),
+    surfaceContainerHighest = Color(0xFF1C2D49),
 )
 
 /** Naheulbeuk Dark Scheme */

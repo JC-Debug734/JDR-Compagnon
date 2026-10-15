@@ -22,6 +22,8 @@ object QuetesJoueur {
         status = status.name,
         giverName = giverCharacterId?.let { id -> characters.firstOrNull { it.id == id }?.name },
         rewards = if (rewardsVisibleToPlayers || status == QuestStatus.TERMINEE) rewards.map { it.resume } else emptyList(),
+        accepteePar = accepteePar,
+        abandonneePar = abandonneePar,
     )
 
     /** Quêtes visibles de la campagne sélectionnée sur cet appareil (MJ et joueurs sur le même appareil). */

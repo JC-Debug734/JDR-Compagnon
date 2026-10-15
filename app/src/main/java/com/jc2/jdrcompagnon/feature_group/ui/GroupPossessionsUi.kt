@@ -77,15 +77,13 @@ internal fun LocationDialog(title: String, initial: String, hint: String? = null
     )
 }
 
+/** Bouton « + Ajouter » en tête du contenu d'une section (le titre est porté par la carte réductible). */
 @Composable
-private fun SectionHeader(title: String, onAdd: (() -> Unit)? = null, addLabel: String = "Ajouter") {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.weight(1f)) { SubsectionTitle(title) }
-        if (onAdd != null) {
-            TextButton(onClick = onAdd) {
-                Icon(Icons.Default.Add, contentDescription = null)
-                Text(addLabel)
-            }
+internal fun BoutonAjout(onAdd: () -> Unit, addLabel: String = "Ajouter", enabled: Boolean = true) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        TextButton(onClick = onAdd, enabled = enabled) {
+            Icon(Icons.Default.Add, contentDescription = null)
+            Text(addLabel)
         }
     }
 }
@@ -117,7 +115,6 @@ internal fun GroupLocationSubsection(group: GameState.MjGroup) {
     var editLieu by remember { mutableStateOf(false) }
     var editOr by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        SubsectionTitle("Position et trésor")
         Row(Modifier.fillMaxWidth().clickable { editLieu = true }, verticalAlignment = Alignment.CenterVertically) {
             Text("📍 Le groupe est à : ", color = Hint)
             Text(group.location.ifBlank { "lieu non précisé" }, color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
@@ -173,7 +170,6 @@ internal fun WhereIsWhatSubsection(group: GameState.MjGroup, members: List<Chara
         group.assets.forEach { add(lieuDe(it.location, group) to "🏠 ${it.name}") }
     }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        SubsectionTitle("Où se trouve quoi")
         if (entrees.isEmpty()) EmptyHint("Rien à localiser pour l'instant.")
         entrees.groupBy({ it.first }, { it.second })
             .toSortedMap(compareBy { it.lowercase() })
@@ -184,48 +180,6 @@ internal fun WhereIsWhatSubsection(group: GameState.MjGroup, members: List<Chara
     }
 }
 
-// --- PNJ de la campagne sélectionnée (hors groupe), par lieu ---
-
-@Composable
-internal fun CampaignPnjsSubsection(group: GameState.MjGroup, onOpenCharacter: (Character) -> Unit) {
-    val campaigns by GameState.mjCampaigns.collectAsState()
-    val campaignId by GameState.currentCampaignId.collectAsState()
-    val characters by GameState.characters.collectAsState()
-    val campaign = campaigns.firstOrNull { it.id == campaignId && it.worldId == group.worldId }
-    val pnjs = campaign?.let { c -> characters.filter { it.id in c.pnjIds && it.id !in group.memberIds } }.orEmpty()
-    var locating by remember { mutableStateOf<Character?>(null) }
-
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        SubsectionTitle("PNJ de la campagne — ${pnjs.size}")
-        when {
-            campaign == null -> EmptyHint("Sélectionnez une campagne pour voir ses PNJ.")
-            pnjs.isEmpty() -> EmptyHint("Aucun PNJ affecté à « ${campaign.title} » (éditeur de campagne).")
-        }
-        pnjs.groupBy { it.location.ifBlank { "Lieu non précisé" } }
-            .toSortedMap(compareBy<String> { it == "Lieu non précisé" }.thenBy { it.lowercase() })
-            .forEach { (lieu, liste) ->
-                Text("📍 $lieu", color = ForcedDarkPalette.AccentGold, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 4.dp))
-                liste.forEach { pnj ->
-                    Row(Modifier.fillMaxWidth().clickable { onOpenCharacter(pnj) }, verticalAlignment = Alignment.CenterVertically) {
-                        val attitude = pnj.groupReputations[group.id]?.let { " — ${ReputationScale.labelFor(it)}" } ?: ""
-                        Text(pnj.name + attitude, color = Color.White, modifier = Modifier.weight(1f))
-                        IconButton(onClick = { locating = pnj }) {
-                            Icon(Icons.Default.Edit, contentDescription = "Changer le lieu", tint = Color.White, modifier = Modifier.size(18.dp))
-                        }
-                    }
-                }
-            }
-    }
-    locating?.let { pnj ->
-        LocationDialog(
-            title = "Où se trouve ${pnj.name} ?",
-            initial = pnj.location,
-            onDismiss = { locating = null },
-            onConfirm = { GameState.setCharacterLocation(pnj.id, it); locating = null },
-        )
-    }
-}
-
 // --- Montures et animaux ---
 
 @Composable
@@ -233,7 +187,7 @@ internal fun MountsSubsection(group: GameState.MjGroup, members: List<Character>
     var editing by remember { mutableStateOf<Mount?>(null) }
     var creating by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        SectionHeader("Montures et animaux — ${group.mounts.size}", onAdd = { creating = true })
+        BoutonAjout(onAdd = { creating = true })
         if (group.mounts.isEmpty()) EmptyHint("Aucune monture ni animal.")
         group.mounts.forEach { mount ->
             val cavalier = mount.riderCharacterId?.let { id -> members.firstOrNull { it.id == id } ?: GameState.characters.value.firstOrNull { it.id == id } }
@@ -248,6 +202,8 @@ internal fun MountsSubsection(group: GameState.MjGroup, members: List<Character>
                     val details = mutableListOf<String>()
                     details.ajouterSi(mount.species.isNotBlank(), mount.species)
                     details.ajouterSi(mount.kind == MountKind.MONTURE, "VIT ${mount.speed} m")
+                    details.ajouterSi(mount.pvMax != null, "PV ${mount.pv ?: mount.pvMax}/${mount.pvMax}")
+                    details.ajouterSi(mount.etat.isNotBlank(), mount.etat)
                     details.ajouterSi(cavalier != null, if (mount.kind == MountKind.MONTURE) "montée par ${cavalier?.name}" else "compagnon de ${cavalier?.name}")
                     details.ajouterSi(attelage != null, "attelée à ${attelage?.name}")
                     details += "📍 ${lieuDe(mount.location, group)}"
@@ -278,6 +234,22 @@ private fun MountDialog(group: GameState.MjGroup, members: List<Character>, init
     var location by remember { mutableStateOf(initial?.location ?: "") }
     var riderId by remember { mutableStateOf(initial?.riderCharacterId) }
     var transportId by remember { mutableStateOf(initial?.transportId) }
+    var pvMax by remember { mutableStateOf(initial?.pvMax?.toString() ?: "") }
+    var pv by remember { mutableStateOf(initial?.pv?.toString() ?: "") }
+    var etat by remember { mutableStateOf(initial?.etat ?: "") }
+    // PV max lus dans le bestiaire d'après l'espèce, tant que le MJ ne les a pas saisis.
+    val context = androidx.compose.ui.platform.LocalContext.current
+    androidx.compose.runtime.LaunchedEffect(species) {
+        if (pvMax.isNotBlank() || species.isBlank()) return@LaunchedEffect
+        kotlinx.coroutines.delay(400)
+        val fiche = com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdRepository.getMonsterByName(context, species.trim(), GameState.currentWorldId())
+            ?: return@LaunchedEffect
+        val pvBestiaire = com.jc2.jdrcompagnon.feature_combat.domain.model.ProfilCombatMonstre.depuisFiche(fiche.rawMarkdown).pvMoyens
+        if (pvMax.isBlank() && pvBestiaire > 0) {
+            pvMax = pvBestiaire.toString()
+            if (pv.isBlank()) pv = pvBestiaire.toString()
+        }
+    }
     val cavaliers = members.filter { it.type == "PJ" || it.type == "PNJ" }
 
     AlertDialog(
@@ -291,6 +263,11 @@ private fun MountDialog(group: GameState.MjGroup, members: List<Character>, init
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Nom") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = species, onValueChange = { species = it }, label = { Text("Espèce (ex. Cheval de trait)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 if (kind == MountKind.MONTURE) NumberField("Vitesse (m)", speed, { speed = it })
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(Modifier.weight(1f)) { NumberField("PV", pv, { pv = it }) }
+                    Box(Modifier.weight(1f)) { NumberField("PV max", pvMax, { pvMax = it }) }
+                }
+                OutlinedTextField(value = etat, onValueChange = { etat = it }, label = { Text("État (ex. Blessé, Effrayé)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 LocationField(value = location, onValueChange = { location = it }, modifier = Modifier.fillMaxWidth())
 
                 Text(if (kind == MountKind.MONTURE) "Cavalier (prend la vitesse de la monture)" else "Maître", style = MaterialTheme.typography.labelLarge)
@@ -335,6 +312,9 @@ private fun MountDialog(group: GameState.MjGroup, members: List<Character>, init
                         kind = kind,
                         speed = speed.toIntOrNull()?.takeIf { it > 0 } ?: 18,
                         location = location.trim(),
+                        pvMax = pvMax.toIntOrNull()?.takeIf { it > 0 },
+                        pv = pvMax.toIntOrNull()?.takeIf { it > 0 }?.let { max -> (pv.toIntOrNull() ?: max).coerceIn(0, max) },
+                        etat = etat.trim(),
                     )
                     if (initial == null) {
                         GameState.updateMjGroup(group.copy(mounts = group.mounts + base))
@@ -359,7 +339,7 @@ internal fun TransportsSubsection(group: GameState.MjGroup, onOpenEquipmentDetai
     var editing by remember { mutableStateOf<Transport?>(null) }
     var creating by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        SectionHeader("Véhicules — ${group.transports.size}", onAdd = { creating = true })
+        BoutonAjout(onAdd = { creating = true })
         if (group.transports.isEmpty()) EmptyHint("Aucun véhicule.")
         group.transports.forEach { transport ->
             val attelees = group.mounts.filter { it.transportId == transport.id }
@@ -483,7 +463,7 @@ private fun TransportDialog(group: GameState.MjGroup, initial: Transport?, onDis
 internal fun ReputationSubsection(group: GameState.MjGroup) {
     var adding by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        SectionHeader("Réputation", onAdd = { adding = true }, addLabel = "Faction")
+        BoutonAjout(onAdd = { adding = true }, addLabel = "Faction")
         if (group.reputations.isEmpty()) EmptyHint("Aucune réputation enregistrée pour l'instant.")
         group.reputations.sortedByDescending { it.score }.forEach { reputation ->
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -537,7 +517,7 @@ internal fun InventorySubsection(group: GameState.MjGroup, members: List<Charact
     var giving by remember { mutableStateOf<GroupItem?>(null) }
     val pj = members.filter { it.type == "PJ" || it.type == "PNJ" }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        SectionHeader("Inventaire du groupe — ${group.inventory.sumOf { it.quantity }}", onAdd = { creating = true })
+        BoutonAjout(onAdd = { creating = true })
         if (group.inventory.isEmpty()) EmptyHint("Inventaire vide. Les équipements gagnés en quête arrivent ici.")
         group.inventory.forEach { item ->
             Row(Modifier.fillMaxWidth().clickable { editing = item }, verticalAlignment = Alignment.CenterVertically) {
@@ -621,7 +601,7 @@ internal fun AssetsSubsection(group: GameState.MjGroup) {
     var editing by remember { mutableStateOf<GroupAsset?>(null) }
     var creating by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        SectionHeader("Biens — ${group.assets.size}", onAdd = { creating = true })
+        BoutonAjout(onAdd = { creating = true })
         if (group.assets.isEmpty()) EmptyHint("Aucun bien (maison, taverne, terrain...).")
         group.assets.forEach { asset ->
             Column(Modifier.fillMaxWidth().clickable { editing = asset }) {

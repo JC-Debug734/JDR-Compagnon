@@ -34,4 +34,16 @@ data class PointInteret(
     val visibleJoueurs: Boolean = false,
     // Événements de la bibliothèque (feature_evenement) rattachés à ce lieu, quel que soit son type.
     val evenementIds: List<String> = emptyList(),
-)
+    // Emblème de la ville (miniature des listes) : "embleme:<clé>" pour un emblème fourni avec
+    // l'app, sinon nom du fichier copié en stockage interne (voir VilleEmblemeStore) ; null = aucun.
+    val embleme: String? = null,
+) {
+    companion object {
+        /**
+         * campagneId d'une ville de la bibliothèque (outil VILLES), rattachée à aucune campagne :
+         * une campagne peut ensuite l'ajouter comme ville existante. Valeur non vide pour rester
+         * utilisable dans les routes de navigation (ville_detail/{campagneId}/{villeId}).
+         */
+        const val SANS_CAMPAGNE = "_sans_campagne"
+    }
+}

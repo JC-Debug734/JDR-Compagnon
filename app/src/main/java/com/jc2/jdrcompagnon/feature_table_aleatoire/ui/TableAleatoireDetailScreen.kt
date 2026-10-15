@@ -69,7 +69,9 @@ import com.jc2.jdrcompagnon.feature_evenement.ui.couleur
 import com.jc2.jdrcompagnon.feature_evenement.ui.icone
 import com.jc2.jdrcompagnon.feature_table_aleatoire.domain.model.EntreeEvenement
 import com.jc2.jdrcompagnon.feature_table_aleatoire.domain.model.EntreeLoot
+import com.jc2.jdrcompagnon.feature_table_aleatoire.domain.model.ExemplesNoms
 import com.jc2.jdrcompagnon.feature_table_aleatoire.domain.model.ResultatLoot
+import com.jc2.jdrcompagnon.feature_table_aleatoire.domain.model.ResultatNom
 import com.jc2.jdrcompagnon.feature_table_aleatoire.domain.model.TypeTable
 import com.jc2.jdrcompagnon.feature_table_aleatoire.presentation.TableAleatoireDetailViewModel
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdRepository
@@ -138,7 +140,8 @@ fun TableAleatoireDetailScreen(
                 singleLine = true
             )
 
-            SubsectionCard(current.id, "Déclenchement") {
+            // Une table de noms se tire à la demande : pas d'horloge ni d'activation.
+            if (current.type != TypeTable.NOMS) SubsectionCard(current.id, "Déclenchement") {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
                         value = current.intervalleHeures.toString(),
@@ -214,6 +217,54 @@ fun TableAleatoireDetailScreen(
                             entrees = current.entreesLoot,
                             worldId = worldId,
                             onEntreesChanged = { misesAJour -> viewModel.mettreAJour(current.copy(entreesLoot = misesAJour)) }
+                        )
+                    }
+                }
+
+                TypeTable.NOMS -> {
+                    SubsectionCard(current.id, "Tirage") {
+                        TirageNomsSection(
+                            disponible = current.prenoms.isNotEmpty() || current.noms.isNotEmpty() || current.pseudos.isNotEmpty(),
+                            onTirer = viewModel::tirerNom,
+                            onRemplirExemples = {
+                                viewModel.mettreAJour(
+                                    current.copy(
+                                        prenoms = (current.prenoms + ExemplesNoms.prenoms).distinct(),
+                                        noms = (current.noms + ExemplesNoms.noms).distinct(),
+                                        pseudos = (current.pseudos + ExemplesNoms.pseudos).distinct()
+                                    )
+                                )
+                            }
+                        )
+                    }
+
+                    SubsectionCard(current.id, "Prénoms (${current.prenoms.size})") {
+                        ListeNomsSection(
+                            valeurs = current.prenoms,
+                            libelleAjout = "Ajouter des prénoms",
+                            onChange = { viewModel.mettreAJour(current.copy(prenoms = it)) },
+                            chanceVide = current.chanceVidePrenom,
+                            onChanceVideChange = { viewModel.mettreAJour(current.copy(chanceVidePrenom = it)) }
+                        )
+                    }
+
+                    SubsectionCard(current.id, "Noms (${current.noms.size})") {
+                        ListeNomsSection(
+                            valeurs = current.noms,
+                            libelleAjout = "Ajouter des noms",
+                            onChange = { viewModel.mettreAJour(current.copy(noms = it)) },
+                            chanceVide = current.chanceVideNom,
+                            onChanceVideChange = { viewModel.mettreAJour(current.copy(chanceVideNom = it)) }
+                        )
+                    }
+
+                    SubsectionCard(current.id, "Pseudos (${current.pseudos.size})") {
+                        ListeNomsSection(
+                            valeurs = current.pseudos,
+                            libelleAjout = "Ajouter des pseudos",
+                            onChange = { viewModel.mettreAJour(current.copy(pseudos = it)) },
+                            chanceVide = current.chanceVidePseudo,
+                            onChanceVideChange = { viewModel.mettreAJour(current.copy(chanceVidePseudo = it)) }
                         )
                     }
                 }
@@ -420,6 +471,118 @@ private fun TirageLootSection(
                 Icon(Icons.Default.Casino, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Tirer du loot")
+            }
+        }
+    }
+}
+
+/**
+ * Tire un seul résultat (prénom, nom, pseudo — chacun pouvant être vide) ; il reste affiché
+ * (sélectionnable) jusqu'au prochain tirage.
+ */
+@Composable
+private fun TirageNomsSection(
+    disponible: Boolean,
+    onTirer: () -> ResultatNom?,
+    onRemplirExemples: () -> Unit,
+) {
+    var resultat by remember { mutableStateOf<ResultatNom?>(null) }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(
+            enabled = disponible,
+            onClick = { resultat = onTirer() },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(Icons.Default.Casino, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Générer un nom")
+        }
+        if (!disponible) {
+            Text(
+                "Ajoutez des prénoms, des noms et/ou des pseudos ci-dessous pour générer un nom.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            OutlinedButton(onClick = onRemplirExemples, modifier = Modifier.fillMaxWidth()) {
+                Text("Remplir avec des exemples")
+            }
+        }
+        resultat?.let { nom ->
+            androidx.compose.foundation.text.selection.SelectionContainer {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(nom.texte, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = Color.White)
+                    Text(
+                        "Prénom : ${nom.prenom.ifBlank { "—" }}   ·   Nom : ${nom.nom.ifBlank { "—" }}   ·   Pseudo : ${nom.pseudo.ifBlank { "—" }}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Liste éditable de prénoms ou de noms : chaque valeur se retire d'une croix ; la saisie accepte
+ * plusieurs valeurs d'un coup, séparées par des virgules, points-virgules ou retours à la ligne
+ * (pratique pour coller une liste). Les doublons sont ignorés.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ListeNomsSection(
+    valeurs: List<String>,
+    libelleAjout: String,
+    onChange: (List<String>) -> Unit,
+    chanceVide: Int,
+    onChanceVideChange: (Int) -> Unit,
+) {
+    var saisie by remember { mutableStateOf("") }
+    // Valeur locale pendant le glissement : la table n'est sauvegardée qu'au relâchement.
+    var chanceVideLocale by remember(chanceVide) { mutableStateOf(chanceVide.toFloat()) }
+    fun ajouter() {
+        val nouveaux = saisie.split(',', ';', '\n').map { it.trim() }.filter { it.isNotEmpty() }
+        if (nouveaux.isNotEmpty()) onChange((valeurs + nouveaux).distinct())
+        saisie = ""
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            "Chance que ce champ soit vide : ${chanceVideLocale.toInt()} %",
+            style = MaterialTheme.typography.bodyMedium,
+            color = Color.White
+        )
+        androidx.compose.material3.Slider(
+            value = chanceVideLocale,
+            onValueChange = { chanceVideLocale = (it / 5f).toInt() * 5f },
+            onValueChangeFinished = { onChanceVideChange(chanceVideLocale.toInt()) },
+            valueRange = 0f..100f
+        )
+        if (valeurs.isEmpty()) {
+            Text("Aucune entrée.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            valeurs.forEach { valeur ->
+                androidx.compose.material3.InputChip(
+                    selected = false,
+                    onClick = { onChange(valeurs - valeur) },
+                    label = { Text(valeur, color = Color.White) },
+                    trailingIcon = {
+                        Icon(Icons.Default.Close, contentDescription = "Retirer $valeur", modifier = Modifier.size(16.dp))
+                    }
+                )
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = saisie,
+                onValueChange = { saisie = it },
+                label = { Text(libelleAjout) },
+                supportingText = { Text("Séparez par des virgules pour en ajouter plusieurs") },
+                modifier = Modifier.weight(1f),
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { ajouter() })
+            )
+            IconButton(onClick = { ajouter() }, enabled = saisie.isNotBlank()) {
+                Icon(Icons.Default.Add, contentDescription = "Ajouter")
             }
         }
     }

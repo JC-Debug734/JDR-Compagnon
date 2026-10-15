@@ -25,7 +25,10 @@ private val LinkTypes = listOf(
     "rule" to "Règle",
     "event" to "Discussion avec un PNJ",
     "epreuve" to "Épreuve environnementale",
-    "evenement" to "Événement (bibliothèque)"
+    "evenement" to "Événement (bibliothèque)",
+    "table" to "Table aléatoire (loot ou événements)",
+    "boss" to "Combat de boss",
+    "boutique" to "Boutique (invitation des joueurs)"
 )
 
 private val typeDisplayNames = mapOf(
@@ -37,7 +40,10 @@ private val typeDisplayNames = mapOf(
     "rule" to "Règle",
     "event" to "Discussion avec un PNJ",
     "epreuve" to "Épreuve",
-    "evenement" to "Événement"
+    "evenement" to "Événement",
+    "table" to "Table aléatoire",
+    "boss" to "Combat de boss",
+    "boutique" to "Boutique"
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -47,6 +53,8 @@ fun EntityLinkPickerDialog(
     onDismiss: () -> Unit,
     onSelect: (type: String, name: String) -> Unit,
     initialType: String = "monster",
+    // Recherche pré-remplie (mot sélectionné par un double appui dans l'éditeur).
+    initialQuery: String = "",
     // Monstres attachés à la campagne du scénario : listés en tête pour le type "Monstre".
     bestiaireCampagne: List<String> = emptyList(),
 ) {
@@ -57,7 +65,7 @@ fun EntityLinkPickerDialog(
     var selected by remember(initialType) {
         mutableStateOf(LinkTypes.find { it.first == initialType } ?: LinkTypes.first())
     }
-    var query by remember { mutableStateOf("") }
+    var query by remember { mutableStateOf(initialQuery) }
     var results by remember { mutableStateOf(listOf<String>()) }
     var isLoading by remember { mutableStateOf(false) }
 
@@ -80,6 +88,14 @@ fun EntityLinkPickerDialog(
                     EvenementDependencies.repository.observerEvenements(monde).first().map { it.titre }.distinct()
                 }.orEmpty()
                 "epreuve" -> com.jc2.jdrcompagnon.di.EpreuveDependencies.epreuvesDuMonde(currentWorldId).map { it.nom }.distinct()
+                "table" -> currentWorldId?.let { monde ->
+                    com.jc2.jdrcompagnon.di.TableAleatoireDependencies.repository.observerTables(monde).first().map { it.nom }.distinct()
+                }.orEmpty()
+                "boss" -> com.jc2.jdrcompagnon.feature_combat.domain.model.BossCatalogue.tous.value.map { it.nom }.filter { it.isNotBlank() }.distinct()
+                // Boutiques de la campagne en cours, et celles communes à toutes les campagnes.
+                "boutique" -> com.jc2.jdrcompagnon.di.BoutiqueDependencies.repository.observerToutesLesBoutiques().first()
+                    .filter { it.campagneId == null || it.campagneId == GameState.currentCampaignId.value }
+                    .map { it.nom }.distinct()
                 else -> emptyList()
             }
             val q = query.trim()
@@ -173,7 +189,8 @@ fun EntityLinkPickerDialog(
                         }
                         items(autresResultats) { name ->
                             TextButton(
-                                onClick = { onSelect(selected.first, name) },
+                                // Un boss se lance par le lien de combat : #combat:[Nom du boss].
+                                onClick = { onSelect(if (selected.first == "boss") "combat" else selected.first, name) },
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text(name)

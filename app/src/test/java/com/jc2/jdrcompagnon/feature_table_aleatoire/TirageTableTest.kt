@@ -3,11 +3,15 @@ package com.jc2.jdrcompagnon.feature_table_aleatoire
 import com.jc2.jdrcompagnon.feature_evenement.domain.model.Evenement
 import com.jc2.jdrcompagnon.feature_evenement.domain.model.TypeEvenement
 import com.jc2.jdrcompagnon.feature_table_aleatoire.domain.model.EntreeEvenement
+import com.jc2.jdrcompagnon.feature_table_aleatoire.domain.model.ResultatNom
 import com.jc2.jdrcompagnon.feature_table_aleatoire.domain.model.TableAleatoire
+import com.jc2.jdrcompagnon.feature_table_aleatoire.domain.model.TypeTable
 import com.jc2.jdrcompagnon.feature_table_aleatoire.domain.usecase.TirageTableUseCase
 import kotlin.random.Random
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TirageTableTest {
@@ -51,5 +55,31 @@ class TirageTableTest {
         val (tableApres, resultat) = tirage.tirerEvenement(table, null, minutesLecture = 120)
         assertNull(resultat)
         assertNull(tableApres.derniereDeclenchementMinutes)
+    }
+
+    @Test
+    fun `une table de noms donne un seul resultat dont les champs peuvent etre vides`() {
+        val table = TableAleatoire(
+            nom = "Noms", type = TypeTable.NOMS,
+            prenoms = listOf("Thorin"), noms = listOf("Forgefer"), pseudos = listOf("le Têtu"),
+            chanceVideNom = 50, chanceVidePseudo = 50
+        )
+        val resultats = (0 until 200).mapNotNull { tirage.tirerNom(table, Random(it)) }
+        assertEquals(200, resultats.size)
+        assertTrue(resultats.all { it.prenom == "Thorin" })
+        assertTrue(resultats.any { it.nom.isEmpty() } && resultats.any { it.nom == "Forgefer" })
+        assertTrue(resultats.any { it.pseudo.isEmpty() } && resultats.any { it.pseudo == "le Têtu" })
+        assertEquals("Thorin Forgefer « le Têtu »", ResultatNom("Thorin", "Forgefer", "le Têtu").texte)
+        assertEquals("« le Têtu »", ResultatNom("", "", "le Têtu").texte)
+    }
+
+    @Test
+    fun `un tirage de noms n'est jamais entierement vide`() {
+        val table = TableAleatoire(
+            nom = "Noms", type = TypeTable.NOMS, prenoms = listOf("Aelar"), pseudos = listOf("l'Archer"),
+            chanceVidePrenom = 100, chanceVideNom = 100, chanceVidePseudo = 100
+        )
+        repeat(20) { assertFalse(tirage.tirerNom(table, Random(it))!!.estVide) }
+        assertNull(tirage.tirerNom(TableAleatoire(nom = "Vide", type = TypeTable.NOMS)))
     }
 }

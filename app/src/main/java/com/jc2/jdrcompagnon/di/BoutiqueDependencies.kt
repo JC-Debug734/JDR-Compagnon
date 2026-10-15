@@ -8,6 +8,8 @@ import com.jc2.jdrcompagnon.core.database.AppDatabase
 import com.jc2.jdrcompagnon.feature_boutique.data.BoutiqueRepository
 import com.jc2.jdrcompagnon.feature_boutique.data.BoutiqueRepositoryImpl
 import com.jc2.jdrcompagnon.feature_boutique.data.SrdEquipementAdapter
+import com.jc2.jdrcompagnon.feature_boutique.domain.model.EquipementReference
+import com.jc2.jdrcompagnon.feature_boutique.domain.model.StandingBoutique
 import com.jc2.jdrcompagnon.feature_boutique.domain.usecase.ApprovisionnerBoutiqueUseCase
 import com.jc2.jdrcompagnon.feature_boutique.domain.usecase.CalculerPrixArticleUseCase
 import com.jc2.jdrcompagnon.feature_boutique.domain.usecase.CreerBoutiqueUseCase
@@ -23,6 +25,8 @@ import com.jc2.jdrcompagnon.feature_boutique.domain.usecase.GenererStandingAleat
 import com.jc2.jdrcompagnon.feature_boutique.domain.usecase.GenererTraitCaractereUseCase
 import com.jc2.jdrcompagnon.feature_boutique.domain.usecase.ListerEquipementsDisponiblesUseCase
 import com.jc2.jdrcompagnon.feature_boutique.domain.usecase.ModifierBoutiqueUseCase
+import com.jc2.jdrcompagnon.feature_boutique.domain.usecase.ReparerPrixBoutiquesUseCase
+import kotlinx.coroutines.launch
 import com.jc2.jdrcompagnon.feature_boutique.presentation.BoutiqueDetailViewModel
 import com.jc2.jdrcompagnon.feature_boutique.presentation.BoutiqueViewModel
 import com.jc2.jdrcompagnon.ui.GameState
@@ -49,7 +53,7 @@ object BoutiqueDependencies {
             AppDatabase::class.java,
             AppDatabase.NOM_BASE
         )
-            .addMigrations(AppDatabase.MIGRATION_7_8, AppDatabase.MIGRATION_11_12, AppDatabase.MIGRATION_12_13, AppDatabase.MIGRATION_13_14, AppDatabase.MIGRATION_14_15, AppDatabase.MIGRATION_15_16, AppDatabase.MIGRATION_16_17, AppDatabase.MIGRATION_17_18, AppDatabase.MIGRATION_18_19, AppDatabase.MIGRATION_19_20, AppDatabase.MIGRATION_20_21, AppDatabase.MIGRATION_21_22, AppDatabase.MIGRATION_22_23)
+            .addMigrations(AppDatabase.MIGRATION_7_8, AppDatabase.MIGRATION_11_12, AppDatabase.MIGRATION_12_13, AppDatabase.MIGRATION_13_14, AppDatabase.MIGRATION_14_15, AppDatabase.MIGRATION_15_16, AppDatabase.MIGRATION_16_17, AppDatabase.MIGRATION_17_18, AppDatabase.MIGRATION_18_19, AppDatabase.MIGRATION_19_20, AppDatabase.MIGRATION_20_21, AppDatabase.MIGRATION_21_22, AppDatabase.MIGRATION_22_23, AppDatabase.MIGRATION_23_24, AppDatabase.MIGRATION_24_25, AppDatabase.MIGRATION_25_26, AppDatabase.MIGRATION_26_27, AppDatabase.MIGRATION_27_28, AppDatabase.MIGRATION_28_29, AppDatabase.MIGRATION_29_30, AppDatabase.MIGRATION_30_31, AppDatabase.MIGRATION_31_32, AppDatabase.MIGRATION_32_33)
             .fallbackToDestructiveMigration(dropAllTables = true)
             .build()
     }
@@ -98,8 +102,25 @@ object BoutiqueDependencies {
         ApprovisionnerBoutiqueUseCase(equipementSource, calculerPrixArticle)
     }
 
+    /** Prix à 0 des anciennes boutiques (« Gratuit ») : réparés une fois au lancement. */
+    fun reparerPrixAZero() {
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            runCatching {
+                ReparerPrixBoutiquesUseCase(repository, equipementSource, calculerPrixArticle, genererServices)(listOf(mondeActif(), "donjon_et_dragon"))
+            }.onFailure { android.util.Log.e("BoutiqueDependencies", "Réparation des prix impossible", it) }
+        }
+    }
+
     /** Le monde actif est lu depuis GameState au moment de l'appel, jamais mis en cache ici. */
     private fun mondeActif(): String = GameState.currentWorld.value?.id ?: "donjon_et_dragon"
+
+    /** Objet du SRD de [monde] portant ce nom (casse ignorée), avec son coût de base ; null = inconnu ou sans prix. */
+    suspend fun equipementSrd(nomObjet: String, monde: String? = null): EquipementReference? =
+        equipementSource.getEquipementsDisponibles(monde?.ifBlank { null } ?: mondeActif())
+            .firstOrNull { it.nom.equals(nomObjet.trim(), ignoreCase = true) }
+
+    /** Prix appliqué par une boutique de ce standing à un objet de ce coût de base. */
+    fun prixEnBoutique(coutBaseEnPc: Int, standing: StandingBoutique): Int = calculerPrixArticle(coutBaseEnPc, standing)
 
     fun newViewModel(): BoutiqueViewModel = BoutiqueViewModel(
         repository = repository,
@@ -107,7 +128,8 @@ object BoutiqueDependencies {
         modifierBoutique = modifierBoutiqueUseCase,
         genererNomBoutique = genererNomBoutiqueUseCase,
         genererNomMarchand = genererNomMarchandUseCase,
-        mondeActif = ::mondeActif
+        mondeActif = ::mondeActif,
+        campagneCourante = GameState.currentCampaignId
     )
 
     fun newDetailViewModel(boutiqueId: String): BoutiqueDetailViewModel = BoutiqueDetailViewModel(

@@ -47,6 +47,10 @@ object EquipmentParser {
      *   **Harmonisation** Oui               (harmonisation requise)
      *   **Harmonisation** Oui (magicien)    (avec prérequis entre parenthèses)
      * À défaut du champ, la mention « harmonisation requise » dans la description suffit.
+     *
+     * Illustration et malédiction (livres personnalisés) :
+     *   **Image** images/chevaliere.webp    (chemin dans l'archive .zip, voir CustomBookImages)
+     *   **Maudit** Oui : texte de l'effet   (une fois équipé, impossible à retirer, voir Malediction)
      */
     private fun parseBoldFields(rawMarkdown: String): List<EquipmentItem> {
         val entries = mutableListOf<EquipmentItem>()
@@ -117,6 +121,7 @@ object EquipmentParser {
 
             val cost = fields["Coût"]?.let { if (it == "-") "" else it } ?: field("Conversion")
             val (harmonisation, prerequis) = parseHarmonisation(field("Harmonisation"), description)
+            val maudit = field("Maudit")
 
             entries.add(
                 EquipmentItem(
@@ -137,6 +142,10 @@ object EquipmentParser {
                     consommable = field("Consommable").equals("Oui", ignoreCase = true),
                     harmonisation = harmonisation,
                     harmonisationPrerequis = prerequis,
+                    image = field("Image").ifBlank { null },
+                    maudit = maudit.startsWith("oui", ignoreCase = true),
+                    malediction = maudit.takeIf { it.startsWith("oui", ignoreCase = true) }
+                        ?.drop(3)?.trim()?.trimStart(':', '.', '-', '—', ',')?.trim().orEmpty(),
                 )
             )
         }

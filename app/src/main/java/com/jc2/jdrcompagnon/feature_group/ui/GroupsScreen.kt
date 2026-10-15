@@ -21,6 +21,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.Row
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -67,17 +68,13 @@ fun GroupsScreen(
                         Icon(Icons.Default.Menu, contentDescription = "Menu")
                     }
                 },
+                actions = {
+                    IconButton(onClick = { showCreateDialog = true }) {
+                        Icon(Icons.Default.Add, contentDescription = "Nouveau groupe", tint = ForcedDarkPalette.AccentGold)
+                    }
+                },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showCreateDialog = true },
-                containerColor = ForcedDarkPalette.AccentGold,
-                contentColor = ForcedDarkPalette.Background
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Nouveau groupe")
-            }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = Color.Transparent
@@ -94,7 +91,6 @@ fun GroupsScreen(
                     SelectableListCard(
                         title = group.name,
                         subtitle = "${group.memberCount} membre(s)" +
-                                (if (group.tablePlayers.isNotEmpty()) " dont ${group.tablePlayers.size} sans fiche" else "") +
                                 (if (group.mounts.isNotEmpty() || group.transports.isNotEmpty())
                                     " · ${group.mounts.size} monture(s)/animal(aux) · ${group.transports.size} véhicule(s)"
                                 else "") +
@@ -113,60 +109,22 @@ fun GroupsScreen(
 
     if (showCreateDialog) {
         var newGroupName by remember { mutableStateOf("") }
-        // Joueurs sans fiche (parties avec des personnes qui n'ont pas l'application) : 0 = groupe
-        // classique, dont les membres seront choisis parmi les fiches existantes.
-        var tablePlayerCount by remember { mutableStateOf(0) }
-        var tablePlayerLevel by remember { mutableStateOf(1) }
         AlertDialog(
             onDismissRequest = { showCreateDialog = false },
             title = { Text("Nouveau groupe") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = newGroupName,
-                        onValueChange = { newGroupName = it },
-                        label = { Text("Nom du groupe") },
-                        singleLine = true
-                    )
-                    Text(
-                        "Joueurs sans fiche (sans l'application) — facultatif",
-                        style = MaterialTheme.typography.labelLarge
-                    )
-                    NumberStepper(
-                        label = "Nombre de joueurs",
-                        value = tablePlayerCount,
-                        range = 0..12,
-                        onValueChange = { tablePlayerCount = it }
-                    )
-                    if (tablePlayerCount > 0) {
-                        NumberStepper(
-                            label = "Niveau des joueurs",
-                            value = tablePlayerLevel,
-                            range = 1..20,
-                            onValueChange = { tablePlayerLevel = it }
-                        )
-                        Text(
-                            "Chaque joueur reste modifiable ensuite (nom, niveau, CA, PV).",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                }
+                OutlinedTextField(
+                    value = newGroupName,
+                    onValueChange = { newGroupName = it },
+                    label = { Text("Nom du groupe") },
+                    singleLine = true
+                )
             },
             confirmButton = {
                 TextButton(
                     onClick = {
                         if (newGroupName.isNotBlank()) {
-                            val group = GameState.MjGroup(
-                                name = newGroupName,
-                                worldId = worldId ?: "",
-                                tablePlayers = (1..tablePlayerCount).map { index ->
-                                    GameState.TablePlayer(
-                                        name = "Joueur $index",
-                                        level = tablePlayerLevel,
-                                        maxHitPoints = GameState.TablePlayer.estimatedHitPoints(tablePlayerLevel),
-                                    )
-                                }
-                            )
+                            val group = GameState.MjGroup(name = newGroupName, worldId = worldId ?: "")
                             GameState.addMjGroup(group)
                             showCreateDialog = false
                         } else {
@@ -235,7 +193,7 @@ private fun EmptyGroupsState(worldName: String) {
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Appuyez sur + pour créer un groupe.",
+                text = "Appuyez sur + en haut à droite pour créer un groupe.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color.White
             )

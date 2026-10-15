@@ -6,7 +6,9 @@ import java.util.UUID
 /** Nature du contenu d'une table aléatoire : détermine quelle liste d'entrées est utilisée. */
 enum class TypeTable(val label: String) {
     EVENEMENTS("Événements"),
-    LOOT("Loot")
+    LOOT("Loot"),
+    /** Générateur de noms (prénom + nom) : tiré à la demande, jamais déclenché par l'horloge. */
+    NOMS("Noms")
 }
 
 /**
@@ -52,12 +54,49 @@ data class TableAleatoire(
     val active: Boolean = true,
     val derniereDeclenchementMinutes: Long? = null,
     val entreesEvenements: List<EntreeEvenement> = emptyList(),
-    val entreesLoot: List<EntreeLoot> = emptyList()
+    val entreesLoot: List<EntreeLoot> = emptyList(),
+    // Table de type NOMS : un tirage = un prénom + un nom de famille + un pseudo (voir
+    // TirageTableUseCase.tirerNom). Chaque champ peut ressortir vide selon sa chance (en %).
+    val prenoms: List<String> = emptyList(),
+    val noms: List<String> = emptyList(),
+    val pseudos: List<String> = emptyList(),
+    val chanceVidePrenom: Int = 0,
+    val chanceVideNom: Int = 0,
+    val chanceVidePseudo: Int = 0
 ) {
     /** Nombre d'entrées de la liste effectivement utilisée par [type], pour l'affichage liste. */
     val nombreEntrees: Int
         get() = when (type) {
             TypeTable.EVENEMENTS -> entreesEvenements.size
             TypeTable.LOOT -> entreesLoot.size
+            TypeTable.NOMS -> prenoms.size + noms.size + pseudos.size
         }
+}
+
+/** Résultat d'un tirage dans une table de noms : chaque champ peut être vide (""). */
+data class ResultatNom(val prenom: String, val nom: String, val pseudo: String) {
+    val estVide: Boolean get() = prenom.isBlank() && nom.isBlank() && pseudo.isBlank()
+
+    /** « Prénom Nom « Pseudo » », en omettant les champs vides. */
+    val texte: String
+        get() = listOf(prenom, nom).filter { it.isNotBlank() }.joinToString(" ")
+            .let { base -> if (pseudo.isBlank()) base else listOf(base, "« $pseudo »").filter { it.isNotBlank() }.joinToString(" ") }
+}
+
+/** Exemples proposés dans une table de noms vide (bouton « Remplir avec des exemples »). */
+object ExemplesNoms {
+    val prenoms = listOf(
+        "Aldric", "Brenna", "Cédric", "Dorian", "Elara", "Faelan", "Gwendolyn", "Hector",
+        "Isolde", "Joran", "Kaela", "Lorcan", "Maëlys", "Néréa", "Osric", "Perrine",
+        "Quentin", "Rowena", "Séraphin", "Tamsin", "Ulric", "Vivienne", "Wilhelm", "Ysolde"
+    )
+    val noms = listOf(
+        "Boisclair", "Cendrebrume", "Dufer", "Forgefeu", "Gristepierre", "Hautval", "Lamontagne",
+        "Lerouge", "Marchebois", "Noirval", "Pierrelune", "Rochefort", "Sombreval", "Tourmente",
+        "Valcourt", "Ventfroid"
+    )
+    val pseudos = listOf(
+        "le Rouge", "la Fouine", "Main-Leste", "le Borgne", "la Pie", "Cœur-Vaillant",
+        "le Sage", "Deux-Lames", "la Muette", "le Balafré", "Pied-Léger", "le Vieux"
+    )
 }

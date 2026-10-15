@@ -43,6 +43,12 @@ object VilleImageStore {
         _version.value++
     }
 
+    /** Copie l'illustration d'une ville vers une autre (ville copiée dans une autre campagne). */
+    fun dupliquer(context: Context, sourceId: String, cibleId: String) {
+        val source = fichier(context, sourceId).takeIf { it.exists() } ?: return
+        runCatching { source.copyTo(fichier(context, cibleId), overwrite = true) }.onSuccess { _version.value++ }
+    }
+
     fun supprimer(context: Context, villeId: String) {
         if (fichier(context, villeId).delete()) _version.value++
     }

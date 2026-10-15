@@ -11,6 +11,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -40,8 +43,6 @@ import androidx.compose.material.icons.filled.RotateRight
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Explore
-import com.jc2.jdrcompagnon.feature_exploration.ExplorationSession
 import androidx.compose.material.icons.filled.LocationOff
 import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.Image as ImageIcon
@@ -55,7 +56,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -69,6 +70,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -104,7 +106,6 @@ import com.jc2.jdrcompagnon.feature_carte.presentation.CarteUiState
 import com.jc2.jdrcompagnon.di.CarteDependencies
 import com.jc2.jdrcompagnon.di.EvenementDependencies
 import com.jc2.jdrcompagnon.feature_evenement.ui.EvenementsLiesSection
-import com.jc2.jdrcompagnon.feature_exploration.LieuExploration
 import androidx.compose.material.icons.filled.GridOff
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Flag
@@ -139,11 +140,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
-
-/** Écritures lancées depuis l'exploration, qui peut rester ouverte après avoir quitté la carte. */
-private val scopePersistance = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
 /** Palette fixe proposée pour la couleur des traits de la grille (Int ARGB, même format que android.graphics.Color). */
 private val PALETTE_GRILLE: List<Int> = listOf(
@@ -155,6 +154,24 @@ private val PALETTE_GRILLE: List<Int> = listOf(
  * fixe, indépendante de la taille des cases de la grille réglée par le MJ.
  */
 private val TAILLE_CASE_REFERENCE = 36.dp
+
+/**
+ * Taille des icônes de lieux (dp, avant zoom) qui évite qu'elles se chevauchent : 90 % de l'écart
+ * entre les deux lieux les plus proches, sans dépasser [maximum] ni descendre sous 16 dp (en dessous,
+ * le MJ zoome). [positions] : centres des lieux en dp sur la carte non zoomée.
+ */
+internal fun tailleIconesSansChevauchement(positions: List<Pair<Float, Float>>, maximum: Float): Float {
+    var ecartMin = Float.MAX_VALUE
+    for (i in positions.indices) for (j in i + 1 until positions.size) {
+        val dx = positions[i].first - positions[j].first
+        val dy = positions[i].second - positions[j].second
+        val d = kotlin.math.sqrt(dx * dx + dy * dy)
+        // Deux lieux au même endroit (empilés volontairement) ne réduisent pas toutes les icônes.
+        if (d > 1f && d < ecartMin) ecartMin = d
+    }
+    if (ecartMin == Float.MAX_VALUE) return maximum
+    return (ecartMin * 0.9f).coerceIn(16f, maximum)
+}
 
 /** Étape d'un tracé en mode mesure : un lieu ([pointId]) ou un point libre, en fractions de la carte. */
 private data class EtapeTrace(val pointId: String?, val fx: Float, val fy: Float)
@@ -248,7 +265,10 @@ fun CarteCampagneScreen(
     var caseSizeDp by remember(cleCarte) { mutableStateOf(CarteGrillePrefs.tailleCaseDp(context, cleCarte)) }
     var couleurGrilleArgb by remember(cleCarte) { mutableStateOf(CarteGrillePrefs.couleurGrille(context, cleCarte)) }
     var epaisseurLigneDp by remember(cleCarte) { mutableStateOf(CarteGrillePrefs.epaisseurLigneDp(context, cleCarte)) }
-    var afficherNoms by remember(cleCarte) { mutableStateOf(CarteGrillePrefs.afficherNoms(context, cleCarte)) }
+    // Réglages d'affichage modifiés ailleurs (joueur : reçus du MJ) : relus à chaque changement.
+    val versionGrille by CarteGrillePrefs.version.collectAsState()
+    val versionPoints by CartePointPrefs.version.collectAsState()
+    var afficherNoms by remember(cleCarte, versionGrille) { mutableStateOf(CarteGrillePrefs.afficherNoms(context, cleCarte)) }
     var afficherGrille by remember(cleCarte) { mutableStateOf(CarteGrillePrefs.afficherGrille(context, cleCarte)) }
     var iconesVerrouillees by remember(cleCarte) { mutableStateOf(CarteGrillePrefs.iconesVerrouillees(context, cleCarte)) }
     // Orientation de la carte (MJ, par quarts de tour) et celle enregistrée par défaut.
@@ -256,11 +276,14 @@ fun CarteCampagneScreen(
     var rotation by remember(cleCarte) { mutableStateOf(rotationDefaut) }
     val tourne = rotation % 180 != 0
     // Réglages d'affichage modifiés pendant la session ; les autres sont relus dans les préférences.
-    var reglagesPoints by remember(cleCarte) { mutableStateOf(mapOf<String, ReglagePoint>()) }
+    var reglagesPoints by remember(cleCarte, versionPoints) { mutableStateOf(mapOf<String, ReglagePoint>()) }
     fun reglageDe(pointId: String): ReglagePoint = reglagesPoints[pointId] ?: CartePointPrefs.lire(context, pointId)
+    // Réglages d'affichage modifiés (taille d'icône, noms) : la page table les reprend (CarteTable).
+    var versionAffichageTable by remember(cleCarte) { mutableStateOf(0) }
     fun majReglage(pointId: String, reglage: ReglagePoint) {
         reglagesPoints = reglagesPoints + (pointId to reglage)
         CartePointPrefs.ecrire(context, pointId, reglage)
+        versionAffichageTable++
     }
     var zoom by remember(cleCarte) { mutableStateOf(1f) }
     val caseSize = caseSizeDp.dp
@@ -268,6 +291,13 @@ fun CarteCampagneScreen(
     val density = LocalDensity.current
 
     val carteActuelle = (uiState as? CarteUiState.Success)?.carte
+    // MJ en mode exploration : la carte s'ouvre automatiquement chez les joueurs connectés.
+    val carteOuverteId = carteActuelle?.id?.takeIf { !readOnly && modeMesure }
+    DisposableEffect(campagneId, carteOuverteId) {
+        val ouverte = carteOuverteId?.let { com.jc2.jdrcompagnon.network.CarteOuverteData(campagneId, it) }
+        if (ouverte != null) NetworkSessionManager.signalerCarteOuverte(ouverte)
+        onDispose { ouverte?.let { NetworkSessionManager.quitterCarteOuverte(it) } }
+    }
     val imageFileName = carteActuelle?.imageFileName
     val imageFondBitmap = remember(imageFileName) {
         imageFileName?.let {
@@ -299,11 +329,15 @@ fun CarteCampagneScreen(
     }
     LaunchedEffect(tailleVue, tailleBasePx) { bornerDecalage(decalageX, decalageY) }
 
-    /** Centre de l'icône en fractions de la carte (un ancien point est centré sur sa case). */
+    /**
+     * Centre de l'icône en fractions de la carte. Un point sans position libre (lieu importé avec
+     * "x"/"y") est centré sur sa case de la grille de la carte (largeurCases × hauteurCases), que
+     * la carte ait une image de fond ou non.
+     */
     fun positionDe(point: PointInteret): Pair<Float, Float> =
         if (point.fx != null && point.fy != null) point.fx to point.fy
-        else ((point.x + 0.5f) * TAILLE_CASE_REFERENCE.value / largeurBase.value).coerceIn(0f, 1f) to
-            ((point.y + 0.5f) * TAILLE_CASE_REFERENCE.value / hauteurBase.value).coerceIn(0f, 1f)
+        else ((point.x + 0.5f) / (carteActuelle?.largeurCases ?: 20).coerceAtLeast(1)).coerceIn(0f, 1f) to
+            ((point.y + 0.5f) / (carteActuelle?.hauteurCases ?: 15).coerceAtLeast(1)).coerceIn(0f, 1f)
 
     // Cases sur la largeur/hauteur de la carte, base des distances : imposées par le MJ côté joueur
     // (mêmes mesures quel que soit l'écran), sinon déduites de la taille des cases réglée.
@@ -317,8 +351,24 @@ fun CarteCampagneScreen(
 
     // Lieux transmis à l'exploration : les joueurs voient ceux que le MJ y rend visibles.
     val pointsCarte = (uiState as? CarteUiState.Success)?.points.orEmpty()
+    // MJ : la page table suit les lieux de cette carte quand elle y est affichée (« Visible des
+    // joueurs » coché ou décoché, lieu déplacé ou renommé, taille d'icône ou nom réglé).
+    if (!readOnly) {
+        LaunchedEffect((uiState as? CarteUiState.Success)?.carte, pointsCarte, versionAffichageTable) {
+            (uiState as? CarteUiState.Success)?.carte?.let { CarteTable.majSiAffichee(context, it, pointsCarte) }
+        }
+    }
     // Côté joueur, un lieu non révélé par le MJ n'apparaît pas.
     val pointsAffiches = if (readOnly) pointsCarte.filter { it.visibleJoueurs } else pointsCarte
+
+    // Taille de base des icônes (avant zoom) : réduite quand des lieux sont proches les uns des
+    // autres, pour qu'elles ne se chevauchent pas (voir tailleIconesSansChevauchement).
+    val tailleIcones: Dp = remember(pointsAffiches, largeurBase, hauteurBase) {
+        tailleIconesSansChevauchement(
+            pointsAffiches.map { p -> positionDe(p).let { (fx, fy) -> fx * largeurBase.value to fy * hauteurBase.value } },
+            TAILLE_CASE_REFERENCE.value,
+        ).dp
+    }
 
     // Position du groupe sur cette carte : placée par le MJ, sinon sur le lieu où il se trouve.
     val positionGroupe: Pair<Float, Float>? = groupeCarte?.let { g ->
@@ -332,7 +382,7 @@ fun CarteCampagneScreen(
             val (px, py) = positionDe(p)
             val dx = (px - gx) * largeurBase.value
             val dy = (py - gy) * hauteurBase.value
-            dx * dx + dy * dy <= (TAILLE_CASE_REFERENCE.value * 0.5f).let { it * it }
+            dx * dx + dy * dy <= (tailleIcones.value * 0.5f).let { it * it }
         }
     }
     val iconeGroupe = IconesPointInteret.iconeGroupe(groupeCarte?.iconKey)
@@ -355,13 +405,6 @@ fun CarteCampagneScreen(
             !readOnly && groupeCarte != null -> iconeGroupeOuverte = true
         }
     }
-    val lieuxExploration = pointsCarte.map { p ->
-        val (fx, fy) = positionDe(p)
-        LieuExploration(p.id, p.nom, fx, fy, IconesPointInteret.emojiPour(p.type, p.iconKey), p.couleurArgb, p.visibleJoueurs)
-    }
-    LaunchedEffect(lieuxExploration, carteActuelle?.id) {
-        carteActuelle?.let { ExplorationSession.majLieux(context, "carte:${it.id}", lieuxExploration) }
-    }
 
     val choisirImageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
@@ -379,26 +422,9 @@ fun CarteCampagneScreen(
                         IconButton(onClick = onOpenMenu) { Icon(Icons.Default.Menu, contentDescription = "Menu") }
                     },
                     actions = {
-                        if (!readOnly) {
+                        if (!readOnly && !modeMesure) {
                             IconButton(onClick = { showGrilleDialog = true }) {
                                 Icon(Icons.Default.GridOn, contentDescription = "Réglages de la grille")
-                            }
-                        }
-                        // Exploration (brouillard de guerre sur la page table) : seulement pour le
-                        // MJ, et sur une carte qui a une image de fond à dévoiler.
-                        if (!readOnly && carteActuelle?.imageFileName != null) {
-                            IconButton(onClick = {
-                                val fichier = CarteImageStore.fichier(context, carteActuelle.imageFileName!!)
-                                ExplorationSession.ouvrirEcran(
-                                    context, "carte:${carteActuelle.id}", carteActuelle.nom, fichier,
-                                    lieux = lieuxExploration,
-                                    // Hors du ViewModel : l'exploration reste ouverte après avoir quitté la carte.
-                                    onVisibiliteLieu = { id, visible ->
-                                        scopePersistance.launch { CarteDependencies.repository.definirVisibiliteJoueurs(id, visible) }
-                                    },
-                                )
-                            }) {
-                                Icon(Icons.Default.Explore, contentDescription = "Exploration (brouillard sur la table)")
                             }
                         }
                         if (!readOnly) {
@@ -425,20 +451,42 @@ fun CarteCampagneScreen(
                                 }
                             }
                         }
-                        // Joueur : toujours en mesure, pas de mode édition.
+                        // Deux modes pour le MJ : Exploration (mesure des distances, voyage, brouillard
+                        // sur la table) et Éditer (lieux, groupe). Joueur : toujours en exploration.
                         if (!readOnly) {
-                            FilterChip(
-                                selected = modeMesure,
-                                onClick = {
-                                    modeMesure = !modeMesure
-                                    placementGroupe = false
+                            fun changerMode(exploration: Boolean) {
+                                if (modeMesure == exploration) return
+                                modeMesure = exploration
+                                placementGroupe = false
+                                // Quitter l'exploration efface le tracé, pour tout le monde (tracé
+                                // partagé) ; y revenir garde celui en cours (d'un joueur, par exemple).
+                                if (!exploration) {
                                     trace = emptyList()
                                     traceTermine = false
-                                },
-                                label = { Text(if (modeMesure) "Mesurer" else "Éditer") },
-                                leadingIcon = { Icon(Icons.Default.NearMe, contentDescription = null) },
-                                modifier = Modifier.padding(end = 12.dp)
-                            )
+                                }
+                                // Explorer la carte : elle apparaît aussitôt sur la page table (avec
+                                // ses lieux visibles des joueurs) si la partie est hébergée.
+                                if (exploration) carteActuelle?.let { carte ->
+                                    envoyerCarteALaTable(context, carte, rotation, pointsCarte, silencieux = true)
+                                }
+                            }
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.padding(end = 8.dp)
+                            ) {
+                                FilterChip(
+                                    selected = modeMesure,
+                                    onClick = { changerMode(true) },
+                                    label = { Text("Exploration") },
+                                    leadingIcon = { Icon(Icons.Default.NearMe, contentDescription = null) },
+                                )
+                                FilterChip(
+                                    selected = !modeMesure,
+                                    onClick = { changerMode(false) },
+                                    label = { Text("Éditer") },
+                                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                                )
+                            }
                         }
                     },
                 )
@@ -544,19 +592,14 @@ fun CarteCampagneScreen(
                                 contentDescription = if (iconesVerrouillees) "Déverrouiller les icônes" else "Verrouiller les icônes"
                             )
                         }
+                        // Nouveau lieu, posé au centre de la carte (à déplacer ensuite en le glissant).
+                        IconButton(onClick = { nouveauPointPosition = 0.5f to 0.5f }) {
+                            Icon(Icons.Default.Add, contentDescription = "Nouveau point")
+                        }
                     }
                 }
             }
         },
-        floatingActionButton = {
-            if (!modeMesure && !readOnly) {
-                ExtendedFloatingActionButton(
-                    onClick = { nouveauPointPosition = 0.5f to 0.5f },
-                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                    text = { Text("Nouveau point") }
-                )
-            }
-        }
     ) { padding ->
         when (val state = uiState) {
             is CarteUiState.Loading -> Box(Modifier.fillMaxSize().padding(padding)) {
@@ -615,6 +658,71 @@ fun CarteCampagneScreen(
                     heuresMax = v.heuresMax
                     modeMesure = true
                 }
+                // ── Tracé partagé (TraceCarteSession) : le tracé du MJ ou d'un joueur apparaît sur
+                // toutes les vues (écrans, page table), et chacune cadre le trajet une fois terminé. ──
+                val traceSession by com.jc2.jdrcompagnon.feature_carte.presentation.TraceCarteSession.etat.collectAsState()
+                fun etapesReseau() = trace.map { com.jc2.jdrcompagnon.network.EtapeVoyageData(it.pointId, it.fx, it.fy) }
+                // Le tracé partagé est repris avant que cet écran ne publie le sien : à l'ouverture,
+                // le tracé (vide) de l'écran n'efface pas celui des autres.
+                var traceRepris by remember(state.carte.id) { mutableStateOf(false) }
+                LaunchedEffect(traceSession, state.carte.id) {
+                    val t = traceSession?.takeIf { it.carteId == state.carte.id }
+                    if (t != null && (etapesReseau() != t.etapes || traceTermine != t.termine)) {
+                        trace = t.etapes.map { EtapeTrace(it.pointId, it.fx, it.fy) }
+                        traceTermine = t.termine
+                    }
+                    traceRepris = true
+                }
+                LaunchedEffect(trace, traceTermine, traceRepris) {
+                    if (!traceRepris) return@LaunchedEffect
+                    val partage = com.jc2.jdrcompagnon.feature_carte.presentation.TraceCarteSession.etat.value
+                    // Rien de tracé ici : le tracé d'une autre carte n'est pas effacé pour autant.
+                    if (trace.isEmpty() && partage?.carteId != state.carte.id) return@LaunchedEffect
+                    com.jc2.jdrcompagnon.feature_carte.presentation.TraceCarteSession.publier(
+                        com.jc2.jdrcompagnon.network.TraceCarteData(campagneId, state.carte.id, etapesReseau(), traceTermine, nomMoi)
+                    )
+                }
+                // Tracé terminé (« Fin de tracé » ou route partagée reçue) : la carte zoome pour
+                // cadrer le trajet, du départ à l'arrivée, chez celui qui le regarde.
+                LaunchedEffect(traceTermine, trace.size, trace.firstOrNull(), trace.lastOrNull()) {
+                    if (!traceTermine || trace.size < 2 || tailleVue.width == 0 || tailleVue.height == 0) return@LaunchedEffect
+                    // Position affichée (carte éventuellement tournée par quarts de tour).
+                    fun affiche(fx: Float, fy: Float): Pair<Float, Float> = when (rotation) {
+                        90 -> (1f - fy) to fx
+                        180 -> (1f - fx) to (1f - fy)
+                        270 -> fy to (1f - fx)
+                        else -> fx to fy
+                    }
+                    val points = trace.map { affiche(it.fx, it.fy) }
+                    val (lPx, hPx) = tailleBasePx
+                    val minX = points.minOf { it.first }
+                    val maxX = points.maxOf { it.first }
+                    val minY = points.minOf { it.second }
+                    val maxY = points.maxOf { it.second }
+                    // Marge autour du trajet ; un trajet très court n'est pas grossi à l'excès.
+                    val largeurTrajet = ((maxX - minX) * lPx * 1.5f).coerceAtLeast(tailleVue.width / 4f)
+                    val hauteurTrajet = ((maxY - minY) * hPx * 1.5f).coerceAtLeast(tailleVue.height / 4f)
+                    val nouveauZoom = minOf(tailleVue.width / largeurTrajet, tailleVue.height / hauteurTrajet).coerceIn(0.5f, 4f)
+                    zoom = nouveauZoom
+                    bornerDecalage(
+                        (minX + maxX) / 2f * lPx * nouveauZoom - tailleVue.width / 2f,
+                        (minY + maxY) / 2f * hPx * nouveauZoom - tailleVue.height / 2f,
+                    )
+                }
+                // Voyage terminé (le groupe est arrivé) : le tracé disparaît de la carte, chez le MJ
+                // comme chez les joueurs. Un voyage annulé avant le départ laisse le tracé en place.
+                var voyageEnRoute by remember { mutableStateOf<String?>(null) }
+                LaunchedEffect(voyage?.id, voyage?.enRoute) {
+                    val v = voyage
+                    when {
+                        v?.enRoute == true -> voyageEnRoute = v.id
+                        v == null && voyageEnRoute != null -> {
+                            trace = emptyList()
+                            traceTermine = false
+                            voyageEnRoute = null
+                        }
+                    }
+                }
                 // MJ : changer la route, l'allure ou les heures de marche par jour (les haltes)
                 // modifie le voyage partagé ; chacun doit alors le revalider.
                 LaunchedEffect(trace, traceTermine, choixVitesse, heuresMax) {
@@ -651,41 +759,6 @@ fun CarteCampagneScreen(
                             color = Color(0xFFFFD54F),
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                         )
-                    }
-                    if (modeMesure) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-                        ) {
-                            // Route terminée (« Fin de tracé ») ou route partagée : on se déclare prêt.
-                            Button(
-                                onClick = { pretAuDepart() },
-                                // Un tracé qui ne part pas du groupe n'est qu'une mesure : pas de départ.
-                                enabled = !dejaPret && voyageIci?.enRoute != true && (maRoute != null || afficheRoutePartagee),
-                            ) {
-                                Icon(Icons.Default.Flag, contentDescription = null)
-                                Spacer(Modifier.width(6.dp))
-                                Text(if (dejaPret) "Prêt ✔" else "Prêt au départ")
-                            }
-                            voyageIci?.let { v ->
-                                Text(
-                                    if (v.enRoute) "En route vers ${v.arriveeNom}"
-                                    else "Prêts ${(if (v.mjPret) 1 else 0) + v.prets.size}/${v.attendus.size + 1}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                            }
-                            Spacer(Modifier.weight(1f))
-                            // Départ depuis la position du groupe.
-                            if (positionGroupe != null && (trace.isEmpty() || traceTermine)) {
-                                TextButton(onClick = {
-                                    trace = listOf(EtapeTrace(ETAPE_GROUPE, positionGroupe.first, positionGroupe.second))
-                                    traceTermine = false
-                                }) { Text("Partir du groupe") }
-                            }
-                        }
                     }
                     Box(
                         modifier = Modifier
@@ -804,7 +877,7 @@ fun CarteCampagneScreen(
                                     when {
                                         modeMesure -> ajouterEtape(EtapeTrace(null, fx, fy))
                                         placementGroupe -> placerGroupe(fx, fy, null)
-                                        !readOnly -> nouveauPointPosition = fx to fy
+                                        // Toucher la carte ne crée plus de lieu : bouton « + » de la barre.
                                     }
                                 }
                             )
@@ -817,7 +890,7 @@ fun CarteCampagneScreen(
                                     fy = fy,
                                     largeurBox = largeurBox,
                                     hauteurBox = hauteurBox,
-                                    tailleBase = TAILLE_CASE_REFERENCE * zoom,
+                                    tailleBase = tailleIcones * zoom,
                                     // Numéro de la (première) étape du tracé sur ce lieu.
                                     marqueMesure = if (modeMesure) {
                                         trace.indexOfFirst { it.pointId == point.id }.takeIf { it >= 0 }?.let { "${it + 1}" }
@@ -862,7 +935,7 @@ fun CarteCampagneScreen(
                                     fy = gy,
                                     largeurBox = largeurBox,
                                     hauteurBox = hauteurBox,
-                                    taille = TAILLE_CASE_REFERENCE * zoom * 1.1f,
+                                    taille = tailleIcones * zoom * 1.1f,
                                     couleur = couleurGroupe,
                                     icone = iconeGroupe,
                                     libelle = groupeCarte?.name ?: "Groupe",
@@ -875,7 +948,7 @@ fun CarteCampagneScreen(
                                             val (px, py) = positionDe(p)
                                             val dx = (px - nfx) * largeurBase.value
                                             val dy = (py - nfy) * hauteurBase.value
-                                            dx * dx + dy * dy <= (TAILLE_CASE_REFERENCE.value * 0.75f).let { it * it }
+                                            dx * dx + dy * dy <= (tailleIcones.value * 0.75f).let { it * it }
                                         }
                                         if (lieu != null) positionDe(lieu).let { (lx, ly) -> placerGroupe(lx, ly, lieu.nom) }
                                         else placerGroupe(nfx, nfy, null)
@@ -887,26 +960,100 @@ fun CarteCampagneScreen(
                         }
                     }
 
-                    if (modeMesure && trace.isNotEmpty()) {
+                    // Panneau du tracé : compact (une ligne, comme au simple départ) ; les détails
+                    // (allure, haltes, voyage partagé...) s'ouvrent en glissant vers le haut.
+                    val peutPartirDuGroupe = positionGroupe != null && (trace.isEmpty() || traceTermine)
+                    if (modeMesure && (trace.isNotEmpty() || peutPartirDuGroupe || voyageIci != null)) {
+                        var detailsOuverts by remember { mutableStateOf(false) }
+                        val peutPartir = !dejaPret && voyageIci?.enRoute != true && (maRoute != null || afficheRoutePartagee)
                         Card(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
                             Column(
-                                modifier = Modifier
-                                    .heightIn(max = 300.dp)
-                                    .verticalScroll(rememberScrollState())
-                                    .padding(12.dp),
+                                modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
                                 verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        if (trace.size == 1) "Départ : ${nomEtape(trace.first())}"
-                                        else "${nomEtape(trace.first())} → ${nomEtape(trace.last())} · ${trace.size - 1} segment(s)",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        modifier = Modifier.weight(1f)
+                                // En-tête (poignée + résumé) : glisser vers le haut ouvre les détails, vers le
+                                // bas les referme. Hors de la zone défilante, qui capterait sinon le geste.
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .pointerInput(Unit) {
+                                            var cumul = 0f
+                                            detectVerticalDragGestures(
+                                                onDragStart = { cumul = 0f },
+                                                onDragEnd = {
+                                                    if (cumul < -30f) detailsOuverts = true
+                                                    if (cumul > 30f) detailsOuverts = false
+                                                },
+                                            ) { change, dy -> cumul += dy; change.consume() }
+                                        }
+                                ) {
+                                // Poignée : glisser vers le haut (ou toucher) pour les détails.
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { detailsOuverts = !detailsOuverts }
+                                        .padding(vertical = 6.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Box(
+                                        Modifier
+                                            .width(36.dp)
+                                            .height(4.dp)
+                                            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(2.dp))
                                     )
-                                    if (!traceTermine) {
+                                }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            when {
+                                                trace.isEmpty() -> "Tracez un trajet sur la carte"
+                                                trace.size == 1 -> "Départ : ${nomEtape(trace.first())}"
+                                                else -> "${nomEtape(trace.first())} → ${nomEtape(trace.last())}"
+                                            },
+                                            style = MaterialTheme.typography.titleSmall,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        val resume = listOfNotNull(
+                                            plan?.let { "%.1f km · %d jour(s)".format(it.distanceKm, it.jours) },
+                                            voyageIci?.let { v ->
+                                                if (v.enRoute) "en route vers ${v.arriveeNom}"
+                                                else "prêts ${(if (v.mjPret) 1 else 0) + v.prets.size}/${v.attendus.size + 1}"
+                                            },
+                                        ).joinToString(" · ")
+                                        if (resume.isNotBlank()) {
+                                            Text(resume, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                                        }
+                                    }
+                                    when {
+                                        !traceTermine && trace.size >= 2 -> TextButton(onClick = { traceTermine = true }) { Text("Fin de tracé") }
+                                        peutPartir || dejaPret -> TextButton(onClick = { pretAuDepart() }, enabled = peutPartir) {
+                                            Text(if (dejaPret) "Prêt ✔" else "Prêt au départ")
+                                        }
+                                        peutPartirDuGroupe -> TextButton(onClick = {
+                                            trace = listOf(EtapeTrace(ETAPE_GROUPE, positionGroupe!!.first, positionGroupe.second))
+                                            traceTermine = false
+                                        }) { Text("Partir du groupe") }
+                                    }
+                                    if (!traceTermine && trace.isNotEmpty()) {
                                         TextButton(onClick = { trace = trace.dropLast(1) }) { Text("Annuler") }
                                     }
+                                    // MJ : efface tout le tracé (le sien ou celui d'un joueur) pour tout le
+                                    // monde, et annule le voyage partagé, même déjà en route.
+                                    if (!readOnly && (trace.isNotEmpty() || voyageIci != null)) {
+                                        IconButton(onClick = {
+                                            if (voyageIci != null) session.annuler()
+                                            trace = emptyList()
+                                            traceTermine = false
+                                        }) { Icon(Icons.Default.Close, contentDescription = "Annuler le tracé") }
+                                    }
                                 }
+                                }
+                                if (detailsOuverts) {
+                                Column(
+                                    modifier = Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState()),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
                                 if (trace.size >= 2 && !partDuGroupe) {
                                     Text(
                                         "Estimation de distance seulement : pour voyager, commencez le tracé sur le groupe" +
@@ -940,13 +1087,6 @@ fun CarteCampagneScreen(
                                         TextButton(onClick = { session.annuler() }) { Text("Annuler le voyage") }
                                     }
                                 }
-                                if (!traceTermine && trace.size >= 2) {
-                                    Button(onClick = { traceTermine = true }, modifier = Modifier.fillMaxWidth()) {
-                                        Icon(Icons.Default.Flag, contentDescription = null)
-                                        Spacer(Modifier.width(8.dp))
-                                        Text("Fin de tracé")
-                                    }
-                                }
                                 if (plan != null) {
                                     TrajetResultat(
                                         plan = plan,
@@ -969,6 +1109,8 @@ fun CarteCampagneScreen(
                                             }
                                         } else null,
                                     )
+                                }
+                                }
                                 }
                             }
                         }
@@ -1070,6 +1212,7 @@ fun CarteCampagneScreen(
                 onAfficherNomsChangee = { nouvelleValeur ->
                     afficherNoms = nouvelleValeur
                     CarteGrillePrefs.setAfficherNoms(context, cleCarte, nouvelleValeur)
+                    versionAffichageTable++
                 }
             )
         }
@@ -1485,13 +1628,46 @@ private fun PointDetailBottomSheet(
 ) {
     var afficherSelectionBoutique by remember { mutableStateOf(false) }
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.fillMaxWidth().padding(16.dp).padding(bottom = 32.dp)) {
+        // Défilante : avec une longue description, les réglages du bas (nom, boutiques,
+        // événements) restent accessibles.
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp)
+                .padding(bottom = 32.dp)
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Text(point.nom, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
                 if (!readOnly) {
-                    // Retirer de la carte : le lieu est conservé (non placé), réutilisable ailleurs.
-                    IconButton(onClick = onRetirerDeLaCarte) { Icon(Icons.Default.LocationOff, contentDescription = "Retirer de la carte") }
-                    IconButton(onClick = onSupprimer) { Icon(Icons.Default.Delete, contentDescription = "Supprimer le point") }
+                    // Deux actions proches, nommées en toutes lettres dans un menu : retirer de la
+                    // carte garde le lieu (non placé, réutilisable), supprimer l'efface pour de bon.
+                    var menuLieu by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { menuLieu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "Actions du lieu") }
+                        DropdownMenu(expanded = menuLieu, onDismissRequest = { menuLieu = false }) {
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text("Retirer de la carte")
+                                        Text("Le lieu est gardé, pour le replacer plus tard", style = MaterialTheme.typography.bodySmall)
+                                    }
+                                },
+                                leadingIcon = { Icon(Icons.Default.LocationOff, contentDescription = null) },
+                                onClick = { menuLieu = false; onRetirerDeLaCarte() },
+                            )
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text("Supprimer le lieu", color = MaterialTheme.colorScheme.error)
+                                        Text("Définitif : le lieu et ses réglages sont effacés", style = MaterialTheme.typography.bodySmall)
+                                    }
+                                },
+                                leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                                onClick = { menuLieu = false; onSupprimer() },
+                            )
+                        }
+                    }
                 }
             }
             Text(point.type.label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1502,12 +1678,11 @@ private fun PointDetailBottomSheet(
 
             if (!readOnly) {
                 Spacer(Modifier.height(12.dp))
-                // Aussi réglable depuis l'exploration (barre « Lieux »).
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Visible des joueurs", style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "Affiché sur la carte d'exploration (écran de table).",
+                            "Affiché sur l'appareil des joueurs et sur l'écran de table.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1556,12 +1731,9 @@ private fun PointDetailBottomSheet(
                     }
                 }
                 Spacer(Modifier.height(16.dp))
-                Text("Taille de l'icône : ${(reglage.taille * 100).roundToInt()} %", style = MaterialTheme.typography.titleMedium)
-                Slider(
-                    value = reglage.taille,
-                    onValueChange = { onReglage(reglage.copy(taille = (it * 4).roundToInt() / 4f)) },
-                    valueRange = 0.5f..3f,
-                    steps = 9 // pas de 25 %
+                TailleIconeSaisie(
+                    pourcentage = (reglage.taille * 100).roundToInt(),
+                    onPourcentage = { onReglage(reglage.copy(taille = it / 100f)) }
                 )
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     Text("Verrouiller l'emplacement", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
@@ -1645,6 +1817,57 @@ private fun PointDetailBottomSheet(
             dismissButton = { TextButton(onClick = { afficherSelectionBoutique = false }) { Text("Fermer") } }
         )
     }
+}
+
+/** Bornes (en %) de la taille d'une icône de lieu, réglée par une valeur saisie. */
+private val PLAGE_TAILLE_ICONE = 10..300
+
+/**
+ * Taille de l'icône d'un lieu en pourcentage : saisie libre, avec −/+ pour ajuster de 10 %.
+ * La valeur n'est appliquée que lorsqu'elle est dans [PLAGE_TAILLE_ICONE].
+ */
+@Composable
+private fun TailleIconeSaisie(pourcentage: Int, onPourcentage: (Int) -> Unit) {
+    var saisie by remember { mutableStateOf(pourcentage.toString()) }
+    // Valeur changée par −/+ : le champ suit.
+    LaunchedEffect(pourcentage) { if (saisie.toIntOrNull() != pourcentage) saisie = pourcentage.toString() }
+    val valeur = saisie.toIntOrNull()
+    val valide = valeur != null && valeur in PLAGE_TAILLE_ICONE
+    fun appliquer(v: Int) {
+        val borne = v.coerceIn(PLAGE_TAILLE_ICONE)
+        saisie = borne.toString()
+        onPourcentage(borne)
+    }
+    Text("Taille de l'icône", style = MaterialTheme.typography.titleMedium)
+    Spacer(Modifier.height(4.dp))
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        androidx.compose.material3.OutlinedButton(
+            onClick = { appliquer((valeur ?: pourcentage) - 10) },
+            enabled = (valeur ?: pourcentage) > PLAGE_TAILLE_ICONE.first
+        ) { Text("−") }
+        OutlinedTextField(
+            value = saisie,
+            onValueChange = { v ->
+                saisie = v.filter { it.isDigit() }.take(3)
+                saisie.toIntOrNull()?.takeIf { it in PLAGE_TAILLE_ICONE }?.let(onPourcentage)
+            },
+            suffix = { Text("%") },
+            singleLine = true,
+            isError = !valide,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.weight(1f)
+        )
+        androidx.compose.material3.OutlinedButton(
+            onClick = { appliquer((valeur ?: pourcentage) + 10) },
+            enabled = (valeur ?: pourcentage) < PLAGE_TAILLE_ICONE.last
+        ) { Text("+") }
+    }
+    Text(
+        "Entre ${PLAGE_TAILLE_ICONE.first} et ${PLAGE_TAILLE_ICONE.last} %.",
+        style = MaterialTheme.typography.bodySmall,
+        color = if (valide) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error
+    )
+    Spacer(Modifier.height(8.dp))
 }
 
 /** Petite icône du groupe posée sur le lieu où il se trouve (voir PointSurCarte). */
@@ -1795,7 +2018,8 @@ private fun MarqueurSurCarte(
 /**
  * Résultat d'un tracé : distance, vitesse (celle du membre le plus lent du groupe, ou une allure
  * choisie), heures de marche max par jour, et haltes de fin de journée. Pour le MJ, chaque halte
- * et l'arrivée proposent un événement et un repos long ; l'arrivée permet d'y déplacer le groupe.
+ * propose un événement et un repos long ; l'arrivée, un événement seulement (pas de repos sans
+ * halte), et permet d'y déplacer le groupe.
  */
 @Composable
 private fun TrajetResultat(
@@ -1864,7 +2088,6 @@ private fun TrajetResultat(
         Text("🏁 Arrivée : $arrivee", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
         if (outilsMj) {
             TextButton(onClick = { onEvenement("Arrivée : $arrivee") }) { Text("Événement") }
-            TextButton(onClick = { onRepos(arrivee) }) { Text("Repos") }
         }
     }
     if (onDeplacerGroupe != null) {
@@ -1882,26 +2105,33 @@ private fun OutlinedButtonCompat(text: String, onClick: () -> Unit) {
 }
 
 /**
- * Affiche l'image de fond de [carte] sur la page d'affichage table (MjWebServer), comme une photo
- * envoyée par le MJ : elle remplace ce qui y était montré. Un message indique le résultat.
- * La table adopte [rotation] (par défaut l'orientation enregistrée pour cette carte).
+ * Affiche [carte] sur la page d'affichage table (MjWebServer) avec ses lieux visibles des joueurs
+ * (CarteTable) : elle remplace ce qui y était montré. La table adopte [rotation] (par défaut
+ * l'orientation enregistrée pour cette carte). [points] : lieux de la campagne, relus en base si
+ * null. [silencieux] : aucun message si la table est hors ligne (envoi automatique en exploration).
  */
 internal fun envoyerCarteALaTable(
     context: android.content.Context,
     carte: CarteCampagne,
     rotation: Int = CarteGrillePrefs.rotationDegres(context, carte.id),
+    points: List<PointInteret>? = null,
+    silencieux: Boolean = false,
 ) {
-    val message = when {
-        carte.imageFileName == null -> "Cette carte n'a pas d'image à envoyer."
-        !NetworkSessionManager.isTableDisplayOnline -> "Écran de table hors ligne : lancez la partie (Connexion) pour l'afficher."
-        NetworkSessionManager.sendImageFileToWeb(
-            CarteImageStore.fichier(context, carte.imageFileName),
-            carte.nom.ifBlank { "Carte" },
-        ) -> {
-            NetworkSessionManager.updateTableRotation(rotation)
-            "Carte « ${carte.nom.ifBlank { "Carte" }} » envoyée à l'écran de table."
+    fun afficher(lieux: List<PointInteret>) {
+        val message = when {
+            carte.imageFileName == null -> "Cette carte n'a pas d'image à envoyer.".takeUnless { silencieux }
+            !NetworkSessionManager.isTableDisplayOnline ->
+                "Écran de table hors ligne : lancez la partie (Connexion) pour l'afficher.".takeUnless { silencieux }
+            CarteTable.afficher(context, carte, lieux) -> {
+                NetworkSessionManager.updateTableRotation(rotation)
+                "Carte « ${carte.nom.ifBlank { "Carte" }} » affichée sur l'écran de table."
+            }
+            else -> "Impossible d'envoyer la carte à l'écran de table."
         }
-        else -> "Impossible d'envoyer la carte à l'écran de table."
+        message?.let { android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_SHORT).show() }
     }
-    android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+    if (points != null) afficher(points)
+    else kotlinx.coroutines.MainScope().launch {
+        afficher(CarteDependencies.repository.observerPoints(carte.campagneId).first())
+    }
 }

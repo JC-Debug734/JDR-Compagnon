@@ -25,6 +25,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -33,11 +37,8 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
-import com.jc2.jdrcompagnon.feature_evenement.ui.EvenementsLiesSection
 import com.jc2.jdrcompagnon.di.EnvironmentDependencies
-import com.jc2.jdrcompagnon.di.TableAleatoireDependencies
 import com.jc2.jdrcompagnon.feature_combat.ui.ComposerCombatDialog
-import com.jc2.jdrcompagnon.feature_table_aleatoire.domain.model.TypeTable
 import com.jc2.jdrcompagnon.ui.GameState
 
 
@@ -97,24 +98,11 @@ fun ScenarioEditorScreen(
     val environmentOptions: List<Pair<String, String>> =
         listOf("Aucun" to "") + environments.map { it.nom to it.id }
 
-    // Tables aléatoires disponibles pour le monde courant : événements pour les sélecteurs
-    // "Table d'événements" (scène + repli scénario entier), loot pour le sélecteur "Table de
-    // loot" de la scène — même approche que le sélecteur d'environnement ci-dessus.
-    val tablesAleatoires by remember {
-        TableAleatoireDependencies.repository.observerTables(GameState.currentWorldId() ?: "donjon_et_dragon")
-    }.collectAsState(initial = emptyList())
-    val tableEvenementsOptions: List<Pair<String, String>> =
-        listOf("Aucune" to "") + tablesAleatoires.filter { it.type == TypeTable.EVENEMENTS }.map { it.nom to it.id }
-    val tableLootOptions: List<Pair<String, String>> =
-        listOf("Aucune" to "") + tablesAleatoires.filter { it.type == TypeTable.LOOT }.map { it.nom to it.id }
-
-    // Boutiques (feature_boutique) associables à une scène : leurs services et tarifs sont
-    // consultables depuis la lecture de la scène.
-    val boutiques by remember {
-        com.jc2.jdrcompagnon.di.BoutiqueDependencies.repository.observerToutesLesBoutiques()
-    }.collectAsState(initial = emptyList())
-    val boutiqueOptions: List<Pair<String, String>> =
-        listOf("Aucune" to "") + boutiques.map { "${it.nom} (${it.type.label})" to it.id }
+    // Musiques (intégrées + importées) proposées pour la scène ; "" = celle de l'environnement.
+    val importedTracks by com.jc2.jdrcompagnon.ui.ImportedMusicStore.tracks.collectAsState()
+    val musiqueOptions: List<Pair<String, String>> = remember(importedTracks) {
+        listOf("Celle de l'environnement" to "") + com.jc2.jdrcompagnon.ui.availableLoopTracks.map { it.displayName to it.id }
+    }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
@@ -126,8 +114,10 @@ fun ScenarioEditorScreen(
 
     var title by rememberSaveable { mutableStateOf("") }
     var lieuNom by rememberSaveable { mutableStateOf("") }
+    // Présentation du scénario (texte d'introduction du MJ avant la première scène : aperçu du
+    // lieu, niveau recommandé, objectifs...), affichée en tête de la première page en lecture.
+    var presentation by rememberSaveable { mutableStateOf("") }
     var lieuImageFileName by rememberSaveable { mutableStateOf<String?>(null) }
-    var tableEvenementsId by rememberSaveable { mutableStateOf<String?>(null) }
     // Chapitre et numéro du scénario (ordre de jeu de la campagne, voir ChapitresScenarios),
     // saisis en texte puis convertis en nombres à l'enregistrement.
     var chapitreNumero by rememberSaveable { mutableStateOf("") }
@@ -140,6 +130,8 @@ fun ScenarioEditorScreen(
     var showColorPicker by remember { mutableStateOf(false) }
     var showLinkDialog by remember { mutableStateOf(false) }
     var linkDialogInitialType by remember { mutableStateOf("monster") }
+    // Dialogue de lien ouvert par un double appui dans le texte : le lien remplace le mot sélectionné.
+    var linkReplacesSelection by remember { mutableStateOf(false) }
     // PNJ dont on remplit la fiche de discussion (attitude, désirs, peurs, ligne rouge).
     var discussionAFicher by remember { mutableStateOf<String?>(null) }
     var showDeleteSceneDialog by remember { mutableStateOf(false) }
@@ -151,8 +143,8 @@ fun ScenarioEditorScreen(
             existingScenario?.let { scenario ->
                 title = scenario.title
                 lieuNom = scenario.lieuNom
+                presentation = scenario.description
                 lieuImageFileName = scenario.lieuImageFileName
-                tableEvenementsId = scenario.tableEvenementsId
                 chapitreNumero = scenario.chapitreNumero?.toString().orEmpty()
                 chapitreTitre = scenario.chapitreTitre
                 numero = scenario.numero?.toString().orEmpty()
@@ -271,12 +263,15 @@ fun ScenarioEditorScreen(
 
     fun insertInternalLink(type: String, name: String) {
         val current = markdownContent
-        val cursor = current.selection.start.coerceIn(0, current.text.length)
         val text = current.text
+        val start = current.selection.min.coerceIn(0, text.length)
+        // Lien créé par un double appui : il remplace le mot sélectionné par ce double appui.
+        val end = if (linkReplacesSelection) current.selection.max.coerceIn(start, text.length) else start
         val insertion = "#$type:[$name]"
-        val newText = text.substring(0, cursor) + insertion + text.substring(cursor)
-        updateText(newText, cursor + insertion.length)
+        val newText = text.substring(0, start) + insertion + text.substring(end)
+        updateText(newText, start + insertion.length)
         showLinkDialog = false
+        linkReplacesSelection = false
     }
 
     fun addScene() {
@@ -319,21 +314,23 @@ fun ScenarioEditorScreen(
             val updated = existingScenario?.copy(
                 title = title,
                 markdownContent = "",
+                description = presentation,
                 scenes = finalScenes,
                 lieuNom = lieuNom,
                 lieuImageFileName = lieuImageFileName,
-                tableEvenementsId = tableEvenementsId,
+                // Table d'événements du scénario retirée : on efface l'ancien choix.
+                tableEvenementsId = null,
                 chapitreNumero = chapitreNumero.trim().toIntOrNull(),
                 chapitreTitre = chapitreTitre.trim(),
                 numero = numero.trim().toIntOrNull(),
             ) ?: GameState.MjScenario(
                 id = effectiveScenarioId,
                 title = title,
+                description = presentation,
                 scenes = finalScenes,
                 worldId = GameState.currentWorldId() ?: "",
                 lieuNom = lieuNom,
                 lieuImageFileName = lieuImageFileName,
-                tableEvenementsId = tableEvenementsId,
                 chapitreNumero = chapitreNumero.trim().toIntOrNull(),
                 chapitreTitre = chapitreTitre.trim(),
                 numero = numero.trim().toIntOrNull(),
@@ -430,6 +427,39 @@ fun ScenarioEditorScreen(
                 singleLine = true,
             )
 
+            // Présentation (aperçu du lieu, niveau recommandé, objectifs, particularités...) : écrite
+            // avant la première « # SCÈNE » dans un fichier importé, affichée en tête de la première
+            // page du lecteur. Repliée par défaut, elle peut être longue.
+            var presentationOuverte by rememberSaveable { mutableStateOf(false) }
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().clickable { presentationOuverte = !presentationOuverte },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Présentation du scénario (MJ)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    Icon(
+                        if (presentationOuverte) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (presentationOuverte) "Replier la présentation" else "Déplier la présentation",
+                    )
+                }
+                if (presentationOuverte) {
+                    OutlinedTextField(
+                        value = presentation,
+                        onValueChange = { presentation = it },
+                        label = { Text("Aperçu, niveau recommandé, objectifs...") },
+                        supportingText = { Text("Affichée en tête de la première page en lecture, avant la première scène.") },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 160.dp),
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+                    )
+                } else if (presentation.isNotBlank()) {
+                    Text(
+                        presentation.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty().removePrefix("## ").take(80) + " …",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
             // Lieu associé au scénario : affiché en tête de la première page du lecteur
             // (nom + image), pour planter le décor avant la première scène.
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
@@ -472,37 +502,6 @@ fun ScenarioEditorScreen(
                     if (lieuImageFileName != null) {
                         OutlinedButton(onClick = { lieuImageFileName = null }) {
                             Text("Retirer")
-                        }
-                    }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Table d'événements (feature_table_aleatoire, type EVENEMENTS) utilisée pour tout
-                // le scénario — repli quand une scène n'a pas sa propre table (voir
-                // MjScene.tableAleatoireId et MjScenario.tableEvenementsId). Champ propre à
-                // l'app, au même titre que lieuNom.
-                var tableEvenementsExpanded by remember { mutableStateOf(false) }
-                ExposedDropdownMenuBox(
-                    expanded = tableEvenementsExpanded,
-                    onExpandedChange = { tableEvenementsExpanded = !tableEvenementsExpanded },
-                ) {
-                    OutlinedTextField(
-                        value = tableEvenementsOptions.find { it.second == tableEvenementsId }?.first ?: "Aucune",
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Table d'événements du scénario (repli)") },
-                        modifier = Modifier.menuAnchor().fillMaxWidth(),
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(tableEvenementsExpanded) }
-                    )
-                    ExposedDropdownMenu(expanded = tableEvenementsExpanded, onDismissRequest = { tableEvenementsExpanded = false }) {
-                        tableEvenementsOptions.forEach { (label, id) ->
-                            DropdownMenuItem(
-                                text = { Text(label) },
-                                onClick = {
-                                    tableEvenementsId = id.ifBlank { null }
-                                    tableEvenementsExpanded = false
-                                }
-                            )
                         }
                     }
                 }
@@ -619,9 +618,8 @@ fun ScenarioEditorScreen(
                     singleLine = true
                 )
 
-                // Pas de sélecteur de musique manuel ici : la musique de la scène provient de
-                // l'environnement qui lui est rattaché (voir sélecteur "Environnement de la
-                // scène" ci-dessous et ScenarioReaderContent, qui joue Environnement.musicTrackId).
+                // Musique : celle choisie ci-dessous pour la scène, sinon celle de l'environnement
+                // rattaché (ScenarioReaderContent joue scene.musicTrackId ?: Environnement.musicTrackId).
                 var environmentExpanded by remember { mutableStateOf(false) }
                 ExposedDropdownMenuBox(
                     expanded = environmentExpanded,
@@ -652,116 +650,38 @@ fun ScenarioEditorScreen(
                     }
                 }
 
-                // Table aléatoire d'événements (feature_table_aleatoire, type EVENEMENTS) rattachée
-                // à cette scène — même sélecteur que l'environnement ci-dessus.
-                var tableAleatoireExpanded by remember { mutableStateOf(false) }
+                // Musique propre à la scène (prioritaire sur celle de l'environnement), jouée en lecture.
+                var musiqueExpanded by remember { mutableStateOf(false) }
                 ExposedDropdownMenuBox(
-                    expanded = tableAleatoireExpanded,
-                    onExpandedChange = { tableAleatoireExpanded = !tableAleatoireExpanded },
+                    expanded = musiqueExpanded,
+                    onExpandedChange = { musiqueExpanded = !musiqueExpanded },
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                 ) {
                     OutlinedTextField(
-                        value = tableEvenementsOptions.find { it.second == scene.tableAleatoireId }?.first ?: "Aucune",
+                        value = musiqueOptions.find { it.second.equals(scene.musicTrackId.orEmpty(), ignoreCase = true) }?.first
+                            ?: scene.musicTrackId.orEmpty(),
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Table aléatoire de la scène") },
+                        label = { Text("Musique de la scène") },
+                        leadingIcon = { Icon(Icons.Default.MusicNote, contentDescription = null) },
                         modifier = Modifier.menuAnchor().fillMaxWidth(),
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(tableAleatoireExpanded) }
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(musiqueExpanded) }
                     )
-                    ExposedDropdownMenu(expanded = tableAleatoireExpanded, onDismissRequest = { tableAleatoireExpanded = false }) {
-                        tableEvenementsOptions.forEach { (label, tableId) ->
+                    ExposedDropdownMenu(expanded = musiqueExpanded, onDismissRequest = { musiqueExpanded = false }) {
+                        musiqueOptions.forEach { (label, trackId) ->
                             DropdownMenuItem(
                                 text = { Text(label) },
                                 onClick = {
                                     pushUndo()
                                     scenes = scenes.mapIndexed { index, s ->
-                                        if (index == selectedSceneIndex) s.copy(tableAleatoireId = tableId.ifBlank { null }) else s
+                                        if (index == selectedSceneIndex) s.copy(musicTrackId = trackId.ifBlank { null }) else s
                                     }
-                                    tableAleatoireExpanded = false
+                                    musiqueExpanded = false
                                 }
                             )
                         }
                     }
                 }
-
-                // Table de loot (feature_table_aleatoire, type LOOT) rattachée à cette scène —
-                // le butin est propre à chaque scène (pas de repli scénario entier, contrairement
-                // à la table d'événements ci-dessus).
-                var tableLootExpanded by remember { mutableStateOf(false) }
-                ExposedDropdownMenuBox(
-                    expanded = tableLootExpanded,
-                    onExpandedChange = { tableLootExpanded = !tableLootExpanded },
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-                ) {
-                    OutlinedTextField(
-                        value = tableLootOptions.find { it.second == scene.tableLootId }?.first ?: "Aucune",
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Table de loot de la scène") },
-                        modifier = Modifier.menuAnchor().fillMaxWidth(),
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(tableLootExpanded) }
-                    )
-                    ExposedDropdownMenu(expanded = tableLootExpanded, onDismissRequest = { tableLootExpanded = false }) {
-                        tableLootOptions.forEach { (label, tableId) ->
-                            DropdownMenuItem(
-                                text = { Text(label) },
-                                onClick = {
-                                    pushUndo()
-                                    scenes = scenes.mapIndexed { index, s ->
-                                        if (index == selectedSceneIndex) s.copy(tableLootId = tableId.ifBlank { null }) else s
-                                    }
-                                    tableLootExpanded = false
-                                }
-                            )
-                        }
-                    }
-                }
-
-                // Boutique présente dans la scène (icône à côté du loot en lecture).
-                var boutiqueExpanded by remember { mutableStateOf(false) }
-                ExposedDropdownMenuBox(
-                    expanded = boutiqueExpanded,
-                    onExpandedChange = { boutiqueExpanded = !boutiqueExpanded },
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-                ) {
-                    OutlinedTextField(
-                        value = boutiqueOptions.find { it.second == scene.boutiqueId }?.first ?: "Aucune",
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Boutique de la scène") },
-                        modifier = Modifier.menuAnchor().fillMaxWidth(),
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(boutiqueExpanded) }
-                    )
-                    ExposedDropdownMenu(expanded = boutiqueExpanded, onDismissRequest = { boutiqueExpanded = false }) {
-                        boutiqueOptions.forEach { (label, boutiqueId) ->
-                            DropdownMenuItem(
-                                text = { Text(label) },
-                                onClick = {
-                                    pushUndo()
-                                    scenes = scenes.mapIndexed { index, s ->
-                                        if (index == selectedSceneIndex) s.copy(boutiqueId = boutiqueId.ifBlank { null }) else s
-                                    }
-                                    boutiqueExpanded = false
-                                }
-                            )
-                        }
-                    }
-                }
-
-                // Événements de la bibliothèque rattachés à la scène (tirables en lecture).
-                EvenementsLiesSection(
-                    worldId = GameState.currentWorldId() ?: "donjon_et_dragon",
-                    campagneId = GameState.currentCampaignId.collectAsState().value,
-                    evenementIds = scene.evenementIds,
-                    onChanger = { ids ->
-                        pushUndo()
-                        scenes = scenes.mapIndexed { index, s ->
-                            if (index == selectedSceneIndex) s.copy(evenementIds = ids) else s
-                        }
-                    },
-                    titre = "Événements de la scène",
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                )
             }
 
             LazyRow(
@@ -805,6 +725,11 @@ fun ScenarioEditorScreen(
                 item {
                     IconButton(onClick = { linkDialogInitialType = "evenement"; showLinkDialog = true }) {
                         Icon(Icons.Default.AutoStories, contentDescription = "Lien vers un événement de la bibliothèque (lancé depuis la lecture)")
+                    }
+                }
+                item {
+                    IconButton(onClick = { linkDialogInitialType = "table"; showLinkDialog = true }) {
+                        Icon(Icons.Default.Casino, contentDescription = "Lien vers une table aléatoire (loot ou événements), tirée depuis la lecture")
                     }
                 }
                 item {
@@ -864,8 +789,15 @@ fun ScenarioEditorScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 400.dp)
-                    .padding(16.dp),
-                placeholder = { Text("Saisissez le contenu de la scène en markdown...") },
+                    .padding(16.dp)
+                    // Double appui : le champ sélectionne le mot touché, puis le dialogue de lien
+                    // s'ouvre pour le remplacer par un lien interne (cherché d'après ce mot).
+                    .onDoubleTapPassThrough {
+                        linkReplacesSelection = true
+                        linkDialogInitialType = "monster"
+                        showLinkDialog = true
+                    },
+                placeholder = { Text("Saisissez le contenu de la scène en markdown... (double appui sur un mot : créer un lien)") },
                 visualTransformation = ReadAloudHighlightTransformation,
                 textStyle = MaterialTheme.typography.bodyLarge.copy(
                     fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
@@ -884,17 +816,24 @@ fun ScenarioEditorScreen(
     if (showLinkDialog) {
         EntityLinkPickerDialog(
             visible = true,
-            onDismiss = { showLinkDialog = false },
+            onDismiss = { showLinkDialog = false; linkReplacesSelection = false },
             onSelect = { type, name ->
                 if (type == "event") {
                     // Discussion : on remplit d'abord sa fiche (ce que le PNJ attend).
                     showLinkDialog = false
+                    linkReplacesSelection = false
                     discussionAFicher = name
                 } else {
                     insertInternalLink(type, name)
                 }
             },
             initialType = linkDialogInitialType,
+            initialQuery = if (linkReplacesSelection) {
+                markdownContent.text.substring(
+                    markdownContent.selection.min.coerceIn(0, markdownContent.text.length),
+                    markdownContent.selection.max.coerceIn(0, markdownContent.text.length),
+                ).trim().take(60)
+            } else "",
             bestiaireCampagne = bestiaireCampagne
         )
     }
@@ -1046,5 +985,47 @@ private object ReadAloudHighlightTransformation : androidx.compose.ui.text.input
             zones.forEach { addStyle(zoneStyle, it.range.first, it.range.last + 1) }
         }
         return androidx.compose.ui.text.input.TransformedText(styled, androidx.compose.ui.text.input.OffsetMapping.Identity)
+    }
+}
+
+/**
+ * Détecte un double appui sans consommer les événements (passe Initial) : le champ de texte
+ * garde son comportement normal (curseur, sélection du mot au double appui) et [onDoubleTap] est
+ * appelé en plus. Un appui long ou un glissement ne compte pas comme appui.
+ */
+private fun Modifier.onDoubleTapPassThrough(onDoubleTap: () -> Unit): Modifier = pointerInput(Unit) {
+    val doubleTapTimeout = viewConfiguration.doubleTapTimeoutMillis
+    val longPressTimeout = viewConfiguration.longPressTimeoutMillis
+    val slop = viewConfiguration.touchSlop
+    var downTime = 0L
+    var downPosition = Offset.Zero
+    var lastTapTime = 0L
+    var lastTapPosition = Offset.Zero
+    awaitPointerEventScope {
+        while (true) {
+            val event = awaitPointerEvent(PointerEventPass.Initial)
+            val change = event.changes.singleOrNull() ?: continue
+            when (event.type) {
+                PointerEventType.Press -> {
+                    downTime = change.uptimeMillis
+                    downPosition = change.position
+                }
+                PointerEventType.Release -> {
+                    val isTap = change.uptimeMillis - downTime < longPressTimeout &&
+                        (change.position - downPosition).getDistance() < slop
+                    if (!isTap) {
+                        lastTapTime = 0L
+                    } else if (lastTapTime != 0L && downTime - lastTapTime < doubleTapTimeout &&
+                        (change.position - lastTapPosition).getDistance() < slop * 4
+                    ) {
+                        lastTapTime = 0L
+                        onDoubleTap()
+                    } else {
+                        lastTapTime = change.uptimeMillis
+                        lastTapPosition = change.position
+                    }
+                }
+            }
+        }
     }
 }

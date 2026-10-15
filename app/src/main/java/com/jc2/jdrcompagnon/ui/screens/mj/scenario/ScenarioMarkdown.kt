@@ -134,12 +134,13 @@ private fun unescapeHashes(text: String): String = text.replace("\\\\#", "#")
  * Types de liens d'un scénario (#type:nom ou #type:[nom en plusieurs mots]) :
  * - liens cliquables vers une fiche ou une action : monster, pnj/npc, equipment, spell, rule,
  *   event (discussion), evenement (bibliothèque d'événements), epreuve, combat, butin (trésor à
- *   donner aux joueurs, éléments séparés par « ; », voir ButinTexte) ;
+ *   donner aux joueurs, éléments séparés par « ; », voir ButinTexte), table (table aléatoire de
+ *   loot ou d'événements, tirée au clic), boutique (invite les joueurs à son écran de commerce) ;
  * - simples mentions ([TYPES_MENTION]), non cliquables, qui ne servent qu'à mettre un nom en
  *   avant avec la couleur de son type : lieu (ville, région, bâtiment), perso (personnage cité
  *   sans fiche), faction.
  */
-const val TYPES_LIEN = "monster|pnj|npc|equipment|spell|rule|event|evenement|epreuve|combat|butin|lieu|perso|faction"
+const val TYPES_LIEN = "monster|pnj|npc|equipment|spell|rule|event|evenement|epreuve|combat|butin|table|boutique|lieu|perso|faction"
 val TYPES_MENTION = setOf("lieu", "perso", "faction")
 
 /** Motif des liens internes ; ignore les `\\#` (échappé). */
@@ -160,6 +161,8 @@ fun couleurLien(type: String): Color = when (type) {
     "faction", "epreuve" -> Color(0xFFFFAA5C)
     "evenement" -> Color(0xFF4DD0E1)
     "butin" -> Color(0xFFFFD54F)
+    "table" -> Color(0xFF4DD0E1)
+    "boutique" -> Color(0xFFC9A7FF)
     else -> Color(0xFFCFD8DC)
 }
 
@@ -175,6 +178,8 @@ fun internalLinkLabel(type: String, name: String): String = when (type) {
     "event" -> "💬 Discussion avec : $name"
     // Événement de la bibliothèque (feature_evenement), lancé depuis la lecture.
     "evenement" -> "🎲 $name"
+    "table" -> "🎲 Table : $name"
+    "boutique" -> "🏪 Boutique : $name"
     "butin" -> "💰 Trésor : " + com.jc2.jdrcompagnon.feature_butin.domain.ButinTexte.libelle(name)
     else -> name
 }
@@ -254,6 +259,8 @@ private fun FlowRowInternalLinks(links: List<Pair<String, String>>, onLinkClick:
                 "epreuve" -> "⛰️ $name"
                 "evenement" -> "🎲 $name"
                 "combat" -> "⚔️ $name"
+                "table" -> "🎲 $name"
+                "boutique" -> "🏪 $name"
                 "butin" -> "💰 " + com.jc2.jdrcompagnon.feature_butin.domain.ButinTexte.libelle(name)
                 else -> "$type:$name"
             }

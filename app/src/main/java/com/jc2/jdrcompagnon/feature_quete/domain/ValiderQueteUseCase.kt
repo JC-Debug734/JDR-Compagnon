@@ -7,6 +7,7 @@ import com.jc2.jdrcompagnon.feature_group.domain.model.Mount
 import com.jc2.jdrcompagnon.feature_group.domain.model.MountKind
 import com.jc2.jdrcompagnon.feature_group.domain.model.Transport
 import com.jc2.jdrcompagnon.feature_quete.domain.model.Quest
+import com.jc2.jdrcompagnon.feature_quete.domain.model.QuestReward
 import com.jc2.jdrcompagnon.feature_quete.domain.model.QuestRewardType
 import com.jc2.jdrcompagnon.feature_quete.domain.model.QuestStatus
 import com.jc2.jdrcompagnon.ui.Character
@@ -32,11 +33,14 @@ data class RepartitionQuete(
 object ValiderQueteUseCase {
 
     fun repartition(quest: Quest, group: GameState.MjGroup, characters: List<Character>): RepartitionQuete =
+        repartition(quest.rewards, group, characters)
+
+    fun repartition(rewards: List<QuestReward>, group: GameState.MjGroup, characters: List<Character>): RepartitionQuete =
         RepartitionQuete(
             pj = characters.filter { it.id in group.memberIds && it.type == "PJ" },
             joueursSansFiche = group.tablePlayers,
-            xpTotal = quest.rewards.filter { it.type == QuestRewardType.XP }.sumOf { it.amount.coerceAtLeast(0) },
-            orTotal = quest.rewards.filter { it.type == QuestRewardType.OR }.sumOf { it.amount.coerceAtLeast(0) },
+            xpTotal = rewards.filter { it.type == QuestRewardType.XP }.sumOf { it.amount.coerceAtLeast(0) },
+            orTotal = rewards.filter { it.type == QuestRewardType.OR }.sumOf { it.amount.coerceAtLeast(0) },
         )
 
     /**
@@ -45,9 +49,22 @@ object ValiderQueteUseCase {
      */
     fun valider(campaignId: String, quest: Quest, groupId: String): String? {
         if (quest.rewardedGroupId != null) return null
+        val resume = distribuer(quest.rewards, groupId) ?: return null
+        GameState.upsertQuest(
+            campaignId,
+            quest.copy(status = QuestStatus.TERMINEE, rewardedGroupId = groupId, rewardSummary = resume),
+        )
+        return resume
+    }
+
+    /**
+     * Distribue des [rewards] au groupe [groupId] (quête validée, ou récompenses d'une séance) et
+     * renvoie le compte rendu ; null si le groupe n'existe plus.
+     */
+    fun distribuer(rewards: List<QuestReward>, groupId: String): String? {
         val group = GameState.mjGroups.value.firstOrNull { it.id == groupId } ?: return null
         val characters = GameState.characters.value
-        val rep = repartition(quest, group, characters)
+        val rep = repartition(rewards, group, characters)
         val lignes = mutableListOf("Groupe « ${group.name} »")
 
         // XP et or : une part par joueur.
@@ -69,7 +86,7 @@ object ValiderQueteUseCase {
         }
 
         // Réputation (chaque faction relit le groupe à jour).
-        quest.rewards.filter { it.type == QuestRewardType.REPUTATION && it.label.isNotBlank() }.forEach { r ->
+        rewards.filter { it.type == QuestRewardType.REPUTATION && it.label.isNotBlank() }.forEach { r ->
             appliquerReputationAuGroupe(groupId, r.label.trim(), r.amount)
             lignes += "Réputation ${if (r.amount >= 0) "+" else ""}${r.amount} auprès de ${r.label.trim()}"
         }
@@ -81,7 +98,7 @@ object ValiderQueteUseCase {
             g = g.copy(gold = g.gold + orAuTresor)
             lignes += "$orAuTresor po au trésor du groupe"
         }
-        quest.rewards.forEach { r ->
+        rewards.forEach { r ->
             when (r.type) {
                 QuestRewardType.EQUIPEMENT -> if (r.label.isNotBlank()) {
                     val quantite = r.amount.coerceAtLeast(1)
@@ -124,11 +141,6 @@ object ValiderQueteUseCase {
         }
         GameState.updateMjGroup(g)
 
-        val resume = lignes.joinToString("\n")
-        GameState.upsertQuest(
-            campaignId,
-            quest.copy(status = QuestStatus.TERMINEE, rewardedGroupId = groupId, rewardSummary = resume),
-        )
-        return resume
+        return lignes.joinToString("\n")
     }
 }

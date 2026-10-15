@@ -284,7 +284,7 @@ fun CharacterStatsGrid(character: Character) {
 
 @Composable
 fun StatBox(label: String, value: Int, modifier: Modifier = Modifier) {
-    val modifierValue = (value - 10) / 2
+    val modifierValue = Math.floorDiv(value - 10, 2)
     val modifierSign = if (modifierValue >= 0) "+" else ""
 
     Surface(

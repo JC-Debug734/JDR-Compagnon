@@ -1,5 +1,7 @@
 package com.jc2.jdrcompagnon.ui.screens.joueur
 
+import com.jc2.jdrcompagnon.R
+
 // Classes de D&D
 val dndClasses = listOf(
     "Guerrier", "Magicien", "Rôdeur", "Clerc", "Voleur", "Paladin",
@@ -113,4 +115,26 @@ object DndConstants {
             fun entriesList(): List<DndAlignment> = entries.toList()
         }
     }
+}
+
+/** Icône illustrée d'une compétence (drawable-nodpi/competence_*.webp) ; Athlétisme n'en a pas. */
+fun skillIconRes(skill: String): Int? = when (skillList.firstOrNull { it.equals(skill.trim(), ignoreCase = true) }) {
+    "Acrobaties" -> R.drawable.competence_acrobaties
+    "Discrétion" -> R.drawable.competence_discretion
+    "Escamotage" -> R.drawable.competence_escamotage
+    "Arcanes" -> R.drawable.competence_arcanes
+    "Histoire" -> R.drawable.competence_histoire
+    "Investigation" -> R.drawable.competence_investigation
+    "Nature" -> R.drawable.competence_nature
+    "Religion" -> R.drawable.competence_religion
+    "Dressage" -> R.drawable.competence_dressage
+    "Intuition" -> R.drawable.competence_intuition
+    "Médecine" -> R.drawable.competence_medecine
+    "Perception" -> R.drawable.competence_perception
+    "Survie" -> R.drawable.competence_survie
+    "Intimidation" -> R.drawable.competence_intimidation
+    "Persuasion" -> R.drawable.competence_persuasion
+    "Représentation" -> R.drawable.competence_representation
+    "Tromperie" -> R.drawable.competence_tromperie
+    else -> null
 }

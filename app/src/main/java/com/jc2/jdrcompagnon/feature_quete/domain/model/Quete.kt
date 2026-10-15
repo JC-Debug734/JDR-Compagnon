@@ -88,4 +88,8 @@ data class Quest(
     val rewardedGroupId: String? = null,
     // Compte rendu de la distribution, affiché ensuite sur la quête.
     val rewardSummary: String = "",
+    // Personnages qui ont accepté la quête (panneau de quêtes d'une ville), par leur nom.
+    val accepteePar: List<String> = emptyList(),
+    // Personnages qui ont abandonné la quête (écran Quêtes du joueur), par leur nom.
+    val abandonneePar: List<String> = emptyList(),
 )

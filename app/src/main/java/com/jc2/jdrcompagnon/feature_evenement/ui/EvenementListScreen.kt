@@ -1,6 +1,10 @@
 package com.jc2.jdrcompagnon.feature_evenement.ui
 
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,7 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoStories
@@ -24,9 +27,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -60,7 +60,7 @@ import com.jc2.jdrcompagnon.ui.theme.ForcedDarkPalette
 /**
  * Bibliothèque d'événements du monde courant : un événement y est écrit une fois, puis
  * référencé depuis les tables aléatoires, villes, lieux, environnements et scènes. Filtres par
- * type (pastilles colorées), par portée (communs / campagne en cours) et recherche texte.
+ * catégorie (menu déroulant) et recherche texte.
  * Tap sur une carte = modifier, corbeille à droite = supprimer.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -72,8 +72,6 @@ fun EvenementListScreen(
 ) {
     val evenements by viewModel.observerEvenements(worldId).collectAsState(initial = emptyList())
     val campagnes = GameState.mjCampaigns.collectAsState().value.filter { it.worldId == worldId }
-    val campagneCouranteId by GameState.currentCampaignId.collectAsState()
-    val campagneCourante = campagnes.firstOrNull { it.id == campagneCouranteId }
 
     val context = LocalContext.current
     LaunchedEffect(worldId) {
@@ -82,14 +80,12 @@ fun EvenementListScreen(
 
     var recherche by rememberSaveable { mutableStateOf("") }
     var filtreType by rememberSaveable { mutableStateOf<TypeEvenement?>(null) }
-    var filtreCampagne by rememberSaveable { mutableStateOf(false) }
     var enEdition by remember { mutableStateOf<Evenement?>(null) }
     var creation by remember { mutableStateOf(false) }
     var aSupprimer by remember { mutableStateOf<Evenement?>(null) }
 
     val filtres = evenements.filter { evt ->
         (filtreType == null || evt.type == filtreType) &&
-            (!filtreCampagne || campagneCourante == null || evt.campagneId == null || evt.campagneId == campagneCourante.id) &&
             (recherche.isBlank() || evt.titre.contains(recherche, ignoreCase = true) || evt.description.contains(recherche, ignoreCase = true))
     }
 
@@ -100,61 +96,50 @@ fun EvenementListScreen(
                 navigationIcon = {
                     IconButton(onClick = onOpenMenu) { Icon(Icons.Default.Menu, contentDescription = "Menu") }
                 },
+                actions = {
+                    IconButton(onClick = { creation = true }) {
+                        Icon(Icons.Default.Add, contentDescription = "Nouvel événement", tint = ForcedDarkPalette.AccentGold)
+                    }
+                },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { creation = true },
-                containerColor = ForcedDarkPalette.AccentGold,
-                contentColor = ForcedDarkPalette.Background
-            ) { Icon(Icons.Default.Add, contentDescription = "Nouvel événement") }
         },
         containerColor = Color.Transparent
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(innerPadding),
-            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 88.dp),
+            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             item {
-                OutlinedTextField(
-                    value = recherche,
-                    onValueChange = { recherche = it },
-                    placeholder = { Text("Rechercher un événement") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    FilterChip(
-                        selected = filtreType == null,
-                        onClick = { filtreType = null },
-                        label = { Text("Tous (${evenements.size})") }
+                // Recherche et filtres regroupés sur une carte translucide.
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.large,
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
+                        contentColor = Color.White
                     )
-                    TypeEvenement.entries.forEach { type ->
-                        FilterChip(
-                            selected = filtreType == type,
-                            onClick = { filtreType = if (filtreType == type) null else type },
-                            label = { Text("${type.label} (${evenements.count { it.type == type }})") },
-                            leadingIcon = { Icon(type.icone, contentDescription = null, tint = type.couleur, modifier = Modifier.size(18.dp)) },
-                            colors = FilterChipDefaults.filterChipColors(selectedContainerColor = type.couleur.copy(alpha = 0.3f))
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = recherche,
+                            onValueChange = { recherche = it },
+                            placeholder = { Text("Rechercher un événement") },
+                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        FiltreCategorie(
+                            filtre = filtreType,
+                            total = evenements.size,
+                            nombre = { type -> evenements.count { it.type == type } },
+                            onChoix = { filtreType = it }
                         )
                     }
-                }
-            }
-            if (campagneCourante != null) {
-                item {
-                    FilterChip(
-                        selected = filtreCampagne,
-                        onClick = { filtreCampagne = !filtreCampagne },
-                        label = { Text("Communs + campagne « ${campagneCourante.title} »") }
-                    )
                 }
             }
 
@@ -246,19 +231,54 @@ fun EvenementCard(
                 }.joinToString(" · ")
                 Text(details, style = MaterialTheme.typography.labelSmall, color = evenement.type.couleur)
                 if (evenement.description.isNotBlank()) {
-                    Text(
-                        evenement.description,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.8f),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    ApercuDescriptionEvenement(evenement.description, lignes = 2, couleur = Color.White.copy(alpha = 0.8f))
                 }
             }
             if (onDelete != null) {
                 IconButton(onClick = onDelete) {
                     Icon(Icons.Default.Delete, contentDescription = "Supprimer", tint = Color.White.copy(alpha = 0.8f))
                 }
+            }
+        }
+    }
+}
+
+/** Filtre de catégorie : menu déroulant (toutes, ou un type d'événement avec son nombre). */
+@Composable
+internal fun FiltreCategorie(
+    filtre: TypeEvenement?,
+    total: Int,
+    nombre: (TypeEvenement) -> Int,
+    onChoix: (TypeEvenement?) -> Unit,
+) {
+    var ouvert by remember { mutableStateOf(false) }
+    Box {
+        OutlinedButton(onClick = { ouvert = true }, modifier = Modifier.fillMaxWidth()) {
+            Icon(
+                filtre?.icone ?: Icons.Default.FilterList,
+                contentDescription = null,
+                tint = filtre?.couleur ?: Color.White,
+                modifier = Modifier.size(18.dp)
+            )
+            Text(
+                "  Catégorie : " + (filtre?.let { "${it.label} (${nombre(it)})" } ?: "Toutes ($total)"),
+                color = Color.White,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = Color.White)
+        }
+        DropdownMenu(expanded = ouvert, onDismissRequest = { ouvert = false }) {
+            DropdownMenuItem(
+                text = { Text("Toutes ($total)") },
+                onClick = { onChoix(null); ouvert = false },
+                leadingIcon = { Icon(Icons.Default.FilterList, contentDescription = null) }
+            )
+            TypeEvenement.entries.forEach { type ->
+                DropdownMenuItem(
+                    text = { Text("${type.label} (${nombre(type)})", fontWeight = if (filtre == type) FontWeight.Bold else null) },
+                    onClick = { onChoix(type); ouvert = false },
+                    leadingIcon = { Icon(type.icone, contentDescription = null, tint = type.couleur) }
+                )
             }
         }
     }

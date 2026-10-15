@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
@@ -25,16 +26,34 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.res.stringResource
 import com.jc2.jdrcompagnon.ui.theme.JdrCompagnonTheme
 
+/** Bleu nuit de la barre du bas (IconesAsset.FondIcones), en ARGB pour la barre de navigation système. */
+private const val BLEU_BARRE_DU_BAS = 0xFF111D30.toInt()
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        // Barres système intégrées à l'appli, quel que soit le thème du téléphone : sans style
+        // imposé, Android choisit selon le mode clair/sombre du système (barre de navigation
+        // blanche sur un Samsung en mode clair). Icônes claires, barre d'état transparente,
+        // barre de navigation du bleu nuit de la barre du bas (transparente en navigation par gestes).
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(BLEU_BARRE_DU_BAS),
+        )
+        // Pas de voile de contraste ajouté par le système par-dessus la barre de navigation.
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+            window.isStatusBarContrastEnforced = false
+        }
         // Empêche le téléphone de se mettre en veille pendant l'utilisation de l'app
         // (session de jeu potentiellement longue, écran hébergeant le serveur réseau...).
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         // Initialize GameState with SharedPreferences
         GameState.init(this)
+        // Carnet du MJ (secrets, fils en suspens, préparation de séance), par monde.
+        com.jc2.jdrcompagnon.feature_preparation.data.CarnetMj.init(this)
+        com.jc2.jdrcompagnon.feature_faction.data.FactionsStore.init(this)
         GameState.loadMusicSettings()
         MusicManager.setVolume(GameState.musicSettings.value.volume)
 

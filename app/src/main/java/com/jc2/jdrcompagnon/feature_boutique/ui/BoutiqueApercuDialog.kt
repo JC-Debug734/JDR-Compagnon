@@ -1,11 +1,13 @@
 package com.jc2.jdrcompagnon.feature_boutique.ui
 
+import com.jc2.jdrcompagnon.ui.Monnaie
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -19,7 +21,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.jc2.jdrcompagnon.feature_boutique.data.BoutiqueImageStore
 import com.jc2.jdrcompagnon.feature_boutique.domain.model.Boutique
+import com.jc2.jdrcompagnon.ui.components.VignetteImage
 
 private val TexteSecondaire = Color.White.copy(alpha = 0.8f)
 
@@ -34,13 +38,18 @@ fun BoutiqueApercuDialog(boutique: Boutique, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Column {
-                Text(boutique.nom, fontWeight = FontWeight.Bold)
-                Text(
-                    "${boutique.type.label} · ${boutique.standing.label} · ${boutique.marchand.nom}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TexteSecondaire
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                boutique.image?.let {
+                    VignetteImage(BoutiqueImageStore, it, Modifier.size(56.dp).padding(end = 8.dp))
+                }
+                Column {
+                    Text(boutique.nom, fontWeight = FontWeight.Bold)
+                    Text(
+                        "${boutique.type.label} · ${boutique.standing.label} · ${boutique.marchand.nom}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TexteSecondaire
+                    )
+                }
             }
         },
         text = {
@@ -60,14 +69,14 @@ fun BoutiqueApercuDialog(boutique: Boutique, onDismiss: () -> Unit) {
                             service.description.ifBlank { null },
                             service.quantiteDisponible?.let { "$it places" }
                         ).joinToString(" · "),
-                        prix = service.prixEnPo
+                        prix = service.prixEnPc
                     )
                 }
                 if (boutique.inventaire.isNotEmpty()) {
                     HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                     Text("Articles en vente", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Black)
                     boutique.inventaire.forEach { article ->
-                        LigneTarif(nom = article.equipement.nom, detail = "x${article.quantiteStock}", prix = article.prixApplique)
+                        LigneTarif(nom = article.equipement.nom, detail = "x${article.quantiteStock}", prix = article.prixEnPc)
                     }
                 }
             }
@@ -83,6 +92,6 @@ private fun LigneTarif(nom: String, detail: String, prix: Int) {
             Text(nom, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
             if (detail.isNotBlank()) Text(detail, style = MaterialTheme.typography.bodySmall, color = TexteSecondaire)
         }
-        Text("$prix po", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+        Text(Monnaie.libelle(prix), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
     }
 }

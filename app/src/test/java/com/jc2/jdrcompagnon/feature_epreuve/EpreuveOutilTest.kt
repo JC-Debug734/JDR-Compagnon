@@ -26,6 +26,27 @@ class EpreuveOutilTest {
     fun nettoyer() = EpreuveOutilSession.fermer()
 
     @Test
+    fun `le DD varie de -2 a +2 au lancement et a chaque reussite`() {
+        val froid = Epreuve(nom = "Froid", reussitesRequises = 20, description = "DD {DD}", difficulte = DifficulteEpreuve.MOYENNE)
+        val ddNormal = ReglesEpreuve.ddPour(DifficulteEpreuve.MOYENNE, 1)
+        val variations = mutableSetOf<Int>()
+        repeat(30) { graine ->
+            val random = Random(graine)
+            EpreuveOutilSession.demarrer(froid, random)
+            repeat(5) {
+                val etat = EpreuveOutilSession.etat.value!!
+                assertTrue(etat.variationDd in ReglesEpreuve.PLAGE_VARIATION_DD)
+                // Le DD de la description suit l'écart tiré.
+                assertEquals("DD ${ReglesEpreuve.ddPour(DifficulteEpreuve.MOYENNE, etat.groupe.niveau, etat.variationDd)}", etat.epreuve.description)
+                variations += etat.variationDd
+                EpreuveOutilSession.reussite(null, null, random)
+            }
+        }
+        assertEquals(ReglesEpreuve.PLAGE_VARIATION_DD.toSet(), variations)
+        assertEquals(ddNormal - 2, ReglesEpreuve.ddPour(DifficulteEpreuve.MOYENNE, 1, -2))
+    }
+
+    @Test
     fun `aucune complication si la liste est vide`() {
         assertNull(ReglesEpreuve.tirerComplication(emptyList(), null))
         assertNull(ReglesEpreuve.tirerComplication(listOf(ComplicationEpreuve("  ")), null))
@@ -44,8 +65,8 @@ class EpreuveOutilTest {
     }
 
     @Test
-    fun `chaque echec tire toujours une complication`() {
-        EpreuveOutilSession.demarrer(marais)
+    fun `chaque echec avant le dernier tire une complication`() {
+        EpreuveOutilSession.demarrer(marais.copy(echecsMax = 6))
         repeat(5) { EpreuveOutilSession.echec("Aria", "saute", Random(it)) }
         val etat = EpreuveOutilSession.etat.value!!
         assertEquals(5, etat.echecs)
@@ -69,6 +90,25 @@ class EpreuveOutilTest {
         // Plus aucune tentative n'est comptée une fois l'épreuve terminée.
         EpreuveOutilSession.echec(null, null)
         assertEquals(0, EpreuveOutilSession.etat.value!!.echecs)
+    }
+
+    @Test
+    fun `trop d'echecs font perdre l'epreuve sans complication finale`() {
+        EpreuveOutilSession.demarrer(marais.copy(echecsMax = 2, issueEchec = "Le tertre surgit", combatEchec = "Tertre errant x1"))
+        EpreuveOutilSession.echec(null, null, Random(1))
+        assertFalse(EpreuveOutilSession.etat.value!!.terminee)
+        EpreuveOutilSession.echec(null, null, Random(2))
+        val etat = EpreuveOutilSession.etat.value!!
+        assertTrue(etat.terminee)
+        assertTrue(etat.echouee)
+        assertFalse(etat.reussie)
+        assertNull(etat.tentatives.last().complication)
+        assertEquals(1, etat.numeroComplication)
+        assertEquals("Tertre errant x1", etat.epreuve.combatEchec)
+        // Annuler le dernier échec rouvre l'épreuve.
+        EpreuveOutilSession.annulerDerniere()
+        assertFalse(EpreuveOutilSession.etat.value!!.terminee)
+        assertFalse(EpreuveOutilSession.etat.value!!.echouee)
     }
 
     @Test
@@ -104,15 +144,29 @@ class EpreuveOutilTest {
     }
 
     @Test
+    fun `les echecs toleres diminuent en proportion avec la difficulte`() {
+        assertEquals(3, ReglesEpreuve.echecsPour(DifficulteEpreuve.FACILE, 4))
+        assertEquals(4, ReglesEpreuve.echecsPour(DifficulteEpreuve.MOYENNE, 4))
+        assertEquals(4, ReglesEpreuve.echecsPour(DifficulteEpreuve.DIFFICILE, 4))
+        assertEquals(5, ReglesEpreuve.echecsPour(DifficulteEpreuve.MORTELLE, 4))
+        assertEquals(6, ReglesEpreuve.echecsPour(DifficulteEpreuve.MORTELLE, 5))
+        assertEquals(2, ReglesEpreuve.echecsPour(DifficulteEpreuve.FACILE, 1))
+        DifficulteEpreuve.entries.zipWithNext().forEach { (a, b) -> assertTrue(a.echecsParReussite > b.echecsParReussite) }
+    }
+
+    @Test
     fun `les variables sont remplacees selon le niveau du groupe`() {
         val col = Epreuve(
             nom = "Col",
             difficulte = DifficulteEpreuve.DIFFICILE,
             complications = listOf(ComplicationEpreuve("Froid", "JS DD {DD} ou {degats}, attaque {attaque}, DD {DD+2}, {po} po")),
+            issueEchec = "Chute : {degats_lourd}",
         )
         val niv1 = ReglesEpreuve.adapter(col, GroupeEpreuve(joueurs = 3, niveau = 1))
         assertEquals(5, niv1.reussitesRequises)
+        assertEquals(4, niv1.echecsMax)
         assertEquals("JS DD 14 ou 2d10, attaque +6, DD 16, 75 po", niv1.complications.single().description)
+        assertEquals("Chute : 4d10", niv1.issueEchec)
         val niv9 = ReglesEpreuve.adapter(col, GroupeEpreuve(joueurs = 4, niveau = 9))
         assertEquals(6, niv9.reussitesRequises)
         assertEquals("JS DD 16 ou 4d10, attaque +8, DD 18, 675 po", niv9.complications.single().description)
@@ -121,5 +175,6 @@ class EpreuveOutilTest {
     @Test
     fun `une epreuve sans difficulte garde ses reussites fixes`() {
         assertEquals(2, ReglesEpreuve.adapter(marais, GroupeEpreuve(joueurs = 6, niveau = 12)).reussitesRequises)
+        assertEquals(3, ReglesEpreuve.adapter(marais, GroupeEpreuve(joueurs = 6, niveau = 12)).echecsMax)
     }
 }

@@ -84,9 +84,20 @@ object ProfilsPackStore {
 
         // Personnages : nouvel id et univers courant ; une fiche de même nom et même type déjà
         // présente dans l'univers n'est pas dupliquée (réimport du même paquet).
-        racine.sousDossier(PERSONNAGES_DIRS).flatMap { it.fichiers(".json") }.forEach { fichier ->
-            val texte = fichier.readTextOrNull(context) ?: return@forEach
-            val export = GameState.characterFromJson(texte) ?: return@forEach
+        // Fiches rangées directement dans Personnages/ ou dans ses sous-dossiers PJ/, PNJ/, Monstres/.
+        val dossiersPersonnages = racine.sousDossier(PERSONNAGES_DIRS).flatMap { dossier ->
+            listOf(dossier) + dossier.listFiles().filter { it.isDirectory }
+        }
+        dossiersPersonnages.forEach { dossier -> dossier.fichiers(".json").forEach fiche@{ fichier ->
+            val texte = fichier.readTextOrNull(context) ?: return@fiche
+            val lu = GameState.characterFromJson(texte) ?: return@fiche
+            // Histoire personnelle : le .md du même nom, à côté du .json (prioritaire sur celle
+            // embarquée dans le .json, il a pu être modifié à part).
+            val histoire = fichier.name?.substringBeforeLast('.')
+                ?.let { base -> dossier.findFile("$base.md") }
+                ?.readTextOrNull(context)
+                ?: lu.character.histoirePersonnelle
+            val export = lu.copy(character = lu.character.copy(histoirePersonnelle = histoire))
             val cible = worldId ?: "donjon_et_dragon"
             val existe = GameState.characters.value.any {
                 it.worldId == cible && it.type == export.character.type &&
@@ -94,14 +105,16 @@ object ProfilsPackStore {
             }
             if (existe) {
                 resume = resume.copy(personnagesDejaPresents = resume.personnagesDejaPresents + 1)
-                return@forEach
+                return@fiche
             }
-            GameState.addCharacter(
-                export.character.copy(id = java.util.UUID.randomUUID().toString(), worldId = cible, createdBy = "MJ"),
-                historiqueImporte = export.historique
-            )
+            val nouveau = export.character.copy(id = java.util.UUID.randomUUID().toString(), worldId = cible, createdBy = "MJ")
+            // Images de l'histoire déposées à côté du .md : recopiées sous le même nom.
+            PersonnageFichiers.imagesReferencees(histoire).forEach { nom ->
+                dossier.findFile(nom)?.let { PersonnageFichiers.ajouterImage(context, nouveau, it.uri, nomImpose = nom) }
+            }
+            GameState.addCharacter(nouveau, historiqueImporte = export.historique)
             resume = resume.copy(personnages = resume.personnages + 1)
-        }
+        } }
 
         // Bibliothèque : chaque .md devient un livre personnalisé de l'univers courant.
         racine.sousDossier(BIBLIOTHEQUE_DIRS).flatMap { it.fichiers(".md") }.forEach { fichier ->
@@ -154,6 +167,19 @@ object ProfilsPackStore {
                 subfolder = "$dossier/$PERSONNAGES_EXPORT_DIR",
                 mimeType = "application/json"
             )
+            // Histoire personnelle : son .md et ses images, à côté du .json.
+            if (personnage.histoirePersonnelle.isNotBlank()) {
+                PublicFilesStore.writeText(
+                    context = context,
+                    displayName = PersonnageFichiers.nomHistoire(personnage),
+                    content = personnage.histoirePersonnelle,
+                    subfolder = "$dossier/$PERSONNAGES_EXPORT_DIR"
+                )
+                PersonnageFichiers.imagesReferencees(personnage.histoirePersonnelle).forEach { nom ->
+                    val image = PersonnageFichiers.fichierImage(context, personnage, nom) ?: return@forEach
+                    PublicFilesStore.writeBytes(context, nom, image.readBytes(), "$dossier/$PERSONNAGES_EXPORT_DIR", PersonnageFichiers.mimeImage(nom))
+                }
+            }
         }
 
         CustomBooksStore.list(context, worldId)

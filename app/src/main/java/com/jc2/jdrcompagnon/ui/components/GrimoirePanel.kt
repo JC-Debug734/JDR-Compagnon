@@ -194,7 +194,7 @@ private fun CopieSortDialog(
                     }
                 } else {
                     Text(
-                        "Niveau ${niveau(sort)} : ${pages * 2} heures, ${pages * 50} po (vous avez ${character.gold} po). " +
+                        "Niveau ${niveau(sort)} : ${pages * 2} heures, ${pages * 50} po (bourse : ${com.jc2.jdrcompagnon.ui.Monnaie.libelleBourse(character)}). " +
                             "Choisissez le matériel dans votre inventaire.",
                         style = MaterialTheme.typography.bodySmall,
                     )

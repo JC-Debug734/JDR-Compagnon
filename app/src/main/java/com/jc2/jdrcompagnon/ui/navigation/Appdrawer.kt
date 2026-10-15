@@ -42,7 +42,7 @@ fun AppDrawer(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     ModalDrawerSheet(
-        drawerContainerColor = ForcedDarkPalette.Surface,
+        drawerContainerColor = com.jc2.jdrcompagnon.ui.components.IconesAsset.FondIcones,
         drawerContentColor = ForcedDarkPalette.Content,
     ) {
         Column(
@@ -74,7 +74,7 @@ fun AppDrawer(
                 selected = false,
                 onClick = { GameState.requestRoleChange() },
                 colors = NavigationDrawerItemDefaults.colors(
-                    unselectedContainerColor = ForcedDarkPalette.Surface,
+                    unselectedContainerColor = com.jc2.jdrcompagnon.ui.components.IconesAsset.FondIcones,
                     unselectedIconColor = ForcedDarkPalette.Content,
                     unselectedTextColor = ForcedDarkPalette.Content,
                 ),

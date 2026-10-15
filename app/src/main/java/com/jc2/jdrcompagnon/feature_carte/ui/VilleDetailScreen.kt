@@ -29,6 +29,9 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MeetingRoom
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Storefront
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import com.jc2.jdrcompagnon.feature_carte.domain.model.FonctionLieu
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
@@ -64,6 +67,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.jc2.jdrcompagnon.di.EvenementDependencies
 import com.jc2.jdrcompagnon.di.VilleDetailViewModelFactory
 import com.jc2.jdrcompagnon.feature_carte.data.VilleImageStore
+import com.jc2.jdrcompagnon.feature_carte.data.VilleEmblemeStore
+import com.jc2.jdrcompagnon.feature_boutique.data.BoutiqueImageStore
+import com.jc2.jdrcompagnon.ui.components.VignetteImage
+import com.jc2.jdrcompagnon.ui.components.VignetteSelecteur
 import com.jc2.jdrcompagnon.feature_carte.domain.model.LieuNotable
 import com.jc2.jdrcompagnon.feature_evenement.ui.EvenementsLiesSection
 import com.jc2.jdrcompagnon.feature_carte.presentation.VilleDetailUiState
@@ -148,7 +155,7 @@ fun VilleDetailScreen(
                     // --- Image et description ---
                     val fichierImage = remember(versionImage) { VilleImageStore.fichier(context, villeId).takeIf { it.exists() } }
                     val image = rememberImageFichier(fichierImage)
-                    if (image != null || ville.description.isNotBlank() || !readOnly) {
+                    if (image != null || ville.description.isNotBlank() || ville.embleme != null || !readOnly) {
                         Surface(
                             shape = MaterialTheme.shapes.large,
                             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
@@ -165,6 +172,17 @@ fun VilleDetailScreen(
                                     )
                                 }
                                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    if (!readOnly) {
+                                        Text("Emblème", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                                        VignetteSelecteur(
+                                            catalogue = VilleEmblemeStore,
+                                            image = ville.embleme,
+                                            titreGalerie = "Emblèmes de ville",
+                                            onChanger = { viewModel.onChangerEmbleme(ville, it) }
+                                        )
+                                    } else if (ville.embleme != null) {
+                                        EmblemeVille(ville, Modifier.size(72.dp))
+                                    }
                                     if (ville.description.isNotBlank()) {
                                         Text(ville.description, style = MaterialTheme.typography.bodyMedium)
                                     } else if (!readOnly) {
@@ -202,6 +220,7 @@ fun VilleDetailScreen(
                         boutiquesLiees.forEach { boutique ->
                             ElementVille(
                                 icone = Icons.Default.Storefront,
+                                vignette = boutique.image?.let { img -> { VignetteImage(BoutiqueImageStore, img, Modifier.size(40.dp)) } },
                                 titre = boutique.nom,
                                 detail = listOf(boutique.type.label, boutique.marchand.nom).filter { it.isNotBlank() }.joinToString(" · "),
                                 onClick = if (readOnly) null else ({ onOpenBoutique(boutique.id) }),
@@ -234,14 +253,26 @@ fun VilleDetailScreen(
                             titre = ENTREE_DE_LA_VILLE,
                             detail = "Point d'arrivée des joueurs dans la ville",
                         )
-                        state.lieuxNotables.forEach { lieu ->
+                        // Côté joueur, les lieux cachés par le MJ ne sont pas montrés.
+                        state.lieuxNotables.filter { !readOnly || it.visibleJoueurs }.forEach { lieu ->
                             ElementVille(
                                 icone = Icons.Default.Place,
-                                titre = lieu.nom,
-                                detail = lieu.description,
+                                titre = (if (lieu.fonction != FonctionLieu.AUCUNE) "${lieu.fonction.emoji} " else "") + lieu.nom,
+                                detail = listOfNotNull(
+                                    lieu.fonction.label.takeIf { lieu.fonction != FonctionLieu.AUCUNE },
+                                    lieu.description.takeIf { it.isNotBlank() },
+                                ).joinToString(" · "),
                                 onClick = if (readOnly) null else ({ lieuEdite = lieu }),
                                 actions = {
                                     if (!readOnly) {
+                                        // Afficher / cacher le lieu aux joueurs d'un appui.
+                                        IconButton(onClick = { viewModel.onModifierLieu(lieu.copy(visibleJoueurs = !lieu.visibleJoueurs)) }) {
+                                            Icon(
+                                                if (lieu.visibleJoueurs) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                                contentDescription = if (lieu.visibleJoueurs) "Visible des joueurs — cacher" else "Caché aux joueurs — afficher",
+                                                tint = if (lieu.visibleJoueurs) ForcedDarkPalette.AccentGold else TexteSecondaire,
+                                            )
+                                        }
                                         IconButton(onClick = { viewModel.onSupprimerLieu(lieu.id) }) {
                                             Icon(Icons.Default.Delete, contentDescription = "Supprimer ${lieu.nom}", tint = MaterialTheme.colorScheme.error)
                                         }
@@ -365,30 +396,12 @@ fun VilleDetailScreen(
                 }
 
                 if (afficherAjoutLieu || lieuEdite != null) {
-                    val initial = lieuEdite
-                    var nom by remember(initial) { mutableStateOf(initial?.nom.orEmpty()) }
-                    var description by remember(initial) { mutableStateOf(initial?.description.orEmpty()) }
-                    val fermer = { afficherAjoutLieu = false; lieuEdite = null }
-                    AlertDialog(
-                        onDismissRequest = fermer,
-                        title = { Text(if (initial == null) "Nouveau lieu à visiter" else "Modifier le lieu") },
-                        text = {
-                            Column {
-                                OutlinedTextField(value = nom, onValueChange = { nom = it }, label = { Text("Nom (ex: Auberge du Dragon)") }, modifier = Modifier.fillMaxWidth())
-                                OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("Description") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
-                            }
-                        },
-                        confirmButton = {
-                            TextButton(
-                                onClick = {
-                                    if (initial == null) viewModel.onAjouterLieu(nom, description)
-                                    else viewModel.onModifierLieu(initial.copy(nom = nom, description = description))
-                                    fermer()
-                                },
-                                enabled = nom.isNotBlank()
-                            ) { Text(if (initial == null) "Ajouter" else "Enregistrer") }
-                        },
-                        dismissButton = { TextButton(onClick = fermer) { Text("Annuler") } }
+                    EditeurLieuVilleDialog(
+                        initial = lieuEdite,
+                        villeId = villeId,
+                        campagneId = campagneId,
+                        onEnregistrer = viewModel::onModifierLieu,
+                        onDismiss = { afficherAjoutLieu = false; lieuEdite = null },
                     )
                 }
             }
@@ -407,6 +420,8 @@ private fun VideHint(texte: String) {
 @Composable
 private fun ElementVille(
     icone: ImageVector,
+    // Vignette affichée à la place de l'icône (enseigne d'une boutique), null = icône.
+    vignette: (@Composable () -> Unit)? = null,
     titre: String,
     detail: String? = null,
     onClick: (() -> Unit)? = null,
@@ -425,7 +440,8 @@ private fun ElementVille(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Icon(icone, contentDescription = null, tint = ForcedDarkPalette.AccentGold, modifier = Modifier.size(22.dp))
+            if (vignette != null) vignette()
+            else Icon(icone, contentDescription = null, tint = ForcedDarkPalette.AccentGold, modifier = Modifier.size(22.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(titre, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (!detail.isNullOrBlank()) {

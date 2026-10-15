@@ -2,6 +2,22 @@ package com.jc2.jdrcompagnon.ui.components
 
 import android.content.Context
 import android.graphics.BitmapFactory
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddPhotoAlternate
+import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.ImageBitmap
@@ -97,6 +113,23 @@ object FilePortraits {
 
     fun idFor(file: java.io.File): String = ID_PREFIX + file.absolutePath
 
+    private const val IMPORTED_DIR = "portraits_importes"
+
+    /**
+     * Copie une photo choisie par l'utilisateur (galerie, fichiers) dans le stockage interne et
+     * renvoie son id de portrait, ou null si la lecture échoue. À appeler hors du thread UI.
+     */
+    fun importer(context: Context, uri: android.net.Uri): String? = runCatching {
+        val dossier = java.io.File(context.filesDir, IMPORTED_DIR).apply { mkdirs() }
+        val extension = context.contentResolver.getType(uri)?.substringAfter('/')
+            ?.takeIf { it in setOf("png", "jpeg", "jpg", "webp") } ?: "jpg"
+        val cible = java.io.File(dossier, "${java.util.UUID.randomUUID()}.$extension")
+        context.contentResolver.openInputStream(uri)?.use { entree ->
+            cible.outputStream().use { entree.copyTo(it) }
+        } ?: return null
+        idFor(cible)
+    }.getOrNull()
+
     fun bitmap(portraitId: String): ImageBitmap? = bitmaps[portraitId] ?: runCatching {
         val path = file(portraitId).absolutePath
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -125,4 +158,28 @@ fun rememberCharacterPortraitPainter(portraitId: String?): Painter? {
     }
     val resId = characterPortraitOptions.find { it.id == portraitId }?.resId ?: return null
     return painterResource(id = resId)
+}
+
+/**
+ * Bouton « Importer une photo » des sélecteurs de portrait : ouvre la galerie, copie l'image
+ * choisie dans l'app puis renvoie son id de portrait (FilePortraits) à [onImporte].
+ */
+@Composable
+fun ImporterPortraitBouton(onImporte: (String) -> Unit, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val lanceur = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val id = withContext(Dispatchers.IO) { FilePortraits.importer(context, uri) }
+                if (id != null) onImporte(id)
+                else Toast.makeText(context, "Impossible de lire cette image", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    OutlinedButton(onClick = { lanceur.launch("image/*") }, modifier = modifier) {
+        Icon(Icons.Default.AddPhotoAlternate, contentDescription = null)
+        Spacer(Modifier.width(8.dp))
+        Text("Importer une photo")
+    }
 }

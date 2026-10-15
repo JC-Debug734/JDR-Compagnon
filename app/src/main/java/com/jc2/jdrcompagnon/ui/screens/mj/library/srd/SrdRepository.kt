@@ -181,7 +181,7 @@ object SrdRepository {
     private val historiquesCache = mutableMapOf<String, List<SrdSectionEntry>>()
     private val donsCache = mutableMapOf<String, List<SrdSectionEntry>>()
     private val armesArmuresMagiquesCache = mutableMapOf<String, List<SrdSectionEntry>>()
-    private val monturesVehiculesCache = mutableMapOf<String, List<SrdDocSection>>()
+    private val monturesVehiculesCache = mutableMapOf<String, List<SrdSectionEntry>>()
     private val spellsIndexCache = mutableMapOf<String, List<SrdSectionEntry>>()
     private val languesCache = mutableMapOf<String, String>()
 
@@ -262,15 +262,21 @@ object SrdRepository {
             monsters += source.imagesRoot
                 ?.let { CustomBookImages.resolve(result.monsters, source.file, it) }
                 ?: result.monsters
-            equipment += result.equipment
+            equipment += source.imagesRoot
+                ?.let { CustomBookImages.resolveObjets(result.equipment, source.file, it) }
+                ?: result.equipment
             spells += result.spells
             spellsIndex += result.spellsIndex
             classes += result.classes
             sousClasses += result.sousClasses
             especes += result.especes
-            historiques += result.historiques
+            historiques += source.imagesRoot
+                ?.let { CustomBookImages.resolveHistoriques(result.historiques, source.file, it) }
+                ?: result.historiques
             dons += result.dons
-            rules += result.rules
+            rules += source.imagesRoot
+                ?.let { CustomBookImages.resolveRegles(result.rules, source.file, it) }
+                ?: result.rules
         }
 
         customMonstersCache[key] = monsters
@@ -563,7 +569,11 @@ object SrdRepository {
             } else {
                 emptyList()
             }
-            val entries = official + customHistoriquesCache[key].orEmpty()
+            // Un historique importé remplace celui du SRD de même nom (ex. Acolyte illustré du
+            // Manuel des joueurs) au lieu d'apparaître en double.
+            val custom = customHistoriquesCache[key].orEmpty()
+            val nomsCustom = custom.map { it.name.lowercase() }.toSet()
+            val entries = official.filter { it.name.lowercase() !in nomsCustom } + custom
             historiquesCache[key] = entries
             entries
         }
@@ -618,23 +628,24 @@ object SrdRepository {
     }
 
     /**
-     * Charge les sections de référence montures et véhicules pour le monde donné
-     * (D&D uniquement, SRD 5.2.1). Ce fichier ne définit pas d'entrées nommées
-     * individuelles (pas de commentaires `<!-- id -->`), d'où l'usage de
-     * [SrdDocSection] plutôt que [SrdSectionEntry] : chaque section correspond à
-     * un titre "## " (ex. "Montures et autres animaux", "Véhicules aériens et bateaux").
+     * Livre « Montures et véhicules » (D&D uniquement, SRD 5.2.1), découpé en entrées comme les
+     * règles : catégorie « Caractéristiques » (tables de prix, charges, profils, véhicules) et
+     * catégorie « Règles » (cargaison, selles, barde, allure...), chacune ouvrant sa fiche.
      */
     suspend fun loadMonturesVehicules(
         context: Context,
         worldId: String? = "donjon_et_dragon",
-    ): List<SrdDocSection> = withContext(Dispatchers.IO) {
+    ): List<SrdSectionEntry> = withContext(Dispatchers.IO) {
         if (worldId != "donjon_et_dragon") return@withContext emptyList()
         monturesVehiculesCache[worldId]?.let { return@withContext it }
-        val raw = readAsset(context, FILE_MONTURES_VEHICULES)
-        val sections = MarkdownSectionParser.parseSections(raw)
-        monturesVehiculesCache[worldId] = sections
-        sections
+        ReferenceEntryParser.parse(readAsset(context, FILE_MONTURES_VEHICULES))
+            .filter { it.category.isNotBlank() && !it.name.equals(it.category, ignoreCase = true) }
+            .also { monturesVehiculesCache[worldId] = it }
     }
+
+    /** Une entrée du livre Montures par son nom (« Selles », « Véhicules aériens et bateaux »). */
+    suspend fun getMontureEntryByName(context: Context, name: String, worldId: String? = "donjon_et_dragon"): SrdSectionEntry? =
+        loadMonturesVehicules(context, worldId).find { it.name.equals(name, ignoreCase = true) }
 
     /**
      * Charge le markdown brut des règles générales pour le monde donné.
@@ -713,7 +724,11 @@ object SrdRepository {
         name: String,
         worldId: String? = "donjon_et_dragon",
     ): SrdEntry? = withContext(Dispatchers.IO) {
-        loadSpells(context, worldId).find { it.name.equals(name, ignoreCase = true) }
+        // Apostrophe droite ou typographique (« Lueur d'espoir » d'une sous-classe importée).
+        loadSpells(context, worldId).let { sorts ->
+            sorts.find { it.name.equals(name, ignoreCase = true) }
+                ?: sorts.find { com.jc2.jdrcompagnon.feature_combat.domain.model.ArsenalPersonnage.memeSort(it.name, name) }
+        }
     }
 
     /**
@@ -953,7 +968,7 @@ object SrdRepository {
     // prochain lancement, écrasant la copie précédente quelle qu'elle soit — c'est
     // le seul moyen fiable de propager un changement de contenu, puisque la copie
     // publique ne porte par elle-même aucune information de date ni de provenance.
-    private const val SRD_DATA_VERSION = 3
+    private const val SRD_DATA_VERSION = 4
     private const val SRD_VERSION_SUBFOLDER = "SRD"
     private const val SRD_VERSION_FILENAME = ".srd_version"
 
@@ -994,6 +1009,16 @@ object SrdRepository {
      * Cherche un item d'équipement par nom dans le cache D&D (fallback sur le premier monde chargé).
      * Utilisé pour calculer le poids total ; tolérant aux majuscules.
      */
+    /**
+     * Objet maudit nommé exactement [name] dans les listes d'équipement déjà chargées (tous mondes),
+     * null s'il n'est pas maudit ou pas encore chargé. Nom exact : contrairement à
+     * [findEquipmentItemCached], une simple ressemblance de nom ne doit pas bloquer un objet.
+     */
+    fun objetMaudit(name: String): EquipmentItem? =
+        equipmentListCache.values.firstNotNullOfOrNull { liste ->
+            liste.firstOrNull { it.maudit && it.name.equals(name, ignoreCase = true) }
+        }
+
     fun findEquipmentItemCached(name: String): EquipmentItem? {
         val cache = equipmentListCache.values.firstOrNull() ?: return null
         val lower = name.lowercase()

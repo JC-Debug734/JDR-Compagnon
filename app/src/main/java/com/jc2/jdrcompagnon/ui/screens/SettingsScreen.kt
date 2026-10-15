@@ -1,6 +1,7 @@
 package com.jc2.jdrcompagnon.ui.screens
 
 import android.widget.Toast
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,6 +22,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -39,9 +41,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.jc2.jdrcompagnon.BuildConfig
 import com.jc2.jdrcompagnon.ui.GameState
+import com.jc2.jdrcompagnon.update.UpdateChecker
 import com.jc2.jdrcompagnon.update.UpdateManager
 import com.jc2.jdrcompagnon.update.UpdateUiState
 import kotlinx.coroutines.launch
@@ -241,6 +245,30 @@ fun SettingsScreen(
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                // Forcer : ouvre la page de téléchargement même si aucune
+                // version plus récente n'est détectée.
+                OutlinedButton(
+                    onClick = { UpdateManager.forceUpdate(context) },
+                    enabled = updateState !is UpdateUiState.Checking,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.SystemUpdate,
+                        contentDescription = null,
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                    Text("Forcer la mise à jour")
+                }
+
+                // Lien direct vers l'APK sur Google Drive (même cible que
+                // "Forcer la mise à jour").
+                Text(
+                    text = UpdateChecker.APK_URL,
+                    style = MaterialTheme.typography.bodySmall.copy(textDecoration = TextDecoration.Underline),
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.clickable { UpdateManager.forceUpdate(context) },
                 )
             }
 

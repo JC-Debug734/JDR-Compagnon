@@ -1,6 +1,13 @@
 package com.jc2.jdrcompagnon.feature_evenement.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -25,14 +32,23 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.jc2.jdrcompagnon.feature_evenement.data.EvenementImageStore
 import com.jc2.jdrcompagnon.feature_evenement.domain.model.Evenement
 import com.jc2.jdrcompagnon.feature_evenement.domain.model.IssueEvenement
 import com.jc2.jdrcompagnon.feature_evenement.domain.model.NatureIssue
 import com.jc2.jdrcompagnon.feature_evenement.domain.model.TypeEvenement
 import com.jc2.jdrcompagnon.ui.GameState
+import com.jc2.jdrcompagnon.ui.components.FilePortraits
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Création / modification d'un événement de la bibliothèque. [initial] null = nouvel événement
@@ -62,6 +78,18 @@ fun EvenementEditorDialog(
         mutableStateOf(initial?.issues ?: listOf(IssueEvenement(nature = NatureIssue.REUSSITE), IssueEvenement(nature = NatureIssue.ECHEC)))
     }
     var porteeExpanded by remember { mutableStateOf(false) }
+    // Id fixé dès l'ouverture : l'illustration choisie est copiée sous un nom qui en dépend.
+    val base = remember { initial ?: Evenement(worldId = worldId, titre = "") }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var imageFileName by remember { mutableStateOf(initial?.imageFileName) }
+    val choisirImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) scope.launch {
+            // Nom unique par choix : annuler l'édition laisse l'ancienne image intacte.
+            withContext(Dispatchers.IO) { EvenementImageStore.copier(context, uri, "${base.id}-${System.currentTimeMillis()}") }
+                ?.let { imageFileName = it }
+        }
+    }
 
     val campagnes = GameState.mjCampaigns.collectAsState().value.filter { it.worldId == worldId }
     val porteeLabel = campagnes.firstOrNull { it.id == campagneId }?.title ?: "Commun à tout le monde"
@@ -122,6 +150,11 @@ fun EvenementEditorDialog(
                         }
                     }
                 }
+                ImageEvenementEditor(
+                    fichier = imageFileName?.let { EvenementImageStore.fichier(context, it) },
+                    onChoisir = { choisirImage.launch("image/*") },
+                    onRetirer = { imageFileName = null }
+                )
                 ProfilsEditor(profils = profils, worldId = worldId, onProfilsChanged = { profils = it })
                 OutlinedTextField(
                     value = objectif,
@@ -139,7 +172,7 @@ fun EvenementEditorDialog(
             TextButton(
                 enabled = titre.isNotBlank(),
                 onClick = {
-                    val base = initial ?: Evenement(worldId = worldId, titre = "")
+                    initial?.imageFileName?.takeIf { it != imageFileName }?.let { EvenementImageStore.supprimer(context, it) }
                     onSave(
                         base.copy(
                             titre = titre.trim(),
@@ -149,7 +182,8 @@ fun EvenementEditorDialog(
                             effets = effets,
                             objectif = objectif.trim(),
                             profils = profils,
-                            issues = issues.filterNot { it.estVide }
+                            issues = issues.filterNot { it.estVide },
+                            imageFileName = imageFileName
                         )
                     )
                 }
@@ -157,4 +191,25 @@ fun EvenementEditorDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } }
     )
+}
+
+/** Illustration de l'événement, montrée sur la page d'affichage table quand le MJ le joue. */
+@Composable
+private fun ImageEvenementEditor(fichier: java.io.File?, onChoisir: () -> Unit, onRetirer: () -> Unit) {
+    val apercu = remember(fichier) { fichier?.takeIf { it.isFile }?.let { FilePortraits.bitmap(FilePortraits.idFor(it)) } }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("Illustration (affichée sur la table quand l'événement est joué)", style = MaterialTheme.typography.labelMedium)
+        if (apercu != null) {
+            Image(
+                bitmap = apercu,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxWidth().heightIn(max = 160.dp).clip(RoundedCornerShape(12.dp))
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = onChoisir) { Text(if (apercu != null) "Changer l'image" else "Choisir une image") }
+            if (fichier != null) TextButton(onClick = onRetirer) { Text("Retirer") }
+        }
+    }
 }

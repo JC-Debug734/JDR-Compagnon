@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -60,17 +61,6 @@ import com.jc2.jdrcompagnon.ui.theme.ForcedDarkPalette
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlayerQuestsScreen(onOpenMenu: () -> Unit) {
-    val networkQuests by NetworkSessionManager.networkQuests.collectAsState()
-    val campaigns by GameState.mjCampaigns.collectAsState()
-    val campaignId by GameState.currentCampaignId.collectAsState()
-    val characters by GameState.characters.collectAsState()
-    val quests = networkQuests ?: remember(campaigns, campaignId, characters) { QuetesJoueur.locales() }
-    var tab by rememberSaveable { mutableStateOf(0) }
-    val actives = setOf(QuestStatus.EN_COURS.name, QuestStatus.EN_ATTENTE.name)
-    val enCours = quests.filter { it.status in actives }
-    val finies = quests.filter { it.status !in actives }
-    val affichees = if (tab == 0) enCours else finies
-
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -83,33 +73,75 @@ fun PlayerQuestsScreen(onOpenMenu: () -> Unit) {
         },
         containerColor = Color.Transparent,
     ) { innerPadding ->
-        Column(Modifier.fillMaxSize().padding(innerPadding)) {
-            TabRow(selectedTabIndex = tab, containerColor = Color.Transparent, contentColor = Color.White) {
-                Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("En cours (${enCours.size})") })
-                Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Terminées (${finies.size})") })
+        PlayerQuestsContent(Modifier.fillMaxSize().padding(innerPadding), PaddingValues(16.dp))
+    }
+}
+
+/**
+ * Journal de quêtes en fenêtre, ouvert depuis le menu latéral du joueur (comme la liste des lieux
+ * d'une ville) : on le consulte sans quitter l'écran en cours.
+ */
+@Composable
+fun PlayerQuestsDialog(onDismiss: () -> Unit) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Quêtes") },
+        text = { PlayerQuestsContent(Modifier.fillMaxWidth().heightIn(max = 480.dp), PaddingValues(vertical = 12.dp)) },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Fermer") } },
+    )
+}
+
+/** Onglets « En cours » / « Terminées » et cartes de quêtes (écran comme fenêtre). */
+@Composable
+private fun PlayerQuestsContent(modifier: Modifier, listPadding: PaddingValues) {
+    val networkQuests by NetworkSessionManager.networkQuests.collectAsState()
+    val campaigns by GameState.mjCampaigns.collectAsState()
+    val campaignId by GameState.currentCampaignId.collectAsState()
+    val characters by GameState.characters.collectAsState()
+    // Personnage du joueur : celui qu'il incarne en partie réseau, sinon celui sélectionné.
+    val claimedId by NetworkSessionManager.claimedCharacterId.collectAsState()
+    val selectedId by GameState.selectedCharacterId.collectAsState()
+    val personnage = characters.firstOrNull { it.id == (claimedId ?: selectedId) }
+    val quests = networkQuests ?: remember(campaigns, campaignId, characters) { QuetesJoueur.locales() }
+    var tab by rememberSaveable { mutableStateOf(0) }
+    val actives = setOf(QuestStatus.EN_COURS.name, QuestStatus.EN_ATTENTE.name)
+    // Quête abandonnée par ce personnage : rangée avec les terminées.
+    fun abandonnee(q: QuestJoueurData) = personnage != null && q.abandonneePar.any { it.equals(personnage.name, ignoreCase = true) }
+    val enCours = quests.filter { it.status in actives && !abandonnee(it) }
+    val finies = quests.filter { it.status !in actives || abandonnee(it) }
+    val affichees = if (tab == 0) enCours else finies
+
+    Column(modifier) {
+        TabRow(selectedTabIndex = tab, containerColor = Color.Transparent, contentColor = Color.White) {
+            Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("En cours (${enCours.size})") })
+            Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Terminées (${finies.size})") })
+        }
+        if (affichees.isEmpty()) {
+            Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                Text(
+                    if (tab == 0) "Aucune quête en cours pour le moment." else "Aucune quête terminée.",
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyLarge,
+                )
             }
-            if (affichees.isEmpty()) {
-                Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-                    Text(
-                        if (tab == 0) "Aucune quête en cours pour le moment." else "Aucune quête terminée.",
-                        color = Color.White,
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                }
-            } else {
-                LazyColumn(
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    items(affichees, key = { it.id }) { quest -> PlayerQuestCard(quest) }
-                }
+        } else {
+            LazyColumn(
+                contentPadding = listPadding,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                items(affichees, key = { it.id }) { quest -> PlayerQuestCard(quest, personnage) }
             }
         }
     }
 }
 
 @Composable
-private fun PlayerQuestCard(quest: QuestJoueurData) {
+private fun PlayerQuestCard(quest: QuestJoueurData, personnage: com.jc2.jdrcompagnon.ui.Character?) {
+    var confirmerAbandon by remember(quest.id) { mutableStateOf(false) }
+    // Quête en cours (acceptée sur un panneau ou confiée par le MJ) : ce personnage peut l'abandonner.
+    val abandonneeParMoi = personnage != null && quest.abandonneePar.any { it.equals(personnage.name, ignoreCase = true) }
+    val abandonnable = personnage != null && !abandonneeParMoi &&
+        (quest.status == QuestStatus.EN_COURS.name || quest.status == QuestStatus.EN_ATTENTE.name)
     var expanded by rememberSaveable(quest.id) { mutableStateOf(quest.status == QuestStatus.EN_COURS.name) }
     val hint = Color.White.copy(alpha = 0.8f)
     Card(
@@ -142,6 +174,7 @@ private fun PlayerQuestCard(quest: QuestJoueurData) {
             val meta = listOfNotNull(
                 quest.location.ifBlank { null }?.let { "📍 $it" },
                 quest.giverName?.let { "Confiée par $it" },
+                "Abandonnée".takeIf { abandonneeParMoi },
                 QuestStatus.entries.firstOrNull { it.name == quest.status }?.takeIf { it != QuestStatus.EN_COURS }?.label,
             ).joinToString(" · ")
             if (meta.isNotBlank()) Text(meta, color = hint, style = MaterialTheme.typography.bodySmall)
@@ -153,7 +186,34 @@ private fun PlayerQuestCard(quest: QuestJoueurData) {
                     Text("Récompenses", color = ForcedDarkPalette.AccentGold, style = MaterialTheme.typography.labelLarge)
                     quest.rewards.forEach { Text("• $it", color = Color.White, style = MaterialTheme.typography.bodySmall) }
                 }
+                if (quest.accepteePar.isNotEmpty()) {
+                    Text("✔ Acceptée par ${quest.accepteePar.joinToString(", ")}", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                }
+                if (abandonnable) {
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = { confirmerAbandon = true },
+                        colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Text("Abandonner la quête", modifier = Modifier.padding(start = 6.dp))
+                    }
+                }
             }
         }
+    }
+
+    if (confirmerAbandon && personnage != null) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmerAbandon = false },
+            title = { Text("Abandonner la quête ?") },
+            text = { Text("Voulez-vous vraiment abandonner la quête « ${quest.title} » ? Le MJ en sera averti.") },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    NetworkSessionManager.abandonnerQuete(quest.id, personnage.id, personnage.name)
+                    confirmerAbandon = false
+                }) { Text("Abandonner", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { confirmerAbandon = false }) { Text("Annuler") } },
+        )
     }
 }

@@ -37,7 +37,6 @@ import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -69,7 +68,7 @@ import com.jc2.jdrcompagnon.ui.theme.ForcedDarkPalette
 
 /**
  * Outil ÉPREUVES : liste des épreuves environnementales du monde courant. Toucher une carte la
- * modifie, le bouton « Lancer » démarre sa résolution (EpreuveResolutionScreen). Une épreuve en
+ * modifie, le bouton « Lancer » démarre sa résolution (EpreuveResolutionDialog). Une épreuve en
  * cours est rappelée en haut de la liste.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -77,7 +76,6 @@ import com.jc2.jdrcompagnon.ui.theme.ForcedDarkPalette
 fun EpreuveListScreen(
     viewModel: EpreuveListViewModel,
     worldId: String,
-    onOuvrirResolution: () -> Unit,
     onOpenMenu: () -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -91,16 +89,20 @@ fun EpreuveListScreen(
     var menuPourId by remember { mutableStateOf<String?>(null) }
     var aSupprimer by remember { mutableStateOf<Epreuve?>(null) }
     var aLancer by remember { mutableStateOf<Epreuve?>(null) }
+    // Résolution de l'épreuve active, affichée comme un événement (EpreuveResolutionDialog).
+    var resolutionOuverte by remember { mutableStateOf(false) }
+    // Épreuve en attente du choix de difficulté par le MJ (DemandeDifficulteEpreuve).
+    var aDemarrer by remember { mutableStateOf<Epreuve?>(null) }
 
     fun lancer(epreuve: Epreuve) {
         val actuelle = EpreuveOutilSession.etat.value
         if (actuelle != null && !actuelle.terminee && actuelle.epreuve.id != epreuve.id) {
             aLancer = epreuve
-        } else {
+        } else if (actuelle != null && !actuelle.terminee && actuelle.epreuve.id == epreuve.id) {
             // Même épreuve encore en cours : on la reprend au lieu de remettre le compteur à zéro.
-            val reprise = actuelle != null && !actuelle.terminee && actuelle.epreuve.id == epreuve.id
-            if (!reprise) EpreuveOutilSession.demarrer(epreuve)
-            onOuvrirResolution()
+            resolutionOuverte = true
+        } else {
+            aDemarrer = epreuve
         }
     }
 
@@ -111,15 +113,13 @@ fun EpreuveListScreen(
                 navigationIcon = {
                     IconButton(onClick = onOpenMenu) { Icon(Icons.Default.Menu, contentDescription = "Menu") }
                 },
+                actions = {
+                    IconButton(onClick = { edition = EditeurEpreuve(null) }) {
+                        Icon(Icons.Default.Add, contentDescription = "Nouvelle épreuve", tint = ForcedDarkPalette.AccentGold)
+                    }
+                },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent),
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { edition = EditeurEpreuve(null) },
-                containerColor = ForcedDarkPalette.AccentGold,
-                contentColor = ForcedDarkPalette.Background,
-            ) { Icon(Icons.Default.Add, contentDescription = "Nouvelle épreuve") }
         },
         containerColor = Color.Transparent,
     ) { innerPadding ->
@@ -133,7 +133,7 @@ fun EpreuveListScreen(
             enCours?.let { actif ->
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     Card(
-                        modifier = Modifier.fillMaxWidth().clickable(onClick = onOuvrirResolution),
+                        modifier = Modifier.fillMaxWidth().clickable { resolutionOuverte = true },
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f)),
                         border = BorderStroke(2.dp, ForcedDarkPalette.AccentGold),
                     ) {
@@ -147,12 +147,12 @@ fun EpreuveListScreen(
                                 )
                                 Text(actif.epreuve.nom, fontWeight = FontWeight.Bold, color = Color.White)
                                 Text(
-                                    "${actif.reussites} / ${actif.epreuve.reussitesRequises} réussites · ${actif.echecs} échec(s)",
+                                    "${actif.reussites} / ${actif.epreuve.reussitesRequises} réussites · ${actif.echecs} / ${actif.epreuve.echecsMax} échecs",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = Color.White,
                                 )
                             }
-                            TextButton(onClick = onOuvrirResolution) { Text("Reprendre") }
+                            TextButton(onClick = { resolutionOuverte = true }) { Text("Reprendre") }
                         }
                     }
                 }
@@ -175,6 +175,14 @@ fun EpreuveListScreen(
             }
         }
     }
+
+    if (resolutionOuverte) EpreuveResolutionDialog(onDismiss = { resolutionOuverte = false })
+
+    DemandeDifficulteEpreuve(
+        demande = aDemarrer,
+        onLancee = { aDemarrer = null; resolutionOuverte = true },
+        onDismiss = { aDemarrer = null },
+    )
 
     edition?.let { (initiale) ->
         EpreuveEditorDialog(
@@ -213,9 +221,8 @@ fun EpreuveListScreen(
             text = { Text("« ${enCours?.epreuve?.nom} » n'est pas terminée. La remplacer par « ${epreuve.nom} » ?") },
             confirmButton = {
                 TextButton(onClick = {
-                    EpreuveOutilSession.demarrer(epreuve)
                     aLancer = null
-                    onOuvrirResolution()
+                    aDemarrer = epreuve
                 }) { Text("Remplacer") }
             },
             dismissButton = { TextButton(onClick = { aLancer = null }) { Text("Annuler") } },
@@ -287,7 +294,8 @@ private fun EpreuveCarte(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                "${epreuve.reussitesRequises} réussite(s) · ${epreuve.complications.size} complication(s)",
+                (epreuve.difficulte?.let { "Difficulté ${it.libelle.lowercase()}" } ?: "${epreuve.reussitesRequises} réussite(s) avant ${epreuve.echecsMax} échec(s)") +
+                    " · ${epreuve.complications.size} complication(s)" + if (epreuve.combatEchec.isNotBlank()) " · combat si échec" else "",
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.White,
             )

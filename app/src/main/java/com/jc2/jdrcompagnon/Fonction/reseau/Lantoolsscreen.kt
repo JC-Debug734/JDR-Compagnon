@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.GroupOff
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.*
@@ -78,7 +79,9 @@ fun LanToolsScreen(
     startInJoinMode: Boolean = false,
     groupId: String? = null,
     campaignTitle: String? = null,
-    onExit: (() -> Unit)? = null
+    onExit: (() -> Unit)? = null,
+    // Ouvre le menu latéral : l'écran du serveur affiche alors l'icône menu au lieu de la flèche retour.
+    onOpenMenu: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     var mode by remember {
@@ -145,6 +148,7 @@ fun LanToolsScreen(
                 },
                 onRequestPermissions = { permissionLauncher.launch(requiredPermissions.toTypedArray()) },
                 onNavigateBack = { if (onExit != null) onExit() else mode = LanMode.CHOIX },
+                onOpenMenu = onOpenMenu,
                 onStopServer = {
                     NetworkSessionManager.stopHosting(context)
                     if (onExit != null) onExit() else mode = LanMode.CHOIX
@@ -219,6 +223,154 @@ private fun PermissionRequiredScreen(onRequestPermissions: () -> Unit, onBack: (
             Spacer(Modifier.height(8.dp))
             OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
                 Text("Retour", color = Color.White)
+            }
+        }
+    }
+}
+
+/**
+ * Imports (livres de la bibliothèque du monde) partagés avec les joueurs : chacun peut les
+ * télécharger à sa connexion s'il ne les a pas (voir ImportsPartages). La carte n'affiche que
+ * le résumé ; un tap ouvre le choix, filtrable par type de contenu. Choix conservé d'une
+ * partie à l'autre.
+ */
+@Composable
+private fun ImportsPartagesSelector() {
+    val context = LocalContext.current
+    val monde = com.jc2.jdrcompagnon.ui.GameState.currentWorldId() ?: "donjon_et_dragon"
+    var selection by remember(monde) { mutableStateOf(com.jc2.jdrcompagnon.network.ImportsPartages.selection(context, monde)) }
+    val livres = remember(monde) { com.jc2.jdrcompagnon.network.ImportsPartages.livresPartageables(context, monde) }
+    val partages = livres.filter { it.id in selection }
+    var choixOuvert by remember { mutableStateOf(false) }
+
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { choixOuvert = true }
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Imports partagés", style = MaterialTheme.typography.labelSmall, color = Color.White)
+                Text(
+                    when {
+                        livres.isEmpty() -> "Aucun import dans la bibliothèque de ce monde"
+                        partages.isEmpty() -> "Aucun — touchez pour en choisir"
+                        else -> partages.joinToString(", ") { it.name }
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            }
+            Icon(Icons.Default.ArrowDropDown, contentDescription = "Choisir les imports partagés", tint = Color.White)
+        }
+    }
+
+    if (choixOuvert) {
+        ImportsPartagesDialog(
+            monde = monde,
+            livres = livres,
+            selection = selection,
+            onBasculer = { livre ->
+                com.jc2.jdrcompagnon.network.ImportsPartages.definirPartage(context, monde, livre.id, livre.id !in selection)
+                selection = com.jc2.jdrcompagnon.network.ImportsPartages.selection(context, monde)
+                NetworkSessionManager.importsPartagesModifies()
+            },
+            onDismiss = { choixOuvert = false },
+        )
+    }
+}
+
+/** Choix des imports partagés : filtre par type de contenu et par nom, une case par import. */
+@Composable
+private fun ImportsPartagesDialog(
+    monde: String,
+    livres: List<com.jc2.jdrcompagnon.ui.screens.mj.CustomBook>,
+    selection: Set<String>,
+    onBasculer: (com.jc2.jdrcompagnon.ui.screens.mj.CustomBook) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    // Contenu de chaque livre, lu une fois à l'ouverture (fichiers parfois volumineux).
+    var contenus by remember(monde) { mutableStateOf<Map<String, Map<com.jc2.jdrcompagnon.ui.components.CategorieContenu, Int>>?>(null) }
+    LaunchedEffect(monde, livres) {
+        contenus = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            livres.associate { it.id to com.jc2.jdrcompagnon.ui.components.categoriesDuLivre(context, it) }
+        }
+    }
+    var filtre by remember { mutableStateOf(emptySet<com.jc2.jdrcompagnon.ui.components.CategorieContenu>()) }
+    var recherche by remember { mutableStateOf("") }
+
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Surface(modifier = Modifier.fillMaxWidth().padding(16.dp), shape = RoundedCornerShape(16.dp)) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Text("Imports partagés", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Les joueurs qui ne les possèdent pas pourront les télécharger (textes et images). " +
+                        "Pour ne partager que le contenu de jeu d'une campagne, séparez-le de ses scénarios dans un import à part.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Spacer(Modifier.height(12.dp))
+                val c = contenus
+                if (c == null) {
+                    androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                } else {
+                    androidx.compose.material3.OutlinedTextField(
+                        value = recherche,
+                        onValueChange = { recherche = it },
+                        label = { Text("Rechercher") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    com.jc2.jdrcompagnon.ui.components.FiltreCategoriesContenu(
+                        disponibles = c.values.flatMap { it.keys }.toSet(),
+                        selection = filtre,
+                        onSelectionChange = { filtre = it },
+                    )
+                    val visibles = livres.filter { livre ->
+                        com.jc2.jdrcompagnon.ui.components.correspondAuFiltre(c[livre.id].orEmpty().keys, filtre) &&
+                            (recherche.isBlank() || livre.name.contains(recherche.trim(), ignoreCase = true))
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    // La liste prend la place restante (sans dépasser l'écran) : le bouton Fermer
+                    // reste visible et la liste défile jusqu'au dernier import.
+                    androidx.compose.foundation.lazy.LazyColumn(modifier = Modifier.weight(1f, fill = false)) {
+                        if (visibles.isEmpty()) {
+                            item { Text("Aucun import ne correspond.", style = MaterialTheme.typography.bodySmall) }
+                        }
+                        items(visibles.size) { i ->
+                            val livre = visibles[i]
+                            Row(
+                                modifier = Modifier.fillMaxWidth().clickable { onBasculer(livre) }.padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                androidx.compose.material3.Checkbox(checked = livre.id in selection, onCheckedChange = null)
+                                Spacer(Modifier.width(8.dp))
+                                Column {
+                                    Text(livre.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        com.jc2.jdrcompagnon.ui.components.resumeCategories(c[livre.id].orEmpty()),
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Fermer") }
             }
         }
     }
@@ -301,7 +453,16 @@ private fun HostScreen(
     onRequestPermissions: () -> Unit,
     onNavigateBack: () -> Unit,
     onStopServer: () -> Unit,
+    onOpenMenu: (() -> Unit)? = null,
 ) {
+    // Icône de gauche : menu latéral (petits traits) si disponible, sinon flèche retour.
+    val navigationIcon: @Composable () -> Unit = {
+        if (onOpenMenu != null) {
+            IconButton(onClick = onOpenMenu) { Icon(Icons.Default.Menu, contentDescription = "Menu") }
+        } else {
+            IconButton(onClick = onNavigateBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour") }
+        }
+    }
     if (!hasPermissions) {
         PermissionRequiredScreen(onRequestPermissions, onNavigateBack)
         return
@@ -309,14 +470,10 @@ private fun HostScreen(
     if (!isHosting) {
         Scaffold(
             topBar = {
-                TopAppBar(
-                    title = { Text("Serveur réseau local") },
-                    navigationIcon = {
-                        IconButton(onClick = onNavigateBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
+                CenterAlignedTopAppBar(
+                    title = { Text("Serveur local") },
+                    navigationIcon = navigationIcon,
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                         containerColor = Color.Transparent,
                         titleContentColor = Color.White,
                         navigationIconContentColor = Color.White
@@ -345,8 +502,35 @@ private fun HostScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.White
                     )
-                    Spacer(Modifier.height(24.dp))
-                    Button(onClick = onStartServer, modifier = Modifier.fillMaxWidth()) {
+                    Spacer(Modifier.height(16.dp))
+                    // Port de la page d'affichage table : gardé d'une session à l'autre.
+                    val context = LocalContext.current
+                    var port by remember { mutableStateOf(NetworkSessionManager.portTable(context).toString()) }
+                    val portValide = port.toIntOrNull()?.let { it in NetworkSessionManager.PLAGE_PORTS } == true
+                    OutlinedTextField(
+                        value = port,
+                        onValueChange = { saisie -> port = saisie.filter(Char::isDigit).take(5) },
+                        label = { Text("Port de la page table") },
+                        supportingText = {
+                            Text(
+                                if (portValide) "Toujours le même à chaque démarrage (${NetworkSessionManager.PORT_TABLE_DEFAUT} par défaut)."
+                                else "Entre ${NetworkSessionManager.PLAGE_PORTS.first} et ${NetworkSessionManager.PLAGE_PORTS.last}."
+                            )
+                        },
+                        isError = !portValide,
+                        singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Button(
+                        onClick = {
+                            NetworkSessionManager.setPortTable(context, port.toInt())
+                            onStartServer()
+                        },
+                        enabled = portValide,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
                         Text("Démarrer le serveur")
                     }
                 }
@@ -370,14 +554,10 @@ private fun HostScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Serveur réseau local") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
+            CenterAlignedTopAppBar(
+                title = { Text("Serveur local") },
+                navigationIcon = navigationIcon,
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = Color.Transparent,
                     titleContentColor = Color.White,
                     navigationIconContentColor = Color.White
@@ -462,6 +642,26 @@ private fun HostScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White
                         )
+                        // Joueurs sans l'appli : ils jouent leur tour de combat depuis le navigateur de leur téléphone.
+                        val urlJoueur = webServerUrl!!.trimEnd('/') + "/joueur"
+                        Spacer(Modifier.height(8.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                urlJoueur,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                modifier = Modifier.weight(1f)
+                            )
+                            IconButton(onClick = { clipboardManager.setText(AnnotatedString(urlJoueur)) }) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = "Copier l'adresse joueur", tint = Color.White)
+                            }
+                        }
+                        Text(
+                            "Page joueur : un joueur sans l'appli y choisit son personnage et joue son tour de combat (attaque, dés, actions) depuis son téléphone.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White
+                        )
                     } else {
                         Text(
                             "Indisponible pour l'instant.",
@@ -474,6 +674,9 @@ private fun HostScreen(
 
             Spacer(Modifier.height(20.dp))
             GroupSelector()
+
+            Spacer(Modifier.height(20.dp))
+            ImportsPartagesSelector()
 
             if (activeGroup != null) {
                 Spacer(Modifier.height(20.dp))

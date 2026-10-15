@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    La page table du MJ (MjWebServer) est servie en HTTP simple sur le réseau local
+    (http://<IP du MJ>:port) : le téléchargement des imports partagés par un joueur doit donc
+    pouvoir s'y connecter sans TLS. Les adresses IP ne pouvant être listées une à une dans un
+    domain-config, le trafic en clair est autorisé globalement.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

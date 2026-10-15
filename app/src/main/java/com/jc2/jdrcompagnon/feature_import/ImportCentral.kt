@@ -5,6 +5,7 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.documentfile.provider.DocumentFile
 import com.jc2.jdrcompagnon.di.EpreuveDependencies
+import com.jc2.jdrcompagnon.di.EvenementDependencies
 import com.jc2.jdrcompagnon.feature_epreuve.data.EpreuveImageStore
 import com.jc2.jdrcompagnon.feature_epreuve.data.EpreuveImport
 import com.jc2.jdrcompagnon.ui.CampagneFileStore
@@ -23,6 +24,7 @@ import com.jc2.jdrcompagnon.ui.screens.mj.scenario.ScenarioImport
 import com.jc2.jdrcompagnon.ui.worlds.CustomWorldsRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.first
 import java.util.zip.ZipInputStream
 
 /**
@@ -33,7 +35,8 @@ import java.util.zip.ZipInputStream
  * Fichiers :
  * - `.zip` contenant un `reference.md` (à la racine ou dans un unique dossier) → univers
  *   ([CustomWorldsRepository.importWorldFromZip]) ;
- * - autre `.zip` → livre avec ses images (bestiaire illustré, objets, PNJ...) ;
+ * - autre `.zip` → livre avec ses images (bestiaire illustré, objets, PNJ...), ses scénarios et ses
+ *   épreuves (.md avec des lignes `{mepreuve: ...}`) ;
  * - `.md` avec des lignes `{mepreuve: ...}` → épreuves de l'outil ÉPREUVES ([EpreuveImport]) ;
  * - `.md` avec des entrées `<!-- type: ... -->` → livre de bibliothèque ; sinon → scénario
  *   ([ScenarioImport]) ;
@@ -105,10 +108,17 @@ object ImportCentral {
      * l'état d'après, il donne exactement ce que l'import a créé, quel que soit le mécanisme
      * d'import sollicité (livre, univers, campagne, dossier de scénarios...).
      */
-    private class Photo(val parType: Map<String, Map<String, String>>)
+    private class Photo(
+        val parType: Map<String, Map<String, String>>,
+        // Campagne de chaque lieu : les lieux d'une campagne importée partent avec elle, ils ne
+        // sont pas listés à part.
+        val campagneDuLieu: Map<String, String> = emptyMap(),
+    )
 
-    private suspend fun photographier(context: Context, worldId: String?): Photo = Photo(
-        mapOf(
+    private suspend fun photographier(context: Context, worldId: String?): Photo {
+        val lieux = runCatching { CampagneArchive.lieuxDuMonde(worldId ?: "donjon_et_dragon") }.getOrDefault(emptyList())
+        return Photo(mapOf(
+            "lieu" to lieux.associate { it.id to it.nom },
             "scenario" to GameState.mjScenarios.value.associate { it.id to it.title },
             "campagne" to GameState.mjCampaigns.value.associate { it.id to it.title },
             "personnage" to GameState.characters.value.associate { it.id to "${it.name} (${it.type})" },
@@ -116,38 +126,49 @@ object ImportCentral {
             "univers" to CustomWorldsRepository.listCustomWorlds(context).associate { it.id to it.name },
             "musique" to ImportedMusicStore.tracks.value.associate { it.id to it.displayName },
             "epreuve" to EpreuveDependencies.epreuvesDuMonde(worldId).associate { it.id to it.nom },
-        )
-    )
+            // Événements de l'outil ÉVÉNEMENTS créés par l'import (campagne.json) et illustrations d'états (dossier Etats/).
+            "evenement" to EvenementDependencies.repository.observerEvenements(worldId ?: "donjon_et_dragon").first().associate { it.id to it.titre },
+            "etat" to com.jc2.jdrcompagnon.ui.screens.mj.library.srd.EtatImages.fichiersPresents(context).associateWith { "Illustration : " + it.substringBeforeLast('.') },
+        ), lieux.associate { it.id to it.campagneId })
+    }
 
     private suspend fun nouveautes(context: Context, worldId: String?, avant: Photo): List<ImportHistorique.ElementImporte> {
         val apres = photographier(context, worldId)
+        val nouvellesCampagnes = apres.parType["campagne"].orEmpty().keys - avant.parType["campagne"].orEmpty().keys
         return ImportHistorique.TYPES.flatMap { type ->
             val anciens = avant.parType[type].orEmpty()
             apres.parType[type].orEmpty()
                 .filterKeys { it !in anciens }
+                .filterKeys { type != "lieu" || apres.campagneDuLieu[it] !in nouvellesCampagnes }
                 .map { (id, libelle) -> ImportHistorique.ElementImporte(type, id, libelle, worldId.takeIf { type == "livre" }) }
         }
     }
 
     /**
      * Retire tout ce qu'a créé l'import [entree] — livres et leurs fichiers (images comprises),
-     * fiches (et portraits importés), scénarios (fichiers et images), campagnes, univers,
-     * musiques — puis le marque comme supprimé dans l'historique. Les éléments déjà supprimés
+     * fiches (et portraits importés), scénarios (fichiers et images),
+     * campagnes (carte, lieux, boutiques, quêtes), univers, musiques, épreuves, événements et
+     * illustrations d'états — puis le marque comme supprimé dans l'historique. Les éléments déjà supprimés
      * à la main entre-temps sont simplement ignorés. Retourne le compte rendu.
      */
     suspend fun supprimerImport(context: Context, entree: ImportHistorique.Entree): String = withContext(Dispatchers.IO) {
         val retires = mutableListOf<String>()
         val mondesModifies = mutableSetOf<String?>()
+        val lieuxPresents = lieuxImportes(entree)
         entree.elements.forEach { e ->
             val ok = when (e.type) {
-                "scenario" -> GameState.mjScenarios.value.any { it.id == e.id }.also { if (it) GameState.removeMjScenario(e.id, context) }
-                "campagne" -> GameState.mjCampaigns.value.any { it.id == e.id }.also {
-                    if (it) {
+                "scenario" -> GameState.mjScenarios.value.firstOrNull { it.id == e.id }?.let {
+                    GameState.removeMjScenario(e.id, context)
+                    true
+                } ?: false
+                "campagne" -> GameState.mjCampaigns.value.firstOrNull { it.id == e.id }.let { campagne ->
+                    if (campagne != null) {
                         GameState.removeMjCampaign(e.id)
                         CampagneImageStore.nettoyer(context, e.id)
-                        // Carte, lieux et boutiques créés avec la campagne (voir CampagneArchive).
-                        runCatching { CampagneArchive.supprimerDonnees(e.id) }
+                        // Carte, lieux, boutiques et événements créés avec la campagne (voir CampagneArchive).
+                        runCatching { CampagneArchive.supprimerDonnees(e.id, campagne.environnementId) }
                     }
+                    campagne != null
                 }
                 "personnage" -> GameState.characters.value.firstOrNull { it.id == e.id }?.let { perso ->
                     // Portrait copié par l'import d'un livre (pnj_portraits/) : supprimé avec la fiche.
@@ -168,6 +189,11 @@ object ImportCentral {
                     EpreuveDependencies.repository.supprimer(epreuve.id)
                     true
                 } ?: false
+                "evenement" -> (EvenementDependencies.repository.getEvenement(e.id) != null).also { if (it) EvenementDependencies.repository.supprimer(e.id) }
+                "etat" -> com.jc2.jdrcompagnon.ui.screens.mj.library.srd.EtatImages.supprimerFichier(context, e.id)
+                "lieu" -> lieuxPresents.firstOrNull { it.id == e.id }?.let { point ->
+                    runCatching { CampagneArchive.supprimerLieu(context, point) }.isSuccess
+                } ?: false
                 else -> false
             }
             if (ok) retires += e.libelle
@@ -186,6 +212,7 @@ object ImportCentral {
      */
     suspend fun elementsPresents(context: Context, entree: ImportHistorique.Entree): List<ImportHistorique.ElementImporte> =
         withContext(Dispatchers.IO) {
+            val lieuxPresents = lieuxImportes(entree).map { it.id }.toSet()
             entree.elements.filter { e ->
                 when (e.type) {
                     "scenario" -> GameState.mjScenarios.value.any { it.id == e.id }
@@ -195,10 +222,21 @@ object ImportCentral {
                     "univers" -> CustomWorldsRepository.listCustomWorlds(context).any { it.id == e.id }
                     "musique" -> ImportedMusicStore.tracks.value.any { it.id == e.id }
                     "epreuve" -> EpreuveDependencies.repository.getEpreuveParId(e.id) != null
+                    "evenement" -> EvenementDependencies.repository.getEvenement(e.id) != null
+                    "etat" -> e.id in com.jc2.jdrcompagnon.ui.screens.mj.library.srd.EtatImages.fichiersPresents(context)
+                    "lieu" -> e.id in lieuxPresents
                     else -> false
                 }
             }
         }
+
+    /** Lieux encore présents de l'import [entree] (cherchés dans toutes les campagnes, tous mondes). */
+    private suspend fun lieuxImportes(entree: ImportHistorique.Entree): List<com.jc2.jdrcompagnon.feature_carte.domain.model.PointInteret> {
+        if (entree.elements.none { it.type == "lieu" }) return emptyList()
+        return runCatching {
+            GameState.mjCampaigns.value.map { it.worldId }.distinct().flatMap { CampagneArchive.lieuxDuMonde(it) }
+        }.getOrDefault(emptyList())
+    }
 
     private suspend fun importerLivre(context: Context, uri: Uri, worldId: String?, nom: String): Result<String> {
         val livre = ajouterLivrePersonnalise(context, uri, worldId, nom)
@@ -210,15 +248,24 @@ object ImportCentral {
                 ?.let { texte -> CustomContentParser.parse(texte).monsters.map { m -> m.name } }
                 .orEmpty()
             " " + CampagneArchive.importer(context, it, worldId ?: "donjon_et_dragon", livre.scenarioIds, livre.pnjIds, livre.id, monstres)
-        }.orEmpty()
-        return resumeLivre(livre, nom).map { it + campagne }
+        }.orEmpty() +
+            // Lieux seuls (lieux.json) : ajoutés à la campagne sélectionnée.
+            livre.lieux?.let { " " + CampagneArchive.importerLieux(context, it, worldId ?: "donjon_et_dragon") }.orEmpty()
+        // Épreuves livrées dans l'archive : ajoutées à l'outil ÉPREUVES, comme un .md d'épreuve importé seul.
+        val nomsEpreuves = livre.epreuves.flatMap { EpreuveImport.importer(context, it, worldId ?: "donjon_et_dragon") }
+        val epreuves = nomsEpreuves.takeIf { it.isNotEmpty() }
+            ?.let { " Épreuve(s) " + it.joinToString(", ") { n -> "« $n »" } + " : à lancer depuis l'outil ÉPREUVES." }
+            .orEmpty()
+        return resumeLivre(livre, nom).map { (it + campagne + epreuves).trim() }
     }
 
     private fun resumeLivre(livre: LivreAjoute, nom: String): Result<String> {
         val scenarios = livre.scenarios.takeIf { it.isNotEmpty() }?.let { titres ->
             " Scénario(s) : " + titres.joinToString(", ") { "« $it »" } +
                 (if (livre.pnjScenarios > 0) " (${livre.pnjScenarios} fiche(s) PNJ créée(s))" else "") + "."
-        }.orEmpty()
+        }.orEmpty() +
+            (if (livre.etatsImages > 0) " ${livre.etatsImages} illustration(s) d'état." else "") +
+            (if (livre.musiques.isNotEmpty()) " ${livre.musiques.size} musique(s) ajoutée(s)." else "")
         if (livre.id == null) return Result.success(scenarios.trim())
         val resume = livre.summary ?: return Result.success("Livre « $nom » ajouté à la bibliothèque.$scenarios")
         val details = buildList {

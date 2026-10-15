@@ -61,6 +61,10 @@ object EpreuveDependencies {
             nom = "Traversée du marais maudit",
             description = "Une brume verdâtre recouvre les eaux stagnantes. Le sentier disparaît sous la vase et des formes bougent entre les roseaux.",
             reussitesRequises = 4,
+            echecsMax = 3,
+            issueReussite = "Le groupe atteint la terre ferme au crépuscule, crotté mais entier, et repère au loin les lueurs du village.",
+            issueEchec = "Le groupe s'enlise au cœur du marais à la nuit tombée. Une forme énorme se lève des eaux noires : le gardien du marais a senti les intrus.",
+            combatEchec = "Tertre errant x1",
             complications = listOf(
                 ComplicationEpreuve("Sables mouvants", "Un personnage s'enfonce jusqu'à la taille : il doit être tiré de là (perte d'une heure)."),
                 ComplicationEpreuve("Sangsues géantes", "Les sangsues s'accrochent aux jambes : 1d4 dégâts perforants à chacun."),
@@ -74,6 +78,9 @@ object EpreuveDependencies {
             nom = "Ascension du col enneigé",
             description = "Le vent hurle sur la paroi gelée. Le seul passage vers la citadelle longe un à-pic vertigineux.",
             reussitesRequises = 3,
+            echecsMax = 3,
+            issueReussite = "Le groupe franchit le col avant la tempête : la citadelle se dresse en contrebas, ses gardes ignorent tout de son approche.",
+            issueEchec = "La tempête rattrape le groupe sur la paroi : chacun gagne un niveau d'épuisement et il faut redescendre passer la nuit au camp avant de retenter l'ascension.",
             complications = listOf(
                 ComplicationEpreuve("Chute de pierres", "Des rochers dévalent la pente : JS de Dextérité DD 13 ou 2d6 dégâts contondants."),
                 ComplicationEpreuve("Gelures", "Le froid mord : un personnage gagne un niveau d'épuisement."),
@@ -86,6 +93,10 @@ object EpreuveDependencies {
             nom = "Poursuite dans la cité marchande",
             description = "Le voleur file entre les étals, renverse les paniers et s'engouffre dans les ruelles bondées.",
             reussitesRequises = 3,
+            echecsMax = 3,
+            issueReussite = "Le voleur, acculé contre un mur, rend la bourse et lâche le nom de son commanditaire.",
+            issueEchec = "Le voleur disparaît dans les égouts. Le groupe s'y engouffre... et tombe sur ses complices qui l'attendaient.",
+            combatEchec = "Bandit x3",
             complications = listOf(
                 ComplicationEpreuve("Étal renversé", "Un marchand furieux exige réparation (10 po) et retient un personnage."),
                 ComplicationEpreuve("Garde de la ville", "Un garde arrête le groupe pour trouble à l'ordre public."),

@@ -2,6 +2,9 @@ package com.jc2.jdrcompagnon.ui.screens.mj.scenario
 
 import android.content.Context
 import android.widget.Toast
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Tv
+import com.jc2.jdrcompagnon.network.NetworkSessionManager
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -90,7 +93,8 @@ fun PlainScenarioRenderer(
     onRevelerZone: (ExplorationSession.ZoneDeCarte) -> Unit = {},
 ) {
     val context = LocalContext.current
-    val segments = remember(content) { parseSegments(content) }
+    // Éléments « partout » : retirés de la page, affichés dans le menu flottant (ElementsPartout).
+    val segments = remember(content) { parseSegments(sansElementsPartout(content)) }
     fun zonePour(texte: String) = zonePourTexte(texte, zonesCarte)
     val prefs = remember { context.getSharedPreferences("scenario_reader", Context.MODE_PRIVATE) }
     val prefKey = collapseKey?.let { "collapsed_$it" }
@@ -131,7 +135,7 @@ fun PlainScenarioRenderer(
                         BoutonRevelerZone(zone, onRevelerZone)
                     }
                 } else {
-                    RenderSegment(segment, onLinkClick, tts)
+                    RenderSegment(segment, onLinkClick, tts, ::zonePour, onRevelerZone)
                 }
             }
         }
@@ -139,7 +143,10 @@ fun PlainScenarioRenderer(
 }
 
 @Composable
-private fun RenderSegment(segment: Segment, onLinkClick: (String, String) -> Unit, tts: ScenarioTts) {
+private fun RenderSegment(segment: Segment, onLinkClick: (String, String) -> Unit, tts: ScenarioTts,
+    zonePour: (String) -> ExplorationSession.ZoneDeCarte? = { null },
+    onRevelerZone: (ExplorationSession.ZoneDeCarte) -> Unit = {},
+) {
     val bodyStyle = MaterialTheme.typography.bodyLarge
     when (segment) {
         is Segment.Paragraph -> LinkedText(segment.text, bodyStyle, onLinkClick)
@@ -153,7 +160,12 @@ private fun RenderSegment(segment: Segment, onLinkClick: (String, String) -> Uni
             segment.items.forEach { item ->
                 Row(modifier = Modifier.padding(vertical = 2.dp)) {
                     Text("• ", style = bodyStyle, color = Color.White)
-                    LinkedText(item, bodyStyle, onLinkClick)
+                    // Puce qui décrit une salle (« **H2. Écuries** — … ») : œil pour la révéler.
+                    // Seulement la forme « Nom — description », pour ne pas viser une phrase ordinaire.
+                    val tete = item.text.substringBefore('—')
+                    val zone = if (tete.length < item.text.length && tete.length <= 60) zonePour(tete) else null
+                    Box(modifier = Modifier.weight(1f)) { LinkedText(item, bodyStyle, onLinkClick) }
+                    zone?.let { BoutonRevelerZone(it, onRevelerZone) }
                 }
             }
         }
@@ -188,20 +200,40 @@ private fun ScenarioImageBlock(fileName: String) {
         Text("Image introuvable : $fileName", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.7f))
         return
     }
-    Image(
-        bitmap = bitmap,
-        contentDescription = "Carte de la scène (appuyer pour l'exploration)",
-        contentScale = ContentScale.FillWidth,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .clickable {
-                ExplorationSession.ouvrirEcran(
-                    context, "scenario-image:$fileName", "Carte du scénario", ScenarioImageStore.fichier(context, fileName)
-                )
-            }
-    )
+    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Image(
+            bitmap = bitmap,
+            contentDescription = "Carte de la scène (appuyer pour l'exploration)",
+            contentScale = ContentScale.FillWidth,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .clickable {
+                    ExplorationSession.ouvrirEcran(
+                        context, "scenario-image:$fileName", "Carte du scénario", ScenarioImageStore.fichier(context, fileName)
+                    )
+                }
+        )
+        // En haut à droite : envoie la photo telle quelle (sans brouillard) sur la page table.
+        IconButton(
+            onClick = {
+                val message = when {
+                    !NetworkSessionManager.isTableDisplayOnline -> "Écran de table hors ligne : lancez la partie (Connexion) pour l'afficher."
+                    NetworkSessionManager.sendImageFileToWeb(ScenarioImageStore.fichier(context, fileName), "Image du scénario") ->
+                        "Image envoyée à l'écran de table."
+                    else -> "Impossible d'envoyer l'image à l'écran de table."
+                }
+                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+            },
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(6.dp)
+                .size(36.dp)
+                .background(Color.Black.copy(alpha = 0.55f), CircleShape)
+        ) {
+            Icon(Icons.Default.Tv, contentDescription = "Envoyer à l'écran de table", tint = Color.White, modifier = Modifier.size(20.dp))
+        }
+    }
 }
 
 @Composable

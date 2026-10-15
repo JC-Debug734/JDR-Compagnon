@@ -4,6 +4,7 @@ import com.jc2.jdrcompagnon.feature_evenement.ui.icone
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,6 +23,12 @@ import androidx.compose.ui.graphics.asImageBitmap
 import com.jc2.jdrcompagnon.di.CarteDependencies
 import com.jc2.jdrcompagnon.feature_carte.data.CarteImageStore
 import com.jc2.jdrcompagnon.feature_carte.domain.model.TypePointInteret
+import com.jc2.jdrcompagnon.feature_carte.domain.model.PointInteret
+import com.jc2.jdrcompagnon.feature_carte.data.VilleImageStore
+import com.jc2.jdrcompagnon.feature_carte.data.VilleEmblemeStore
+import com.jc2.jdrcompagnon.feature_carte.ui.EmblemeVille
+import com.jc2.jdrcompagnon.feature_boutique.data.BoutiqueImageStore
+import androidx.compose.foundation.layout.heightIn
 import com.jc2.jdrcompagnon.feature_carte.domain.model.CarteCampagne
 import com.jc2.jdrcompagnon.feature_group.ui.LocationField
 import com.jc2.jdrcompagnon.feature_group.ui.rememberLieuxConnus
@@ -82,22 +89,12 @@ fun CampaignListScreen(
                     }
                 },
                 actions = {
-                    // Dossier de campagne : via l'outil IMPORT.
-                    IconButton(onClick = { com.jc2.jdrcompagnon.feature_import.ImportNavigation.ouvrir() }) {
-                        Icon(Icons.Default.DriveFolderUpload, contentDescription = "Importer une campagne")
+                    IconButton(onClick = { onOpenCampaignEditor(null) }) {
+                        Icon(Icons.Default.Add, contentDescription = "Nouvelle campagne", tint = ForcedDarkPalette.AccentGold)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { onOpenCampaignEditor(null) },
-                containerColor = ForcedDarkPalette.AccentGold,
-                contentColor = ForcedDarkPalette.Background
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Nouvelle campagne")
-            }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = Color.Transparent
@@ -124,7 +121,8 @@ fun CampaignListScreen(
                             GameState.setCurrentCampaignId(if (selectedCampaignId == campaign.id) null else campaign.id)
                         },
                         onEdit = { onOpenCampaignEditor(campaign.id) },
-                        onDelete = { campaignToDelete = campaign }
+                        onDelete = { campaignToDelete = campaign },
+                        leading = { CampaignThumbnail(campaign.imageFileName) }
                     )
                 }
             }
@@ -157,6 +155,39 @@ fun CampaignListScreen(
     }
 }
 
+/** Miniature de l'image de la campagne dans la liste ; icône par défaut si aucune image. */
+@Composable
+private fun CampaignThumbnail(imageFileName: String?) {
+    val context = LocalContext.current
+    val image = rememberImageFichier(
+        imageFileName?.let { CampagneImageStore.fichier(context, it) },
+        maxDimension = 256
+    )
+    Box(
+        modifier = Modifier
+            .size(56.dp)
+            .clip(MaterialTheme.shapes.medium)
+            .background(Color.White.copy(alpha = 0.08f)),
+        contentAlignment = Alignment.Center
+    ) {
+        if (image != null) {
+            androidx.compose.foundation.Image(
+                bitmap = image,
+                contentDescription = "Image de la campagne",
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            Icon(
+                Icons.Default.Map,
+                contentDescription = null,
+                tint = Color.White.copy(alpha = 0.5f),
+                modifier = Modifier.size(28.dp)
+            )
+        }
+    }
+}
+
 @Composable
 private fun EmptyCampaignState() {
     Box(
@@ -180,7 +211,7 @@ private fun EmptyCampaignState() {
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Appuyez sur + pour créer une campagne et suivre ses quêtes.",
+                text = "Appuyez sur + en haut à droite pour créer une campagne et suivre ses quêtes.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )
@@ -381,7 +412,7 @@ fun CampaignEditorScreen(
                     )
             }
 
-            CampaignSectionCard(sectionKey, "Scénarios attachés") {
+            CampaignSectionCard(sectionKey, "Scénarios attachés", count = attachedIds.size) {
                     if (attachedIds.isEmpty()) {
                         Text(
                             "Aucun scénario attaché.",
@@ -446,7 +477,7 @@ fun CampaignEditorScreen(
             )
             CampaignEnvironnementCard(sectionKey = sectionKey, campaign = existing)
 
-            CampaignSectionCard(sectionKey, "Quêtes") {
+            CampaignSectionCard(sectionKey, "Quêtes", count = existing?.quests?.size) {
                 if (existing == null) {
                     CampagneNonEnregistreeHint("ses quêtes")
                 } else {
@@ -539,15 +570,23 @@ fun CampaignEditorScreen(
 }
 
 /**
- * Carte de section de l'éditeur de campagne (voir [CollapsibleSectionCard]) : état replié
- * propre à chaque campagne, persisté.
+ * Carte de section de l'éditeur de campagne (voir [CollapsibleSectionCard]) : toutes repliées à
+ * l'ouverture de l'éditeur (état non persisté), le nombre d'éléments restant visible en pastille.
  */
 @Composable
 private fun CampaignSectionCard(
     campaignKey: String,
     title: String,
+    count: Int? = null,
     content: @Composable ColumnScope.() -> Unit,
-) = CollapsibleSectionCard(ownerKey = "campagne:$campaignKey", title = title, content = content)
+) = CollapsibleSectionCard(
+    ownerKey = "campagne:$campaignKey",
+    title = title,
+    count = count,
+    persistent = false,
+    defaultExpanded = false,
+    content = content
+)
 
 /** Message commun aux cartes Villes/Carte/Événements tant que la campagne n'est pas enregistrée. */
 @Composable
@@ -587,28 +626,49 @@ private fun CampaignVillesCard(
     onOpenVilles: (String) -> Unit,
     onOpenVilleDetail: (campagneId: String, villeId: String) -> Unit,
 ) {
-    CampaignSectionCard(sectionKey, "Villes") {
+    // Chargées hors de la carte pour que leur nombre s'affiche aussi quand elle est repliée.
+    val points by remember(campagneId) {
+        campagneId?.let { CarteDependencies.repository.observerPoints(it) } ?: kotlinx.coroutines.flow.flowOf(emptyList())
+    }.collectAsState(initial = emptyList())
+    val villes = points.filter { it.type == TypePointInteret.VILLE }
+    var showAjout by remember { mutableStateOf(false) }
+
+    CampaignSectionCard(sectionKey, "Villes", count = villes.size.takeIf { campagneId != null }) {
         if (campagneId == null) {
             CampagneNonEnregistreeHint("ses villes")
             return@CampaignSectionCard
         }
-        val points by remember(campagneId) { CarteDependencies.repository.observerPoints(campagneId) }
-            .collectAsState(initial = emptyList())
-        val villes = points.filter { it.type == TypePointInteret.VILLE }
         if (villes.isEmpty()) {
-            Text("Aucune ville créée.", style = MaterialTheme.typography.bodyMedium, color = CampaignHintColor)
+            Text("Aucune ville.", style = MaterialTheme.typography.bodyMedium, color = CampaignHintColor)
         } else {
             villes.forEach { ville ->
-                CampaignItemRow(
-                    icon = Icons.Default.LocationCity,
-                    titre = ville.nom,
-                    detail = listOfNotNull(
-                        "non placée".takeIf { ville.carteId == null },
-                        ville.boutiqueIds.size.takeIf { it > 0 }?.let { "$it boutique(s)" },
-                        ville.scenarioIds.size.takeIf { it > 0 }?.let { "$it scénario(s)" },
-                    ).joinToString(" · ").ifBlank { ville.description }
-                ) { onOpenVilleDetail(campagneId, ville.id) }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onOpenVilleDetail(campagneId, ville.id) }
+                        .padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    EmblemeVille(ville, Modifier.size(40.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(ville.nom, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        val detail = listOfNotNull(
+                            "non placée".takeIf { ville.carteId == null },
+                            ville.boutiqueIds.size.takeIf { it > 0 }?.let { "$it boutique(s)" },
+                            ville.scenarioIds.size.takeIf { it > 0 }?.let { "$it scénario(s)" },
+                        ).joinToString(" · ").ifBlank { ville.description }
+                        if (detail.isNotBlank()) {
+                            Text(detail, style = MaterialTheme.typography.bodySmall, color = CampaignHintColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
             }
+        }
+        OutlinedButton(onClick = { showAjout = true }, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Default.Add, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("Ajouter une ville")
         }
         OutlinedButton(onClick = { onOpenVilles(campagneId) }, modifier = Modifier.fillMaxWidth()) {
             Icon(Icons.Default.LocationCity, contentDescription = null)
@@ -616,6 +676,141 @@ private fun CampaignVillesCard(
             Text("Gérer les villes")
         }
     }
+
+    if (showAjout && campagneId != null) {
+        AjouterVilleDialog(
+            campagneId = campagneId,
+            onDismiss = { showAjout = false },
+            onAjoutee = { villeId -> showAjout = false; onOpenVilleDetail(campagneId, villeId) }
+        )
+    }
+}
+
+/**
+ * Ajout d'une ville à la campagne : nouvelle ville, ou ville existante de l'outil VILLES (une
+ * ville de la bibliothèque est rattachée à la campagne, celle d'une autre campagne y est copiée,
+ * voir AjouterVilleACampagneUseCase). La ville ajoutée n'est placée sur aucune carte.
+ */
+@Composable
+private fun AjouterVilleDialog(campagneId: String, onDismiss: () -> Unit, onAjoutee: (villeId: String) -> Unit) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val mjCampaigns by GameState.mjCampaigns.collectAsState()
+    val toutesLesVilles by remember { CarteDependencies.repository.observerToutesLesVilles() }
+        .collectAsState(initial = emptyList())
+    val worldId = mjCampaigns.firstOrNull { it.id == campagneId }?.worldId
+    val campagnesDuMonde = mjCampaigns.filter { it.worldId == worldId }.associateBy { it.id }
+    val existantes = toutesLesVilles.filter {
+        it.campagneId != campagneId && (it.campagneId == PointInteret.SANS_CAMPAGNE || it.campagneId in campagnesDuMonde)
+    }
+    // null = choix du mode ; true = nouvelle ville ; false = ville existante.
+    var nouvelle by remember { mutableStateOf<Boolean?>(null) }
+    var nom by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+    var enCours by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                when (nouvelle) {
+                    null -> "Ajouter une ville"
+                    true -> "Nouvelle ville"
+                    false -> "Ville existante"
+                }
+            )
+        },
+        text = {
+            when (nouvelle) {
+                null -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { nouvelle = true }, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Default.Add, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Nouvelle ville")
+                    }
+                    OutlinedButton(onClick = { nouvelle = false }, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Default.LocationCity, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Ville existante (${existantes.size})")
+                    }
+                }
+                true -> Column {
+                    OutlinedTextField(value = nom, onValueChange = { nom = it }, label = { Text("Nom") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("Description") }, modifier = Modifier.fillMaxWidth())
+                }
+                false -> if (existantes.isEmpty()) {
+                    Text("Aucune autre ville. Créez-en dans l'outil VILLES pour les réutiliser dans vos campagnes.")
+                } else {
+                    LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
+                        items(existantes, key = { it.id }) { ville ->
+                            val origine = campagnesDuMonde[ville.campagneId]?.title
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable(enabled = !enCours) {
+                                        enCours = true
+                                        coroutineScope.launch {
+                                            val id = CarteDependencies.ajouterVilleACampagne(
+                                                ville = ville,
+                                                campagneId = campagneId,
+                                                copierImages = { source, nouvelId ->
+                                                    VilleImageStore.dupliquer(context, source.id, nouvelId)
+                                                    VilleEmblemeStore.dupliquer(context, source.embleme)
+                                                },
+                                                dupliquerImageBoutique = { BoutiqueImageStore.dupliquer(context, it) }
+                                            )
+                                            onAjoutee(id)
+                                        }
+                                    }
+                                    .padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                EmblemeVille(ville, Modifier.size(40.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(ville.nom, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(
+                                        origine?.let { "Copie depuis « $it »" } ?: "Bibliothèque",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (nouvelle == true) {
+                TextButton(
+                    enabled = nom.isNotBlank() && !enCours,
+                    onClick = {
+                        enCours = true
+                        val ville = PointInteret(
+                            id = java.util.UUID.randomUUID().toString(),
+                            campagneId = campagneId,
+                            nom = nom.trim(),
+                            type = TypePointInteret.VILLE,
+                            x = 0,
+                            y = 0,
+                            description = description,
+                        )
+                        coroutineScope.launch {
+                            CarteDependencies.repository.sauvegarderPoint(ville)
+                            onAjoutee(ville.id)
+                        }
+                    }
+                ) { Text("Créer") }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { if (nouvelle == null) onDismiss() else nouvelle = null }) {
+                Text(if (nouvelle == null) "Annuler" else "Retour")
+            }
+        }
+    )
 }
 
 /**
@@ -658,7 +853,7 @@ private fun CampaignCartesSection(
     }
     val nonPlaces = points.filter { it.carteId == null }
     if (nonPlaces.isNotEmpty()) {
-        CampaignSectionCard(sectionKey, "Lieux non placés") {
+        CampaignSectionCard(sectionKey, "Lieux non placés", count = nonPlaces.size) {
             Text(
                 "Pour placer un lieu, ouvrez une carte et touchez une case vide.",
                 style = MaterialTheme.typography.bodySmall,
@@ -745,6 +940,9 @@ private fun CampaignCarteCard(
     CollapsibleSectionCard(
         ownerKey = "campagne:$sectionKey",
         title = "🗺 ${carte.nom}",
+        count = points.size,
+        persistent = false,
+        defaultExpanded = false,
         headerActions = {
             if (onDelete != null) {
                 IconButton(onClick = onDelete) {
@@ -804,19 +1002,22 @@ private fun CampaignEvenementsCard(
     campagneId: String?,
     onOpenEvenements: (String) -> Unit,
 ) {
-    CampaignSectionCard(sectionKey, "Événements de campagne") {
+    // Événements de la bibliothèque marqués pour cette campagne (les communs du monde sont
+    // visibles depuis l'écran Événements de campagne). Chargés hors de la carte pour que leur
+    // nombre s'affiche aussi quand elle est repliée.
+    val evenements by remember(campagneId) {
+        campagneId?.let {
+            com.jc2.jdrcompagnon.di.EvenementDependencies.repository.observerEvenements(
+                com.jc2.jdrcompagnon.di.EvenementDependencies.mondeDeCampagne(it)
+            )
+        } ?: kotlinx.coroutines.flow.flowOf(emptyList())
+    }.collectAsState(initial = emptyList())
+    val deCampagne = evenements.filter { it.campagneId == campagneId }
+    CampaignSectionCard(sectionKey, "Événements de campagne", count = deCampagne.size.takeIf { campagneId != null }) {
         if (campagneId == null) {
             CampagneNonEnregistreeHint("ses événements")
             return@CampaignSectionCard
         }
-        // Événements de la bibliothèque marqués pour cette campagne (les communs du monde sont
-        // visibles depuis l'écran Événements de campagne).
-        val evenements by remember(campagneId) {
-            com.jc2.jdrcompagnon.di.EvenementDependencies.repository.observerEvenements(
-                com.jc2.jdrcompagnon.di.EvenementDependencies.mondeDeCampagne(campagneId)
-            )
-        }.collectAsState(initial = emptyList())
-        val deCampagne = evenements.filter { it.campagneId == campagneId }
         val coroutineScope = rememberCoroutineScope()
         var showPicker by remember { mutableStateOf(false) }
         Text(
@@ -833,7 +1034,7 @@ private fun CampaignEvenementsCard(
                         CampaignItemRow(
                             icon = evenement.type.icone,
                             titre = evenement.titre,
-                            detail = evenement.type.label + if (evenement.description.isNotBlank()) " · ${evenement.description}" else ""
+                            detail = evenement.type.label + if (evenement.description.isNotBlank()) " · ${com.jc2.jdrcompagnon.feature_evenement.ui.descriptionSansBalises(evenement.description)}" else ""
                         ) { onOpenEvenements(campagneId) }
                     }
                     // Retiré de la campagne : redevient commun au monde (rien n'est supprimé).
@@ -981,7 +1182,7 @@ private val CampaignHintColor = Color.White.copy(alpha = 0.8f)
  */
 @Composable
 private fun CampaignPnjCard(sectionKey: String, campaign: GameState.MjCampaign?) {
-    CampaignSectionCard(sectionKey, "PNJ de la campagne") {
+    CampaignSectionCard(sectionKey, "PNJ de la campagne", count = campaign?.pnjIds?.size) {
         if (campaign == null) {
             CampagneNonEnregistreeHint("ses PNJ")
             return@CampaignSectionCard
@@ -1091,7 +1292,7 @@ private fun BestiaireAttacheCard(
         }
     }
 
-    CampaignSectionCard(sectionKey, "Bestiaire attaché") {
+    CampaignSectionCard(sectionKey, "Bestiaire attaché", count = monsterIds.size) {
             if (monsterIds.isEmpty()) {
                 Text(
                     "Aucun monstre attaché.",

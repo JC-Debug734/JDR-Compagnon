@@ -157,4 +157,12 @@ data class EquipmentItem(
     val harmonisation: Boolean = false,
     // Condition imposée à qui s'harmonise ("magicien", "lanceur de sorts"...), vide si aucune.
     val harmonisationPrerequis: String = "",
+    // **Image** images/chevaliere.webp : illustration livrée avec le livre .zip, remplacée par
+    // son chemin absolu au chargement (voir CustomBookImages.resolveObjets), null sans image.
+    val image: String? = null,
+    // **Maudit** Oui : une fois équipé, l'objet ne peut plus être retiré (ni rangé, ni jeté,
+    // ni délogé) tant que le MJ n'a pas levé la malédiction (voir Malediction).
+    val maudit: Boolean = false,
+    // Effet de la malédiction ("Oui : le porteur ne peut plus mentir..."), vide si non précisé.
+    val malediction: String = "",
 )

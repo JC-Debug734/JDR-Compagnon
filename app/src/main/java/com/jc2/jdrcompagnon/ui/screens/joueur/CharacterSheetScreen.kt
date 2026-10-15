@@ -19,6 +19,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import com.jc2.jdrcompagnon.ui.theme.ForcedDarkPalette
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -42,6 +43,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Backpack
 import androidx.compose.material.icons.filled.Badge
@@ -107,6 +109,7 @@ import com.jc2.jdrcompagnon.ui.CharacterProgression
 import com.jc2.jdrcompagnon.ui.calculateProficiencyBonus
 import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.ProficiencyLevel
+import com.jc2.jdrcompagnon.ui.components.ImporterPortraitBouton
 import com.jc2.jdrcompagnon.ui.components.PnjPortraits
 import com.jc2.jdrcompagnon.ui.components.rememberCharacterPortraitPainter
 import com.jc2.jdrcompagnon.ui.components.PnjReputationEditor
@@ -142,6 +145,14 @@ import com.jc2.jdrcompagnon.ui.screens.joueur.character.creation.ChoixBaliseCart
 import com.jc2.jdrcompagnon.ui.screens.joueur.character.creation.ContexteChoix
 import com.jc2.jdrcompagnon.ui.screens.joueur.character.creation.Don
 import com.jc2.jdrcompagnon.ui.screens.joueur.character.creation.DonParser
+import com.jc2.jdrcompagnon.ui.screens.joueur.character.creation.EffetsDon
+import com.jc2.jdrcompagnon.ui.screens.joueur.character.creation.effetsDon
+import com.jc2.jdrcompagnon.ui.screens.joueur.character.creation.donsDuPersonnage
+import com.jc2.jdrcompagnon.ui.screens.joueur.character.creation.donRepetable
+import com.jc2.jdrcompagnon.ui.screens.joueur.character.creation.possedeDon
+import com.jc2.jdrcompagnon.ui.screens.joueur.character.creation.prerequisManquants
+import com.jc2.jdrcompagnon.ui.screens.joueur.character.creation.pvParNiveauDons
+import com.jc2.jdrcompagnon.ui.screens.joueur.character.creation.competencesPourExpertise
 import com.jc2.jdrcompagnon.ui.screens.joueur.character.creation.LangueParser
 import com.jc2.jdrcompagnon.ui.screens.joueur.character.creation.construireChoix
 import com.jc2.jdrcompagnon.ui.screens.joueur.character.creation.EffetBalise
@@ -155,6 +166,10 @@ import com.jc2.jdrcompagnon.ui.screens.joueur.character.creation.TOUTES_COMPETEN
 import com.jc2.jdrcompagnon.ui.screens.joueur.character.creation.TableMd
 import com.jc2.jdrcompagnon.ui.screens.joueur.character.creation.parseCompetencesClasse
 import com.jc2.jdrcompagnon.ui.screens.joueur.character.creation.valeurNiveau
+import com.jc2.jdrcompagnon.ui.screens.joueur.character.creation.pourPersonnage
+import com.jc2.jdrcompagnon.ui.screens.joueur.character.creation.incantationDeSousClasse
+import com.jc2.jdrcompagnon.ui.screens.joueur.character.creation.listeSortsDeClasse
+import com.jc2.jdrcompagnon.ui.screens.joueur.character.creation.niveauLanceurTiers
 import com.jc2.jdrcompagnon.ui.screens.joueur.savingThrows
 import com.jc2.jdrcompagnon.ui.screens.joueur.skillList
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.SrdEntry
@@ -180,6 +195,10 @@ fun CharacterSheetScreen(
     // le même libellé fait des choses différentes selon d'où on arrive ici.
     onChooseCharacter: () -> Unit = onBack,
     onOpenMenu: () -> Unit = {},
+    // Liens inverses d'un PNJ (« Apparaît dans ») : ouverture du scénario, de la campagne ou du carnet MJ.
+    onOpenScenario: ((String) -> Unit)? = null,
+    onOpenCampaign: ((String) -> Unit)? = null,
+    onOpenPreparation: (() -> Unit)? = null,
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -190,9 +209,9 @@ fun CharacterSheetScreen(
     // son briefing (comportement / intentions / objectif) dans Notes.
     val isPnj = currentCharacter.type == "PNJ"
     val tabs = buildList {
-        // PNJ : vue simplifiée façon bloc de stats du bestiaire, ouverte par défaut.
-        if (isPnj) add(SheetTab.FICHE)
-        add(SheetTab.APERCU)
+        // PNJ : vue simplifiée façon bloc de stats du bestiaire, ouverte par défaut. Elle remplace
+        // l'aperçu (caractéristiques et compétences déjà dans le bloc, réputation reprise dedans).
+        if (isPnj) add(SheetTab.FICHE) else add(SheetTab.APERCU)
         add(SheetTab.COMBAT)
         add(SheetTab.EQUIPEMENT)
         if (!isPnj) add(SheetTab.SORTS)
@@ -283,35 +302,54 @@ fun CharacterSheetScreen(
 
                 // Tab selector, sous la carte d'en-tête — icônes uniquement, toujours visible
                 // quel que soit l'onglet sélectionné (y compris Sorts).
+                // Fond bleu nuit des icônes illustrées (elles s'y fondent) ; onglet choisi cerclé
+                // d'or, les autres légèrement estompés.
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    color = com.jc2.jdrcompagnon.ui.components.IconesAsset.FondIcones.copy(alpha = 0.92f)
                 ) {
                     Row(modifier = Modifier.padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
                         tabIcons.forEachIndexed { index, icon ->
                             val selected = selectedTab == index
+                            val illustration = com.jc2.jdrcompagnon.ui.components.rememberIconeAsset(tabs[index].illustration)
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
                                     .clip(RoundedCornerShape(12.dp))
-                                    .background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                    .background(if (selected) ForcedDarkPalette.AccentGold.copy(alpha = 0.18f) else Color.Transparent)
+                                    .border(
+                                        width = if (selected) 1.5.dp else 0.dp,
+                                        color = if (selected) ForcedDarkPalette.AccentGold else Color.Transparent,
+                                        shape = RoundedCornerShape(12.dp),
+                                    )
                                     .clickable { selectedTab = index }
-                                    .padding(vertical = 10.dp),
+                                    .padding(vertical = 4.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(
-                                    icon,
-                                    contentDescription = tabTitles[index],
-                                    tint = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-                                )
+                                if (illustration != null) {
+                                    androidx.compose.foundation.Image(
+                                        bitmap = illustration,
+                                        contentDescription = tabTitles[index],
+                                        modifier = Modifier
+                                            .size(44.dp)
+                                            .graphicsLayer { alpha = if (selected) 1f else 0.6f },
+                                    )
+                                } else {
+                                    Icon(
+                                        icon,
+                                        contentDescription = tabTitles[index],
+                                        tint = if (selected) ForcedDarkPalette.AccentGold else com.jc2.jdrcompagnon.ui.components.IconesAsset.TexteDore.copy(alpha = 0.7f),
+                                        modifier = Modifier.padding(vertical = 10.dp)
+                                    )
+                                }
                             }
                         }
                     }
                 }
 
                 when (tabs[selectedTab]) {
-                    SheetTab.FICHE -> PnjFicheSimplifiee(currentCharacter, isMjMode)
+                    SheetTab.FICHE -> PnjFicheSimplifiee(currentCharacter, isMjMode, onOpenScenario, onOpenCampaign, onOpenPreparation)
                     SheetTab.APERCU -> OverviewTab(currentCharacter, isMjMode)
                     SheetTab.COMBAT -> CombatTab(currentCharacter, isMjMode)
                     SheetTab.EQUIPEMENT -> EquipmentTab(currentCharacter, isMjMode)
@@ -346,13 +384,19 @@ fun CharacterSheetScreen(
 }
 
 /** Onglets de la fiche (le PNJ n'a pas l'onglet Sorts, cf. CharacterSheetScreen). */
-private enum class SheetTab(val titre: String, val icone: androidx.compose.ui.graphics.vector.ImageVector) {
+// [illustration] : icône illustrée (assets, cf. IconesAsset) ; [icone] sert de repli et pour la
+// Fiche simplifiée du PNJ, qui n'a pas d'illustration.
+private enum class SheetTab(
+    val titre: String,
+    val icone: androidx.compose.ui.graphics.vector.ImageVector,
+    val illustration: String? = null,
+) {
     FICHE("Fiche simplifiée", Icons.Default.Badge),
-    APERCU("Aperçu", Icons.Default.Person),
-    COMBAT("Combat", Icons.Default.Shield),
-    EQUIPEMENT("Équipement", Icons.Default.Backpack),
-    SORTS("Sorts", Icons.AutoMirrored.Filled.MenuBook),
-    NOTES("Notes", Icons.AutoMirrored.Filled.Article),
+    APERCU("Aperçu", Icons.Default.Person, com.jc2.jdrcompagnon.ui.components.IconesAsset.FICHE_APERCU),
+    COMBAT("Combat", Icons.Default.Shield, com.jc2.jdrcompagnon.ui.components.IconesAsset.FICHE_COMBAT),
+    EQUIPEMENT("Équipement", Icons.Default.Backpack, com.jc2.jdrcompagnon.ui.components.IconesAsset.FICHE_EQUIPEMENT),
+    SORTS("Sorts", Icons.AutoMirrored.Filled.MenuBook, com.jc2.jdrcompagnon.ui.components.IconesAsset.FICHE_SORTS),
+    NOTES("Notes", Icons.AutoMirrored.Filled.Article, com.jc2.jdrcompagnon.ui.components.IconesAsset.FICHE_NOTES),
 }
 
 /**
@@ -406,7 +450,13 @@ private fun LevelBar(level: Int, experience: Int) {
  * complète, pour l'éditer en détail.
  */
 @Composable
-private fun PnjFicheSimplifiee(character: Character, isMjMode: Boolean) {
+private fun PnjFicheSimplifiee(
+    character: Character,
+    isMjMode: Boolean,
+    onOpenScenario: ((String) -> Unit)?,
+    onOpenCampaign: ((String) -> Unit)?,
+    onOpenPreparation: (() -> Unit)?,
+) {
     var afficherButin by remember { mutableStateOf(false) }
     var conversation by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -424,6 +474,20 @@ private fun PnjFicheSimplifiee(character: Character, isMjMode: Boolean) {
                 }
             }
             com.jc2.jdrcompagnon.ui.screens.mj.scenario.InfosComportementalesPnj(character)
+            SheetCard {
+                com.jc2.jdrcompagnon.feature_preparation.ui.SecretsConnusDuPnj(character)
+                com.jc2.jdrcompagnon.feature_preparation.ui.ApparitionsPnjContent(character, onOpenScenario, onOpenCampaign, onOpenPreparation)
+            }
+            SheetCard {
+                PnjReputationEditor(
+                    character = character,
+                    onUpdate = { GameState.updateCharacter(it) },
+                    textColor = SheetTextPrimary,
+                    sectionTitle = { titre ->
+                        Text(titre, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = SheetTextPrimary)
+                    }
+                )
+            }
         }
     }
     if (afficherButin) {
@@ -470,9 +534,43 @@ private fun OverviewTab(character: Character, isMjMode: Boolean) {
 
         SavingThrowsOverviewCard(character)
 
+        // Guerrier : Second souffle, Fougue, Inflexible, ressources de sous-classe (effets appliqués à la fiche).
+        if (com.jc2.jdrcompagnon.feature_combat.domain.model.Guerrier.niveau(character) > 0) {
+            com.jc2.jdrcompagnon.feature_combat.ui.CarteAptitudesGuerrier(
+                character,
+                onAnnonce = { libelle, texte -> "$libelle : $texte." },
+                onDegats = { _, des, formule -> "${des.sum()} dégâts — $formule." },
+                onSoin = { pv, detail ->
+                    GameState.soignerOuGuerirPoison(character.id, pv, false)
+                    "$detail : ${character.name} récupère $pv PV."
+                },
+            )
+        }
+
+        // Roublard : Attaque sournoise, Frappe malicieuse, ressources de sous-classe.
+        if (com.jc2.jdrcompagnon.feature_combat.domain.model.Roublard.niveau(character) > 0) {
+            com.jc2.jdrcompagnon.feature_combat.ui.CarteAptitudesRoublard(
+                character,
+                onAnnonce = { libelle, texte -> "$libelle : $texte." },
+                onDegats = { _, des, formule -> "${des.sum()} dégâts — $formule." },
+            )
+        }
+
+        // Dons : Points de chance, Regain de vitalité, sorts gratuits… (compteurs remis au repos).
+        com.jc2.jdrcompagnon.feature_combat.ui.CarteRessourcesDons(
+            character,
+            onAnnonce = { libelle, texte -> "$libelle : $texte" },
+            onSoin = { pv, detail ->
+                GameState.soignerOuGuerirPoison(character.id, pv, false)
+                "$detail : ${character.name} récupère $pv PV."
+            },
+        )
+
         SheetCard {
-            Text("Compétences", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = SheetTextPrimary)
+            Text("Compétences",style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = SheetTextPrimary)
             Spacer(modifier = Modifier.height(8.dp))
+            // Double-clic sur une compétence : affiche son icône en grand.
+            var skillIconShown by remember { mutableStateOf<String?>(null) }
             skillList.forEach { skill ->
                 ProficiencyRow(
                     label = "$skill (${skillAbilityAbbreviation(skill)})",
@@ -481,8 +579,14 @@ private fun OverviewTab(character: Character, isMjMode: Boolean) {
                     proficiencyBonus = character.proficiencyBonus,
                     onClick = if (isMjMode) {
                         { GameState.cycleSkillProficiency(character.id, skill) }
+                    } else null,
+                    onDoubleClick = if (skillIconRes(skill) != null) {
+                        { skillIconShown = skill }
                     } else null
                 )
+            }
+            skillIconShown?.let { skill ->
+                SkillIconDialog(skill = skill, onDismiss = { skillIconShown = null })
             }
         }
     }
@@ -494,7 +598,8 @@ private fun OverviewTab(character: Character, isMjMode: Boolean) {
  */
 @Composable
 internal fun CharacterStatsHeader(character: Character, isMjMode: Boolean = false) {
-    val init = GameState.abilityModifier(character.dexterity)
+    // Dextérité + bonus saisi + don Vigilant (bonus de maîtrise), comme en combat.
+    val init = com.jc2.jdrcompagnon.feature_combat.domain.model.Dons.initiative(character)
     val passivePerception = 10 + GameState.abilityModifierForSkill("Perception", character)
     val hitDieFaces = hitDieForClass(character.characterClass)
     val hitDiceRemaining = (character.level - character.hitDiceUsed).coerceIn(0, character.level)
@@ -505,6 +610,7 @@ internal fun CharacterStatsHeader(character: Character, isMjMode: Boolean = fals
     var showHpDialog by remember { mutableStateOf(false) }
     var showHitDiceDialog by remember { mutableStateOf(false) }
     var showConditionDialog by remember { mutableStateOf(false) }
+    var showConditionsAide by remember { mutableStateOf(false) }
     var showXpDialog by remember { mutableStateOf(false) }
     var showSpeedDialog by remember { mutableStateOf(false) }
     var showSizeDialog by remember { mutableStateOf(false) }
@@ -518,10 +624,10 @@ internal fun CharacterStatsHeader(character: Character, isMjMode: Boolean = fals
     // niveau" apparaît sous la barre et ouvre LevelUpDialog au clic.
     val peutMonterDeNiveau = character.level < 20 &&
         CharacterProgression.levelForXp(character.experience) > character.level
-    // TODO: `character.heroicInspiration` doit être ajouté au data class Character
-    // (Boolean, défaut false) et un GameState.setHeroicInspiration(id, value)
-    // doit être créé sur le même modèle que GameState.setCharacterPortrait.
     val hasInspiration = character.heroicInspiration
+    // Joueur : l'inspiration se dépense seulement (le MJ l'accorde), après confirmation.
+    var showSpendInspiration by remember { mutableStateOf(false) }
+    var showNoInspiration by remember { mutableStateOf(false) }
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -548,7 +654,13 @@ internal fun CharacterStatsHeader(character: Character, isMjMode: Boolean = fals
                     )
                     InspirationBadge(
                         active = hasInspiration,
-                        onToggle = { GameState.setHeroicInspiration(character.id, !hasInspiration) }
+                        onToggle = {
+                            when {
+                                isMjMode -> GameState.setHeroicInspiration(character.id, !hasInspiration)
+                                hasInspiration -> showSpendInspiration = true
+                                else -> showNoInspiration = true
+                            }
+                        }
                     )
                 }
 
@@ -650,17 +762,27 @@ internal fun CharacterStatsHeader(character: Character, isMjMode: Boolean = fals
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier
-                            .clickable { showConditionDialog = true }
+                            // La condition est fixée par le MJ (combat, effets) : le joueur la consulte
+                            // seulement. Double appui (tous) : aide sur les conditions et leurs effets.
+                            .combinedClickable(
+                                onClick = { if (isMjMode) showConditionDialog = true },
+                                onDoubleClick = { showConditionsAide = true }
+                            )
                             .padding(4.dp)
                     ) {
+                        // Nombre de conditions présentes (épuisement compris) à côté du titre.
+                        val nombreConditions = com.jc2.jdrcompagnon.ui.screens.joueur.character.nombreConditions(character.condition, character.exhaustionLevel)
                         Text(
-                            "CONDITION",
+                            if (nombreConditions > 0) "CONDITIONS ($nombreConditions)" else "CONDITION",
                             style = MaterialTheme.typography.labelSmall,
-                            color = SheetTextSecondary,
+                            color = if (nombreConditions > 0) MaterialTheme.colorScheme.error else SheetTextSecondary,
+                            fontWeight = if (nombreConditions > 0) FontWeight.Bold else null,
                             letterSpacing = 1.sp
                         )
+                        // L'épuisement est une condition : affiché ici avec son niveau.
                         Text(
-                            character.condition.ifBlank { "Aucune" },
+                            com.jc2.jdrcompagnon.ui.screens.joueur.character.texteConditions(character.condition, character.exhaustionLevel)
+                                .ifBlank { "Aucune" },
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                             color = SheetTextPrimary,
                             textAlign = TextAlign.Center
@@ -743,6 +865,7 @@ internal fun CharacterStatsHeader(character: Character, isMjMode: Boolean = fals
         PortraitPickerDialog(
             currentPortrait = character.portrait,
             pnj = character.type == "PNJ",
+            race = character.race,
             onSelect = { portraitId ->
                 GameState.setCharacterPortrait(character.id, portraitId)
                 showPortraitPicker = false
@@ -773,6 +896,40 @@ internal fun CharacterStatsHeader(character: Character, isMjMode: Boolean = fals
                 showHitDiceDialog = false
             },
             onDismiss = { showHitDiceDialog = false }
+        )
+    }
+
+    if (showSpendInspiration) {
+        AlertDialog(
+            onDismissRequest = { showSpendInspiration = false },
+            icon = { Icon(Icons.Default.Star, contentDescription = null, tint = PortraitFrameGold) },
+            title = { Text("Dépenser l'inspiration ?") },
+            text = { Text(INSPIRATION_RAPPEL + "\n\nDépenser maintenant votre point d'inspiration ?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    GameState.setHeroicInspiration(character.id, false)
+                    showSpendInspiration = false
+                }) { Text("Dépenser") }
+            },
+            dismissButton = { TextButton(onClick = { showSpendInspiration = false }) { Text("Garder") } }
+        )
+    }
+
+    if (showNoInspiration) {
+        AlertDialog(
+            onDismissRequest = { showNoInspiration = false },
+            title = { Text("Pas d'inspiration") },
+            text = { Text(INSPIRATION_RAPPEL + "\n\nVous n'avez pas de point d'inspiration : c'est le MJ qui l'accorde.") },
+            confirmButton = { TextButton(onClick = { showNoInspiration = false }) { Text("OK") } }
+        )
+    }
+
+    if (showConditionsAide) {
+        com.jc2.jdrcompagnon.ui.screens.joueur.character.ConditionsAideDialog(
+            condition = character.condition,
+            niveauEpuisement = character.exhaustionLevel,
+            onDismiss = { showConditionsAide = false },
+            personnage = character,
         )
     }
 
@@ -836,8 +993,9 @@ internal fun CharacterStatsHeader(character: Character, isMjMode: Boolean = fals
         StatDetailDialog(
             title = "Initiative",
             lignes = listOfNotNull(
-                "Initiative = modificateur de Dextérité = ${GameState.abilityModifier(character.dexterity)} (DEX ${character.dexterity})",
-                if (character.initiativeBonus != 0) "Bonus supplémentaire : ${if (character.initiativeBonus >= 0) "+" else ""}${character.initiativeBonus}" else null
+                "Modificateur de Dextérité = ${GameState.abilityModifier(character.dexterity)} (DEX ${character.dexterity})",
+                if (character.initiativeBonus != 0) "Bonus supplémentaire : ${if (character.initiativeBonus >= 0) "+" else ""}${character.initiativeBonus}" else null,
+                com.jc2.jdrcompagnon.feature_combat.domain.model.Dons.bonusInitiative(character).takeIf { it > 0 }?.let { "Don Vigilant : +$it (bonus de maîtrise)" },
             ),
             onDismiss = { showInitiativeDetail = false }
         )
@@ -937,6 +1095,7 @@ private data class PisteNiveau(val classe: Classe, val niveauActuel: Int, val es
  * Naheulbeuk...), seuls les points de vie sont proposés — le dialogue reste utilisable
  * dans tous les cas, sans piste ni aptitude.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun LevelUpDialog(character: Character, onDismiss: () -> Unit) {
     val context = LocalContext.current
@@ -976,13 +1135,14 @@ private fun LevelUpDialog(character: Character, onDismiss: () -> Unit) {
         Caracteristique.CHARISME -> character.charisma
     }
 
-    val classePrincipale = classesSrd.firstOrNull { it.nom.equals(character.characterClass, ignoreCase = true) }
+    // Classes telles qu'elles s'appliquent au personnage (Guerrier Chevalier occulte : lanceur « tiers »).
+    val classePrincipale = classesSrd.firstOrNull { it.nom.equals(character.characterClass, ignoreCase = true) }?.pourPersonnage(character)
     val niveauPrincipalActuel = character.level - character.classesSecondaires.sumOf { it.niveau }
 
     val pistesExistantes = buildList {
         classePrincipale?.let { add(PisteNiveau(it, niveauPrincipalActuel, estNouvelle = false, estPrincipale = true)) }
         character.classesSecondaires.forEach { nc ->
-            classesSrd.firstOrNull { it.nom.equals(nc.classe, ignoreCase = true) }
+            classesSrd.firstOrNull { it.nom.equals(nc.classe, ignoreCase = true) }?.pourPersonnage(character)
                 ?.let { add(PisteNiveau(it, nc.niveau, estNouvelle = false, estPrincipale = false)) }
         }
     }
@@ -1080,7 +1240,10 @@ private fun LevelUpDialog(character: Character, onDismiss: () -> Unit) {
     )
     var pointsAssignes by remember(pisteActive, nouveauNiveauDansClasse) { mutableStateOf(mapOf<String, Int>()) }
     val totalAssigne = pointsAssignes.values.sum()
-    val choixAsiComplet = aptitudeAsi == null || totalAssigne == 2
+    // Amélioration de caractéristique : +2/+1+1, ou à la place un don Général dont les prérequis
+    // sont remplis (choisi plus bas, comme le don d'une Faveur épique).
+    var asiParDon by remember(pisteActive, nouveauNiveauDansClasse) { mutableStateOf(false) }
+    val choixAsiComplet = aptitudeAsi == null || asiParDon || totalAssigne == 2
 
     // Aptitudes à choix intégré gagnées à ce niveau (ex. Impacts bénis du Clerc au niveau 7 :
     // Impact divin ou Incantation puissante) : une option retenue par aptitude, obligatoire
@@ -1131,6 +1294,7 @@ private fun LevelUpDialog(character: Character, onDismiss: () -> Unit) {
             "complet" -> tableEmplacementsSrd?.plusHautNiveauAvecEmplacement(nouveauNiveauDansClasse) ?: 0
             "demi" -> tableEmplacementsSrd?.plusHautNiveauAvecEmplacement((nouveauNiveauDansClasse + 1) / 2) ?: 0
             "pacte" -> c.tableProgression?.valeurNiveau(nouveauNiveauDansClasse.toString(), "Niveau des emplacements")?.toIntOrNull() ?: 0
+            "tiers" -> tableEmplacementsSrd?.plusHautNiveauAvecEmplacement(niveauLanceurTiers(nouveauNiveauDansClasse)) ?: 0
             else -> 0
         }
     } ?: 0
@@ -1200,20 +1364,30 @@ private fun LevelUpDialog(character: Character, onDismiss: () -> Unit) {
 
     // Sorts lançables sans emplacement (balise « sorts-speciaux: MODE; niveaux: 1, 2[; incantation: Action] »,
     // ex. Maîtrise des sorts, Sorts de prédilection du Magicien) : un sort du grimoire par niveau listé.
-    data class EmplacementSortSpecial(val cle: String, val apt: AptitudeClasse, val mode: String, val niveau: Int, val incantation: String?)
+    // Balise « un-par-niveau: 11, 13, 15, 17 » : un seul sort, du niveau listé au même rang que le
+    // niveau de classe atteint (Arcanum mystique : 6e niveau au niveau 11, 7e au 13…) ; « source:
+    // liste » : choisi dans la liste de sorts de la classe plutôt que dans le grimoire.
+    data class EmplacementSortSpecial(val cle: String, val apt: AptitudeClasse, val mode: String, val niveau: Int, val incantation: String?, val depuisListe: Boolean = false)
     val emplacementsSpeciaux = aptitudesGagnees.flatMap { apt ->
-        apt.balises.filter { it.containsKey("sorts-speciaux") }.flatMap { b ->
-            b["niveaux"].orEmpty().split(",").mapIndexedNotNull { i, n ->
-                n.trim().toIntOrNull()?.let { EmplacementSortSpecial("${b["id"] ?: apt.nom}#$i", apt, b["sorts-speciaux"]!!.trim(), it, b["incantation"]?.trim()) }
+        apt.balises.filter { it.containsKey("sorts-speciaux") && !it.containsKey("sort") }.flatMap { b ->
+            val niveaux = b["niveaux"].orEmpty().split(",").mapNotNull { it.trim().toIntOrNull() }
+            val rang = b["un-par-niveau"]?.split(",")?.mapNotNull { it.trim().toIntOrNull() }?.indexOf(nouveauNiveauDansClasse)
+            val retenus = if (rang == null) niveaux.withIndex().toList() else listOfNotNull(niveaux.getOrNull(rang)?.let { IndexedValue(rang, it) })
+            retenus.map { (i, n) ->
+                EmplacementSortSpecial("${b["id"] ?: apt.nom}#$i", apt, b["sorts-speciaux"]!!.trim(), n, b["incantation"]?.trim(), b["source"]?.trim() == "liste")
             }
         }
     }
+    // Sort imposé (« sort: Contact avec les plans », Communication avec le protecteur) : sans choix.
+    val sortsSpeciauxImposes = aptitudesGagnees.flatMap { apt ->
+        apt.balises.filter { it.containsKey("sorts-speciaux") && it.containsKey("sort") }.map { b -> b["sort"]!!.trim() to b["sorts-speciaux"]!!.trim() }
+    }.toMap()
     var sortsSpeciauxChoisis by remember(pisteActive, nouveauNiveauDansClasse) { mutableStateOf(mapOf<String, String>()) }
     // Grimoire de la classe qui progresse (sorts déjà appris + ceux choisis à ce niveau).
     val grimoire = character.spells.filter { s -> (character.spellClasses[s] ?: character.characterClass).equals(classeSorts?.nom, ignoreCase = true) } +
         nouveauxSortsChoisis
     fun candidatsSpeciaux(e: EmplacementSortSpecial): List<SrdEntry> = sortsSrd.filter { s ->
-        grimoire.any { ArsenalPersonnage.memeSort(it, s.name) } &&
+        (if (e.depuisListe) classeSorts == null || s.enseignePar(classeSorts.nom) else grimoire.any { ArsenalPersonnage.memeSort(it, s.name) }) &&
             ArsenalPersonnage.niveauDepuisLibelle(s.niveauSort) == e.niveau &&
             (e.incantation == null || s.tempsIncantation.startsWith(e.incantation, ignoreCase = true)) &&
             character.sortsSpeciaux.keys.none { ArsenalPersonnage.memeSort(it, s.name) } &&
@@ -1223,18 +1397,52 @@ private fun LevelUpDialog(character: Character, onDismiss: () -> Unit) {
 
     // Don choisi par une aptitude (Faveur épique : balise « don-categorie: Faveur épique »), avec son
     // augmentation de caractéristique (« Intelligence, Sagesse ou Charisme +1 (max 30) »).
+    // Amélioration de caractéristique prise sous forme de don : un don Général.
     val aptitudeDon = aptitudesGagnees.firstNotNullOfOrNull { apt ->
         apt.balises.firstNotNullOfOrNull { it["don-categorie"] }?.let { apt to it.trim() }
-    }
+    } ?: aptitudeAsi?.takeIf { asiParDon }?.let { it to "Général" }
+    // Dons de la catégorie, sauf ceux déjà pris (hors dons répétables) et « Amélioration de
+    // caractéristique » elle-même (c'est l'option des points ci-dessus).
     val donsCandidats = aptitudeDon?.let { (_, categorie) ->
-        donsSrd.filter { d -> d.categorie.equals(categorie, ignoreCase = true) && !character.feats.contains(d.nom, ignoreCase = true) }
+        donsSrd.filter { d ->
+            d.categorie.equals(categorie, ignoreCase = true) &&
+                !d.nom.equals("Amélioration de caractéristique", ignoreCase = true) &&
+                (donRepetable(d) || !possedeDon(character, d.nom))
+        }
     }.orEmpty()
+    // Prérequis manquants de chaque candidat (niveau, caractéristique à 13, formation, Sorts…).
+    val prerequisDons = donsCandidats.associate { it.nom to prerequisManquants(it, character, nouveauNiveauTotal) }
     var donChoisiNom by remember(pisteActive, nouveauNiveauDansClasse) { mutableStateOf<String?>(null) }
-    val donChoisi = donsCandidats.firstOrNull { it.nom == donChoisiNom }
+    val donChoisi = donsCandidats.firstOrNull { it.nom == donChoisiNom && prerequisDons[it.nom].isNullOrEmpty() }
     val augmentationDon = donChoisi?.let { augmentationDeDon(it) }
     var caracDon by remember(donChoisiNom) { mutableStateOf<String?>(null) }
+    // Choix propres au don (compétence d'Observateur, résistances d'une Faveur…) : « choix: bm »
+    // vaut le bonus de maîtrise au nouveau niveau (sorts de Magie rituelle).
+    val prefixeChoixDon = "don:${donChoisi?.nom}:"
+    val choixDon = donChoisi?.balises.orEmpty().mapNotNull { b0 ->
+        val b = if (b0["choix"].equals("bm", ignoreCase = true)) b0 + ("choix" to calculateProficiencyBonus(nouveauNiveauTotal).toString()) else b0
+        construireChoix(b, donChoisi!!.nom, donChoisi.description, contexteChoix, prefixeId = prefixeChoixDon)?.let { c ->
+            when {
+                c.effet == EffetBalise.EXPERTISE -> c.copy(options = competencesPourExpertise(character), descriptions = emptyMap())
+                b["nouvelle"].equals("oui", ignoreCase = true) -> c.copy(options = c.options.filterNot { o -> character.skillProficiencies.any { it.equals(o, true) } })
+                else -> c
+            }
+        }
+    }
+    var choixDonFaits by remember(donChoisiNom) { mutableStateOf(mapOf<String, List<String>>()) }
+    val effetsDonChoisi: EffetsDon? = donChoisi?.let { d ->
+        effetsDon(
+            d,
+            choixDon.associate { it.id.removePrefix(prefixeChoixDon) to choixDonFaits[it.id].orEmpty() },
+            nouveauNiveauTotal,
+            caracDon?.let(::abilitySaveName),
+        )
+    }
     val choixDonComplet = aptitudeDon == null || donsCandidats.isEmpty() ||
-        (donChoisi != null && (augmentationDon == null || augmentationDon.options.isEmpty() || caracDon != null))
+        (donChoisi != null && (augmentationDon == null || augmentationDon.options.isEmpty() || caracDon != null) &&
+            choixDon.all { c -> choixDonFaits[c.id].orEmpty().size == minOf(c.nombre, c.options.size) })
+    // Dons déjà possédés qui donnent des PV à chaque niveau (Robuste : +2).
+    val pvDons = pvParNiveauDons(donsDuPersonnage(character, donsSrd)) + (effetsDonChoisi?.pv ?: 0)
 
     // Autres choix balisés des aptitudes gagnées (ex. Maîtrises supplémentaires du Collège du
     // Savoir : « choix: 3; effet: competences »), cf. construireChoix.
@@ -1262,12 +1470,13 @@ private fun LevelUpDialog(character: Character, onDismiss: () -> Unit) {
     val competencesEspeceGagnees = effetsApres?.competences.orEmpty() - character.skillProficiencies.toSet()
     val pvEspece = effetsApres?.pvParNiveau ?: 0
 
-    AlertDialog(
+    // Plein écran : la montée de niveau est longue (sorts, aptitudes, caractéristiques).
+    com.jc2.jdrcompagnon.ui.components.DialoguePleinEcran(
         onDismissRequest = onDismiss,
         title = { Text("Niveau $nouveauNiveauTotal !") },
         text = {
             Column(
-                modifier = Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()),
+                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 if (!chargementTermine) {
@@ -1368,8 +1577,15 @@ private fun LevelUpDialog(character: Character, onDismiss: () -> Unit) {
                         color = SheetTextSecondary
                     )
                 }
+                if (pvDons > 0) {
+                    Text(
+                        "+$pvDons PV de dons (Robuste, Faveur de vigueur…)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = SheetTextSecondary
+                    )
+                }
                 Text(
-                    "Nouveau maximum : ${character.maxHitPoints + pvGagnes + pvEspece}",
+                    "Nouveau maximum : ${character.maxHitPoints + pvGagnes + pvEspece + pvDons}",
                     style = MaterialTheme.typography.bodySmall,
                     color = SheetTextSecondary
                 )
@@ -1437,8 +1653,8 @@ private fun LevelUpDialog(character: Character, onDismiss: () -> Unit) {
                             "${infosMulticlasse.competence} :",
                             style = MaterialTheme.typography.bodySmall
                         )
-                        Row(modifier = Modifier.fillMaxWidth().heightIn(max = 140.dp)) {
-                            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            Column {
                                 optionsCompetenceMulticlasse.forEach { competence ->
                                     Row(
                                         modifier = Modifier
@@ -1644,7 +1860,7 @@ private fun LevelUpDialog(character: Character, onDismiss: () -> Unit) {
                         FiltreSortsBarre(filtreSortsEcole, candidats)
                     }
                     Column(
-                        modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
+                        modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         filtreSortsEcole.appliquer(candidats).forEach { sort ->
@@ -1668,6 +1884,17 @@ private fun LevelUpDialog(character: Character, onDismiss: () -> Unit) {
 
                 if (aptitudeAsi != null) {
                     HorizontalDivider(thickness = 0.5.dp, color = SheetBorder)
+                    // FlowRow (et non Row) : sur un écran étroit, la seconde puce passe à la ligne au lieu
+                    // d'être écrasée (son texte s'empilait lettre par lettre en un grand cadre vide).
+                    androidx.compose.foundation.layout.FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        FilterChip(selected = !asiParDon, onClick = { asiParDon = false }, label = { Text("+2 caractéristiques", maxLines = 1) })
+                        FilterChip(selected = asiParDon, onClick = { asiParDon = true; pointsAssignes = emptyMap() }, label = { Text("Prendre un don", maxLines = 1) })
+                    }
+                }
+                if (aptitudeAsi != null && !asiParDon) {
                     Text(
                         "${aptitudeAsi.nom} — répartissez 2 points ($totalAssigne/2), max +2 sur une " +
                             "caractéristique ou +1 sur deux, plafonné à 20.",
@@ -1709,7 +1936,7 @@ private fun LevelUpDialog(character: Character, onDismiss: () -> Unit) {
                     FiltreSortsBarre(filtreMineurs, mineursCandidats)
                     // Même carte que l'onglet Sorts de la fiche : aperçu rapide, détail dépliable.
                     Column(
-                        modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
+                        modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         filtreMineurs.appliquer(mineursCandidats).forEach { sort ->
@@ -1757,7 +1984,7 @@ private fun LevelUpDialog(character: Character, onDismiss: () -> Unit) {
                         FiltreSortsBarre(filtreNouveauxSorts, sortsCandidats)
                     }
                     Column(
-                        modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
+                        modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         filtreNouveauxSorts.appliquer(sortsCandidats)
@@ -1783,11 +2010,12 @@ private fun LevelUpDialog(character: Character, onDismiss: () -> Unit) {
                 emplacementsSpeciaux.forEach { e ->
                     HorizontalDivider(thickness = 0.5.dp, color = SheetBorder)
                     Text(
-                        "${e.apt.nom} — sort du ${if (e.niveau == 1) "1er" else "${e.niveau}e"} niveau de votre grimoire" +
+                        "${e.apt.nom} — sort du ${if (e.niveau == 1) "1er" else "${e.niveau}e"} niveau ${if (e.depuisListe) "de votre liste de sorts" else "de votre grimoire"}" +
                             (e.incantation?.let { " (incantation : ${it.lowercase()})" } ?: "") + " : " +
                             when (e.mode) {
                                 ArsenalPersonnage.SORT_A_VOLONTE -> "lançable à volonté sans emplacement."
                                 ArsenalPersonnage.SORT_PREDILECTION -> "lançable une fois sans emplacement par repos court ou long."
+                                ArsenalPersonnage.SORT_ARCANUM -> "lançable une fois sans emplacement par repos long."
                                 else -> "lançable sans emplacement."
                             },
                         style = MaterialTheme.typography.bodySmall,
@@ -1818,16 +2046,35 @@ private fun LevelUpDialog(character: Character, onDismiss: () -> Unit) {
                         Text("Aucun don de cette catégorie disponible dans la bibliothèque.", style = MaterialTheme.typography.bodySmall, color = SheetTextSecondary)
                     }
                     donsCandidats.forEach { don ->
+                        val manquants = prerequisDons[don.nom].orEmpty()
+                        val accessible = manquants.isEmpty()
                         Row(
-                            modifier = Modifier.fillMaxWidth().clickable { donChoisiNom = don.nom },
+                            modifier = Modifier.fillMaxWidth().clickable(enabled = accessible) { donChoisiNom = don.nom },
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            RadioButton(selected = donChoisiNom == don.nom, onClick = { donChoisiNom = don.nom })
-                            Text(don.nom, style = MaterialTheme.typography.bodySmall)
+                            RadioButton(selected = donChoisiNom == don.nom && accessible, enabled = accessible, onClick = { donChoisiNom = don.nom })
+                            Column {
+                                Text(don.nom, style = MaterialTheme.typography.bodySmall, color = if (accessible) Color.Unspecified else SheetTextSecondary)
+                                if (!accessible) {
+                                    Text("Prérequis manquant : ${manquants.joinToString(", ")}", style = MaterialTheme.typography.labelSmall, color = SheetTextSecondary)
+                                }
+                            }
                         }
                     }
                     donChoisi?.let { don ->
                         Markdown(content = don.description)
+                        choixDon.forEach { c ->
+                            ChoixBaliseCarte(
+                                choix = c,
+                                selection = choixDonFaits[c.id].orEmpty(),
+                                onSelectionChange = { choixDonFaits = choixDonFaits + (c.id to it) },
+                                indisponibles = if (c.effet == EffetBalise.COMPETENCES) character.skillExpertise.toSet() else emptySet(),
+                                versExpertise = if (c.effet == EffetBalise.COMPETENCES) character.skillProficiencies.toSet() else emptySet(),
+                            )
+                        }
+                        effetsDonChoisi?.takeIf { !it.vide }?.let { e ->
+                            Text("Appliqué à la fiche : ${e.resume()}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                        }
                         augmentationDon?.takeIf { it.options.isNotEmpty() }?.let { aug ->
                             Text(
                                 "Augmentation : +${aug.gain} à une caractéristique (max ${aug.max})",
@@ -1853,7 +2100,7 @@ private fun LevelUpDialog(character: Character, onDismiss: () -> Unit) {
         confirmButton = {
             if (etapeChoixSousClasse) {
                 TextButton(enabled = sousClasseRetenue != null, onClick = { sousClasseValidee = true }) { Text("Suivant") }
-                return@AlertDialog
+                return@DialoguePleinEcran
             }
             TextButton(
                 enabled = chargementTermine && choixAsiComplet && choixCompetenceMulticlasseComplet && choixEffetComplet &&
@@ -1925,7 +2172,7 @@ private fun LevelUpDialog(character: Character, onDismiss: () -> Unit) {
                     }
                     GameState.appliquerMonteeDeNiveau(
                         characterId = character.id,
-                        pvGagnes = pvGagnes + pvEspece,
+                        pvGagnes = pvGagnes + pvEspece + pvDons,
                         aptitudesTexte = aptitudesTexte,
                         sousClasse = sousClasseRetenue?.nom?.takeIf { doitChoisirSousClasse && pisteActive?.estPrincipale == true },
                         ameliorationCaracteristiques = pointsAssignes.filterValues { it != 0 }.toMutableMap().apply {
@@ -1937,9 +2184,17 @@ private fun LevelUpDialog(character: Character, onDismiss: () -> Unit) {
                         plafondCaracteristiques = augmentationDon?.takeIf { caracDon != null }?.max ?: 20,
                         donTexte = donChoisi?.let { don ->
                             val augmentation = augmentationDon?.let { aug -> caracDon?.let { " — ${abilitySaveName(it)} +${aug.gain}" } }.orEmpty()
-                            "${don.nom} (${aptitudeDon?.second.orEmpty()}, niveau $nouveauNiveauTotal)$augmentation : ${don.description}"
+                            // Choix faits et effets appliqués, rappelés sous le don.
+                            val choixTexte = choixDon.mapNotNull { c ->
+                                choixDonFaits[c.id]?.takeIf { it.isNotEmpty() }?.let { "${c.libelleFiche} : ${it.joinToString(", ")}" }
+                            }
+                            val effetsTexte = listOfNotNull(effetsDonChoisi?.takeIf { !it.vide }?.let { "Appliqué : ${it.resume()}" })
+                            "${don.nom} (${aptitudeDon?.second.orEmpty()}, niveau $nouveauNiveauTotal)$augmentation : " +
+                                (choixTexte + effetsTexte + don.description).joinToString("\n")
                         }.orEmpty(),
-                        nouveauxSortsSpeciaux = emplacementsSpeciaux.mapNotNull { e -> sortsSpeciauxChoisis[e.cle]?.let { it to e.mode } }.toMap(),
+                        effetsDon = effetsDonChoisi,
+                        sourceDon = donChoisi?.nom,
+                        nouveauxSortsSpeciaux = emplacementsSpeciaux.mapNotNull { e -> sortsSpeciauxChoisis[e.cle]?.let { it to e.mode } }.toMap() + sortsSpeciauxImposes,
                         // Classe à grimoire : seuls les nouveaux emplacements de préparation sont remplis d'office.
                         sortsAPreparer = if (baliseGrimoire != null) {
                             nouveauxSortsChoisis.take(nouveauxEmplacementsPrepares) + mineursChoisis + sortsSousClasseGagnes
@@ -2238,8 +2493,10 @@ internal data class PortraitOption(val id: String, val label: String, val resId:
 internal val characterPortraitOptions = listOf(
     PortraitOption("drakeide_f", "Drakéide (F)", R.drawable.av_drakeide_f),
     PortraitOption("drakeide_m", "Drakéide (H)", R.drawable.av_drakeide_m),
+    PortraitOption("drakeide_barbare_m", "Drakéide barbare (H)", R.drawable.av_drakeide_barbare_m),
     PortraitOption("elfe_f", "Elfe (F)", R.drawable.av_elfe_f),
     PortraitOption("elfe_m", "Elfe (H)", R.drawable.av_elfe_m),
+    PortraitOption("elfe_magicien_m", "Elfe magicien (H)", R.drawable.av_elfe_magicien_m),
     PortraitOption("gnome_f", "Gnome (F)", R.drawable.av_gnome_f),
     PortraitOption("gnome_m", "Gnome (H)", R.drawable.av_gnome_m),
     PortraitOption("goliath_f", "Goliath (F)", R.drawable.av_goliath_f),
@@ -2251,31 +2508,58 @@ internal val characterPortraitOptions = listOf(
     PortraitOption("nain_f", "Nain (F)", R.drawable.av_nain_f),
     PortraitOption("nain_h", "Nain (H)", R.drawable.av_nain_h),
     PortraitOption("nain2_h", "Nain (H) 2", R.drawable.av_nain2_h),
+    PortraitOption("nain_barbare_h", "Nain barbare (H)", R.drawable.av_nain_barbare_h),
     PortraitOption("orc_f", "Orc (F)", R.drawable.av_orc_f),
     PortraitOption("orc_m", "Orc (H)", R.drawable.av_orc_m),
     PortraitOption("tieffelin_f", "Tieffelin (F)", R.drawable.av_tieffelin_f),
     PortraitOption("tieffelin_h", "Tieffelin (H)", R.drawable.av_tieffelin_h),
 )
 
+// Mot-clé de la race (sans accents, minuscules) → préfixe des ids de portrait correspondants.
+private val prefixesPortraitParRace = listOf(
+    "drakeide" to "drakeide", "drakéide" to "drakeide", "elfe" to "elfe", "gnome" to "gnome",
+    "goliath" to "goliath", "halfelin" to "halfling", "humain" to "humain", "nain" to "nain",
+    "orc" to "orc", "tieffelin" to "tieffelin", "tiefelin" to "tieffelin",
+)
+
+/**
+ * Portraits de PJ en lien avec la race [race] (ex. « Haut-elfe » → portraits d'elfe ; « Demi-elfe »
+ * → elfe et humain). Race vide ou sans portrait correspondant : tous les portraits.
+ */
+internal fun portraitsPourRace(race: String): List<PortraitOption> {
+    val r = java.text.Normalizer.normalize(race.lowercase(Locale.FRANCE), java.text.Normalizer.Form.NFD)
+        .replace(Regex("\\p{M}+"), "")
+    val prefixes = prefixesPortraitParRace.filter { (mot, _) -> mot in r }.map { it.second }.toMutableSet()
+    if ("demi-elfe" in r) prefixes += "humain"
+    if ("demi-orc" in r) prefixes += "humain"
+    val filtres = characterPortraitOptions.filter { option -> prefixes.any { option.id.startsWith(it) } }
+    return filtres.ifEmpty { characterPortraitOptions }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun PortraitPickerDialog(
+internal fun PortraitPickerDialog(
     currentPortrait: String,
     // PNJ : seuls les portraits du dossier assets/dnd/PNJ sont proposés (voir PnjPortraits).
     pnj: Boolean = false,
+    // PJ : seuls les portraits de sa race sont proposés (voir portraitsPourRace).
+    race: String = "",
     onSelect: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
     // (id, libellé) de chaque portrait proposé ; l'image est résolue par rememberCharacterPortraitPainter.
-    val options = remember(pnj) {
+    val options = remember(pnj, race) {
         if (pnj) PnjPortraits.ids(context).map { it to PnjPortraits.label(it) }
-        else characterPortraitOptions.map { it.id to it.label }
+        else portraitsPourRace(race).map { it.id to it.label }
     }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Choisir un portrait") },
         text = {
+          Column {
+            ImporterPortraitBouton(onImporte = onSelect, modifier = Modifier.fillMaxWidth())
+            Spacer(modifier = Modifier.height(8.dp))
             FlowRow(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -2313,12 +2597,19 @@ private fun PortraitPickerDialog(
                     }
                 }
             }
+          }
         },
         confirmButton = {
             TextButton(onClick = onDismiss) { Text("Fermer") }
         }
     )
 }
+
+/** Rappel de la règle d'Inspiration héroïque (SRD 5.2), affiché quand le joueur touche le badge. */
+private const val INSPIRATION_RAPPEL =
+    "Inspiration héroïque : immédiatement après avoir lancé un dé (attaque, test, sauvegarde, dégâts…), " +
+        "vous pouvez la dépenser pour relancer ce dé et devez garder le nouveau résultat. On ne peut en avoir " +
+        "qu'une à la fois ; le MJ l'accorde (belle action, roleplay, certaines aptitudes)."
 
 /**
  * Badge cliquable pour l'Inspiration Héroïque — s'allume en doré quand
@@ -2476,44 +2767,59 @@ private fun SavingThrowsOverviewCard(character: Character) {
             fontWeight = FontWeight.Bold,
             color = SheetTextPrimary
         )
+        // Paladin niv. 6 — Aura de protection : + mod. Charisme (min. +1) à tous ses JS.
+        val aura = com.jc2.jdrcompagnon.feature_combat.domain.model.Paladin.bonusAuraProtection(character)
+        if (aura > 0) {
+            Text(
+                "Aura de protection incluse : +$aura (alliés à ${com.jc2.jdrcompagnon.feature_combat.domain.model.Paladin.rayonAura(character)} m aussi, " +
+                    "tant que vous n'êtes pas Neutralisé)",
+                style = MaterialTheme.typography.labelSmall,
+                color = SheetTextSecondary
+            )
+        }
         Spacer(modifier = Modifier.height(12.dp))
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            maxItemsInEachRow = 2
-        ) {
-            savingThrows.forEach { save ->
-                val proficient = character.savingThrowProficiencies.contains(save)
-                val total = GameState.abilityModifierForSave(save, character) +
-                        if (proficient) character.proficiencyBonus else 0
-                Row(
-                    modifier = Modifier.width(150.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(10.dp)
-                                .clip(CircleShape)
-                                .background(if (proficient) MaterialTheme.colorScheme.error else Color.Transparent)
-                                .border(1.dp, SheetTextSecondary, CircleShape)
-                        )
-                        Text(
-                            save.uppercase(Locale.FRANCE),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = SheetTextPrimary
-                        )
+        // Grille 2 colonnes à parts égales : nom à gauche, bonus aligné à droite de sa colonne,
+        // quelle que soit la largeur d'écran ou la taille du texte (l'ancienne largeur fixe décalait tout).
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            savingThrows.chunked(2).forEach { ligne ->
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    ligne.forEach { save ->
+                        // Maîtrise de la fiche, ou d'une aptitude (Esprit fuyant du Roublard).
+                        val proficient = com.jc2.jdrcompagnon.feature_combat.domain.model.Sauvegardes.maitrisee(character, save)
+                        val total = GameState.abilityModifierForSave(save, character) +
+                                (if (proficient) character.proficiencyBonus else 0) + aura
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .clip(CircleShape)
+                                        .background(if (proficient) MaterialTheme.colorScheme.error else Color.Transparent)
+                                        .border(1.dp, SheetTextSecondary, CircleShape)
+                                )
+                                Text(
+                                    save.uppercase(Locale.FRANCE),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = SheetTextPrimary
+                                )
+                            }
+                            Text(
+                                text = if (total >= 0) "+$total" else total.toString(),
+                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                color = SheetTextPrimary,
+                                maxLines = 1,
+                            )
+                        }
                     }
-                    Text(
-                        text = if (total >= 0) "+$total" else total.toString(),
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                        color = SheetTextPrimary
-                    )
+                    // Dernière ligne incomplète : garde la colonne de gauche à la même largeur.
+                    if (ligne.size == 1) Spacer(Modifier.weight(1f))
                 }
             }
         }
@@ -2918,7 +3224,12 @@ private fun ArmesEtPouvoirsCard(character: Character, isMjMode: Boolean) {
             maitrise = character.proficiencyBonus,
         )
     }
-    val objetsACharges = objetsEquipes.filter { it.charges != null }
+    // Charmes : utilisables où qu'ils soient rangés (sac compris), sans être équipés.
+    val charmes = remember(character.backpackItems, character.backpackExteriorSlots, equipes, bibliotheque) {
+        val portes = ObjetsACharges.objetsPortes(character).map { it.lowercase() }.toSet()
+        bibliotheque.filter { it.charges != null && ObjetsACharges.estCharme(it) && it.name.lowercase() in portes }
+    }
+    val objetsACharges = (objetsEquipes.filter { it.charges != null } + charmes).distinctBy { it.name }
     val consommables = objetsEquipes.filter { it.consommable }
     var message by remember(character.id) { mutableStateOf<String?>(null) }
 
@@ -2993,6 +3304,13 @@ private fun ArmesEtPouvoirsCard(character: Character, isMjMode: Boolean) {
                     onClick = { message = ObjetsACharges.utiliser(character, objet) },
                     enabled = restantes > 0 && actif,
                 ) { Text("Utiliser") }
+            }
+            if (ObjetsACharges.estCharme(objet)) {
+                Text(
+                    "Charme : $max utilisation(s), il vous quitte après la dernière.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = SheetTextSecondary,
+                )
             }
             if (objet.recharge.isNotBlank()) {
                 Text(
@@ -3227,9 +3545,7 @@ private fun DamageTypeChips(selected: Set<String>, onToggle: (String) -> Unit) {
 @Composable
 private fun CombatTabBase(character: Character) {
     val acBreakdown = GameState.armorClassBreakdown(character)
-    val init = GameState.abilityModifier(character.dexterity)
     var showAcDetail by remember { mutableStateOf(false) }
-    var showInitDetail by remember { mutableStateOf(false) }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (character.weaponArmorTraining.isNotBlank()) {
@@ -3273,22 +3589,7 @@ private fun CombatTabBase(character: Character) {
                     Icon(Icons.Default.Shield, null, tint = SheetTextSecondary)
                     Text("Classe d'armure", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = SheetTextPrimary)
                 }
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.combinedClickable(onClick = {}, onDoubleClick = { showInitDetail = true })
-                ) {
-                    Text(
-                        "INITIATIVE",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = SheetTextSecondary,
-                        letterSpacing = 1.sp
-                    )
-                    Text(
-                        if (init >= 0) "+$init" else init.toString(),
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = SheetTextPrimary
-                    )
-                }
+                // Pas d'initiative ici : elle figure déjà dans les cases sous la barre d'XP.
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
@@ -3340,16 +3641,6 @@ private fun CombatTabBase(character: Character) {
     if (showAcDetail) {
         StatDetailDialog(title = "Classe d'armure", lignes = listOf(acBreakdown.detail), onDismiss = { showAcDetail = false })
     }
-    if (showInitDetail) {
-        StatDetailDialog(
-            title = "Initiative",
-            lignes = listOfNotNull(
-                "Initiative = modificateur de Dextérité = $init (DEX ${character.dexterity})",
-                if (character.initiativeBonus != 0) "Bonus supplémentaire : ${if (character.initiativeBonus >= 0) "+" else ""}${character.initiativeBonus}" else null
-            ),
-            onDismiss = { showInitDetail = false }
-        )
-    }
 }
 
 @Composable
@@ -3358,7 +3649,8 @@ private fun ProficiencyRow(
     level: ProficiencyLevel,
     modifier: Int,
     proficiencyBonus: Int,
-    onClick: (() -> Unit)? = null
+    onClick: (() -> Unit)? = null,
+    onDoubleClick: (() -> Unit)? = null
 ) {
     val (bgColor, labelText) = when (level) {
         ProficiencyLevel.NONE -> SheetSurfaceLight to "—"
@@ -3370,7 +3662,13 @@ private fun ProficiencyRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .background(bgColor)
-            .let { if (onClick != null) it.clickable { onClick() } else it }
+            .let {
+                when {
+                    onDoubleClick != null -> it.combinedClickable(onClick = { onClick?.invoke() }, onDoubleClick = onDoubleClick)
+                    onClick != null -> it.clickable { onClick() }
+                    else -> it
+                }
+            }
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
@@ -3399,6 +3697,26 @@ private fun ProficiencyRow(
             color = SheetTextPrimary
         )
     }
+}
+
+@Composable
+private fun SkillIconDialog(skill: String, onDismiss: () -> Unit) {
+    val res = skillIconRes(skill) ?: return
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(skill) },
+        text = {
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Image(
+                    painter = painterResource(res),
+                    contentDescription = skill,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.size(240.dp)
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Fermer") } }
+    )
 }
 
 @Composable
@@ -3461,10 +3779,10 @@ internal fun calculerEmplacementsDeSort(
 ): EmplacementsDeSortResultat {
     val niveauPrincipal = character.level - character.classesSecondaires.sumOf { it.niveau }
     val pistes = buildList {
-        classesSrd.firstOrNull { it.nom.equals(character.characterClass, ignoreCase = true) }
+        classesSrd.firstOrNull { it.nom.equals(character.characterClass, ignoreCase = true) }?.pourPersonnage(character)
             ?.let { add(it to niveauPrincipal) }
         character.classesSecondaires.forEach { nc ->
-            classesSrd.firstOrNull { it.nom.equals(nc.classe, ignoreCase = true) }?.let { add(it to nc.niveau) }
+            classesSrd.firstOrNull { it.nom.equals(nc.classe, ignoreCase = true) }?.pourPersonnage(character)?.let { add(it to nc.niveau) }
         }
     }
 
@@ -3474,6 +3792,8 @@ internal fun calculerEmplacementsDeSort(
             // Demi-lanceur (Paladin, Rôdeur) : moitié arrondie au supérieur (règles 2024), soit
             // 2 emplacements du 1er niveau dès le niveau 1.
             "demi" -> (niveau + 1) / 2
+            // Lanceur « tiers » (Chevalier occulte) : 2 emplacements du 1er niveau au niveau 3.
+            "tiers" -> niveauLanceurTiers(niveau)
             else -> 0
         }
     }
@@ -3543,20 +3863,22 @@ internal fun calculerPistesIncantation(
 ): List<PisteIncantation> {
     val niveauPrincipal = character.level - character.classesSecondaires.sumOf { it.niveau }
     val pistesBrutes = buildList {
-        classesSrd.firstOrNull { it.nom.equals(character.characterClass, ignoreCase = true) }
+        classesSrd.firstOrNull { it.nom.equals(character.characterClass, ignoreCase = true) }?.pourPersonnage(character)
             ?.let { add(it to niveauPrincipal) }
         character.classesSecondaires.forEach { nc ->
-            classesSrd.firstOrNull { it.nom.equals(nc.classe, ignoreCase = true) }?.let { add(it to nc.niveau) }
+            classesSrd.firstOrNull { it.nom.equals(nc.classe, ignoreCase = true) }?.pourPersonnage(character)?.let { add(it to nc.niveau) }
         }
     }
     return pistesBrutes.mapNotNull { (classe, niveau) ->
-        // Caractéristique d'incantation de la classe (Paladin : Charisme), pas sa première
-        // caractéristique principale (« Force et Charisme » donnait Force).
-        val ability = spellcastingAbilityByClass.entries.firstOrNull { it.key.equals(classe.nom, ignoreCase = true) }?.value
+        // Caractéristique d'incantation de la classe (Paladin : Charisme), ou de sa sous-classe
+        // (Chevalier occulte : Intelligence), pas sa première caractéristique principale.
+        val ability = incantationDeSousClasse(character, classe.nom)?.caracteristique
+            ?: spellcastingAbilityByClass.entries.firstOrNull { it.key.equals(classe.nom, ignoreCase = true) }?.value
             ?: classe.caracteristiquePrincipale.firstOrNull()?.label ?: return@mapNotNull null
         val maxNiveauSort = when (classe.typeIncantation) {
             "complet" -> tableEmplacements?.plusHautNiveauAvecEmplacement(niveau) ?: 0
             "demi" -> tableEmplacements?.plusHautNiveauAvecEmplacement((niveau + 1) / 2) ?: 0
+            "tiers" -> tableEmplacements?.plusHautNiveauAvecEmplacement(niveauLanceurTiers(niveau)) ?: 0
             "pacte" -> classe.tableProgression?.valeurNiveau(niveau.toString(), "Niveau des emplacements")?.toIntOrNull() ?: 0
             else -> return@mapNotNull null
         }
@@ -3610,6 +3932,13 @@ private fun SpellsTab(character: Character, isMjMode: Boolean) {
         ArsenalPersonnage.sortsToujoursPreparesClasse(character) + sortsDeSousClasse(character, classesSrd)
     }
     val sortsPreparesAffiches = character.spells.filterNot { s -> sortsToujoursPrepares.any { it.equals(s, ignoreCase = true) } }
+    // Classes qui préparent (Clerc, Druide, Magicien, Paladin) : le sort est-il préparé (écran
+    // Repos) ? null = sans objet (autre classe). Jamais préparés (preparedSpells null) = tous prêts.
+    fun etatPreparation(s: String): Boolean? {
+        val classe = character.spellClasses[s] ?: character.characterClass
+        if (ArsenalPersonnage.classesQuiPreparent.none { it.equals(classe, ignoreCase = true) }) return null
+        return character.preparedSpells?.any { ArsenalPersonnage.memeSort(it, s) } ?: true
+    }
     // Niveau de chaque sort du SRD : les sorts mineurs ne comptent pas dans les sorts préparés.
     var niveauxSorts by remember(character.worldId) { mutableStateOf<Map<String, Int>>(emptyMap()) }
     LaunchedEffect(character.worldId) {
@@ -3621,7 +3950,7 @@ private fun SpellsTab(character: Character, isMjMode: Boolean) {
     LaunchedEffect(character.id, sortsToujoursPrepares, character.spells) {
         sortsToujoursPrepares.filter { s -> character.spells.none { it.equals(s, ignoreCase = true) } }
             .forEach { s ->
-                val classe = if (s.equals(ArsenalPersonnage.SORT_CHATIMENT_DIVIN, ignoreCase = true)) "Paladin" else character.characterClass
+                val classe = if (com.jc2.jdrcompagnon.feature_combat.domain.model.Paladin.estSortDePaladin(s)) "Paladin" else character.characterClass
                 GameState.addSpellToCharacter(character.id, s, classe)
             }
     }
@@ -3651,6 +3980,7 @@ private fun SpellsTab(character: Character, isMjMode: Boolean) {
                     when (piste.classe.typeIncantation) {
                         "complet" -> 9
                         "demi" -> 5
+                        "tiers" -> 4
                         else -> 0
                     }
                 } ?: 0
@@ -3680,6 +4010,40 @@ private fun SpellsTab(character: Character, isMjMode: Boolean) {
                             disponibles = max - utilises,
                             max = max,
                             modifier = Modifier.weight(1f)
+                        )
+                    }
+                    // Occultiste — Rouerie magique (niveau 2, 1/repos long) : emplacements de pacte
+                    // regagnés jusqu'à la moitié du maximum (tous au niveau 20, Maître de l'occulte).
+                    val occultiste = com.jc2.jdrcompagnon.feature_combat.domain.model.Occultiste
+                    if (occultiste.niveau(character) >= 2) {
+                        val apres = occultiste.apresRouerie(character, max)
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                when {
+                                    character.rouerieMagiqueUtilisee -> "Rouerie magique utilisée (récupérée au prochain repos long)."
+                                    utilises == 0 -> "Rouerie magique disponible (aucun emplacement de pacte dépensé)."
+                                    else -> "Rouerie magique : rite d'1 minute, regagne ${utilises - apres} emplacement(s) de pacte."
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = SheetTextPrimary,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (occultiste.rouerieDisponible(character) && utilises > 0) {
+                                TextButton(onClick = { GameState.rouerieMagique(character.id, max) }) { Text("Rouerie magique") }
+                            }
+                        }
+                        // Pacte de la lame et aptitudes de protecteur (compteurs, soins de Lumière guérisseuse).
+                        com.jc2.jdrcompagnon.feature_combat.ui.ActionPacteDeLaLame(character, modifier = Modifier.padding(top = 8.dp))
+                        val fichesMonde = GameState.characters.collectAsState().value.filter { it.worldId == character.worldId && it.id != character.id }
+                        com.jc2.jdrcompagnon.feature_combat.ui.CarteAptitudesOccultiste(
+                            character,
+                            cibles = listOf(com.jc2.jdrcompagnon.feature_combat.ui.CibleContact(character.id, character.name + " (vous)")) +
+                                fichesMonde.map { com.jc2.jdrcompagnon.feature_combat.ui.CibleContact(it.id, it.name) },
+                            onSoin = { cible, pv, detail ->
+                                GameState.soignerOuGuerirPoison(cible.id, pv, false)
+                                "$detail : ${cible.nom} récupère $pv PV."
+                            },
+                            modifier = Modifier.padding(top = 8.dp),
                         )
                     }
                 }
@@ -3722,9 +4086,10 @@ private fun SpellsTab(character: Character, isMjMode: Boolean) {
                     color = SheetTextPrimary
                 )
                 Spacer(modifier = Modifier.height(10.dp))
+                // Sorts du grimoire non préparés exclus du compte.
                 val prepares = sortsPreparesAffiches.count {
                     (character.spellClasses[it] ?: character.characterClass).equals(piste.classe.nom, ignoreCase = true) &&
-                        niveauxSorts[it.lowercase()] != 0
+                        niveauxSorts[it.lowercase()] != 0 && etatPreparation(it) != false
                 }
                 val signeMod = if (modifier >= 0) "+$modifier" else "$modifier"
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -3767,7 +4132,12 @@ private fun SpellsTab(character: Character, isMjMode: Boolean) {
                 // vrai multiclassage (2+ pistes), il est partagé entre elles et reçoit sa
                 // propre carte juste après (cf. plus bas), pour ne pas le dupliquer par classe.
                 if (pistesIncantation.size <= 1) blocEmplacements()
-                if (piste.classe.nom.equals("Paladin", ignoreCase = true)) RessourcesPaladin(character, isMjMode)
+                if (piste.classe.nom.equals("Paladin", ignoreCase = true)) {
+                    RessourcesPaladin(
+                        character, isMjMode,
+                        emplacementsRestants = emplacements.classiques.mapValues { (n, max) -> (max - (character.spellSlotsUsed[n] ?: 0)).coerceAtLeast(0) },
+                    )
+                }
                 if (piste.classe.nom.equals("Magicien", ignoreCase = true)) RessourcesMagicien(character)
             }
         }
@@ -3815,7 +4185,9 @@ private fun SpellsTab(character: Character, isMjMode: Boolean) {
                 fun origineSort(s: String): String = character.spellSources[s] ?: when {
                     s.equals(ArsenalPersonnage.SORT_CHATIMENT_DIVIN, ignoreCase = true) && s in sortsToujoursPrepares ->
                         "Châtiment de paladin (toujours préparé)"
-                    s in character.sortsSpeciaux -> "Aptitude de classe (toujours préparé)"
+                    ArsenalPersonnage.memeSort(s, com.jc2.jdrcompagnon.feature_combat.domain.model.Paladin.SORT_FIDELE_DESTRIER) && s in sortsToujoursPrepares ->
+                        "Fidèle destrier (toujours préparé)"
+                    ArsenalPersonnage.sortsSpeciaux(character).keys.any { ArsenalPersonnage.memeSort(it, s) } ->"Aptitude de classe (toujours préparé)"
                     s in sortsToujoursPrepares -> "Sous-classe : ${character.subclass} (toujours préparé)"
                     character.traits.contains(s, ignoreCase = true) -> "Espèce : ${character.race}"
                     character.feats.contains(s, ignoreCase = true) -> "Don"
@@ -3829,18 +4201,26 @@ private fun SpellsTab(character: Character, isMjMode: Boolean) {
                         // Sorts mineurs d'un côté, sorts de niveau 1+ préparés de l'autre, chacun
                         // avec son maximum (colonnes de la table de progression de la classe).
                         val (mineurs, prepares) = sortsGroupe.partition { niveauxSorts[it.lowercase()] == 0 }
-                        val preparesComptes = prepares.count { it !in sortsToujoursPrepares }
+                        val preparesComptes = prepares.count { it !in sortsToujoursPrepares && etatPreparation(it) != false }
+                        // Des sorts connus non préparés (grimoire du Magicien, liste du Clerc...) :
+                        // la liste montre tous les sorts, les préparés en couleur.
+                        val avecNonPrepares = prepares.any { it !in sortsToujoursPrepares && etatPreparation(it) == false }
+                        val titrePrepares = when {
+                            !avecNonPrepares -> "Sorts préparés"
+                            classeSort.equals("Magicien", ignoreCase = true) -> "Grimoire — préparés en couleur"
+                            else -> "Sorts connus — préparés en couleur"
+                        }
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             if (groupes.size > 1) {
                                 Text(classeSort, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = SheetTextSecondary)
                             }
                             listOf(
                                 "Sorts mineurs" + (piste?.sortsMineursMax?.let { " (${mineurs.size}/$it)" } ?: "") to mineurs,
-                                "Sorts préparés" + (piste?.sortsPreparesMax?.let { " ($preparesComptes/$it)" } ?: "") to prepares,
+                                titrePrepares + (piste?.sortsPreparesMax?.let { " ($preparesComptes/$it)" } ?: "") to prepares,
                             ).filter { it.second.isNotEmpty() }.forEach { (titre, sorts) ->
                             Text(titre, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = SheetTextSecondary)
-                            // Favoris en tête de liste.
-                            sorts.sortedByDescending { it in character.favoriteSpells }.forEach { spellName ->
+                            // Favoris en tête de liste, puis les sorts préparés.
+                            sorts.sortedWith(compareBy({ it !in character.favoriteSpells }, { etatPreparation(it) == false })).forEach { spellName ->
                                 SpellRow(
                                     spellName = spellName,
                                     worldId = character.worldId,
@@ -3852,6 +4232,9 @@ private fun SpellsTab(character: Character, isMjMode: Boolean) {
                                     onDelete = { GameState.removeSpellFromCharacter(character.id, spellName) },
                                     onLancer = { sort -> Consommables.lancerSort(character, sort) },
                                     toujoursPrepare = spellName in sortsToujoursPrepares,
+                                    // Sorts mineurs toujours prêts : pas de marquage.
+                                    prepare = if (spellName in sortsToujoursPrepares || niveauxSorts[spellName.lowercase()] == 0) null
+                                        else etatPreparation(spellName),
                                     emplacementsRestants = emplacements.classiques.mapValues { (niveau, max) ->
                                         (max - (character.spellSlotsUsed[niveau] ?: 0)).coerceAtLeast(0)
                                     },
@@ -3860,9 +4243,9 @@ private fun SpellsTab(character: Character, isMjMode: Boolean) {
                                     },
                                     origine = origineSort(spellName),
                                     rituelAutorise = ArsenalPersonnage.rituelAutorise(character, spellName),
-                                    badgeSpecial = character.sortsSpeciaux[spellName]?.let { mode ->
+                                    badgeSpecial = ArsenalPersonnage.sortsSpeciaux(character).entries.firstOrNull { ArsenalPersonnage.memeSort(it.key, spellName) }?.value?.let { mode ->
                                         ArsenalPersonnage.libelleSortSpecial(mode)?.let { libelle ->
-                                            if (mode == ArsenalPersonnage.SORT_PREDILECTION && spellName in character.sortsPredilectionUtilises) "$libelle (utilisé)"
+                                            if (mode != ArsenalPersonnage.SORT_A_VOLONTE && !ArsenalPersonnage.gratuitDisponible(character, spellName)) "$libelle (utilisé)"
                                             else libelle
                                         }
                                     },
@@ -3967,7 +4350,7 @@ private fun CaseEmplacement(
  * deux récupérées au repos long.
  */
 @Composable
-private fun RessourcesPaladin(character: Character, isMjMode: Boolean) {
+private fun RessourcesPaladin(character: Character, isMjMode: Boolean, emplacementsRestants: Map<Int, Int> = emptyMap()) {
     val reserve = ArsenalPersonnage.reservePuissanceCurative(character)
     if (reserve <= 0) return
     val utilises = character.layOnHandsUsed.coerceAtMost(reserve)
@@ -3988,7 +4371,24 @@ private fun RessourcesPaladin(character: Character, isMjMode: Boolean) {
                 modifier = Modifier.weight(1f)
             )
         }
+        val conduitMax = com.jc2.jdrcompagnon.feature_combat.domain.model.Paladin.conduitDivinMax(character)
+        if (conduitMax > 0) {
+            CaseEmplacement(
+                titre = "Conduit divin",
+                disponibles = com.jc2.jdrcompagnon.feature_combat.domain.model.Paladin.conduitDivinRestants(character),
+                max = conduitMax,
+                modifier = Modifier.weight(1f)
+            )
+        }
     }
+    // Conduit divin, Frappes radiantes, Nimbe sacré, auras : effets appliqués directement à la fiche.
+    com.jc2.jdrcompagnon.feature_combat.ui.CarteAptitudesPaladin(
+        character,
+        onAnnonce = { libelle, texte -> "$libelle : $texte." },
+        onDegats = { _, des, formule -> "${des.sum()} dégâts radiants (${des.joinToString("+")}) — $formule." },
+        modifier = Modifier.padding(top = 8.dp),
+        emplacementsRestants = emplacementsRestants,
+    )
 }
 
 /**
@@ -4018,7 +4418,8 @@ private fun SrdEntry.enseignePar(classe: String): Boolean =
     REGEX_CLASSES_SORT.find(rawMarkdown)?.groupValues?.get(1).orEmpty()
         .split(",")
         .map { it.trim() }
-        .any { it.equals(classe, ignoreCase = true) }
+        // Liste suivie par la classe : la sienne, ou celle d'une incantation de sous-classe (Guerrier → Magicien).
+        .any { it.equals(listeSortsDeClasse(classe), ignoreCase = true) }
 
 /** Niveau du sort (0 pour un sort mineur), lu sur la première ligne "*École — Niveau*". */
 private fun SrdEntry.niveauSort(): Int =
@@ -4065,6 +4466,9 @@ private fun SpellRow(
     onDepenserEmplacement: ((Int) -> Unit)? = null,
     // Sort toujours préparé par une aptitude (Châtiment divin du Paladin) : badge doré, non retirable.
     toujoursPrepare: Boolean = false,
+    // Classe qui prépare ses sorts : true = préparé (en couleur), false = connu mais non préparé
+    // (grisé), null = sans objet (sort mineur, classe qui ne prépare pas).
+    prepare: Boolean? = null,
     // D'où vient le sort (classe et niveau, espèce, don, grimoire...), affiché sous la carte.
     origine: String? = null,
     // Sort rituel que le personnage peut lancer en rituel (préparé, ou grimoire du Magicien —
@@ -4095,7 +4499,8 @@ private fun SpellRow(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        color = SheetSurfaceLight.copy(alpha = 0.75f)
+        color = if (prepare == true) CouleurPrepare.copy(alpha = 0.22f) else SheetSurfaceLight.copy(alpha = 0.75f),
+        border = if (prepare == true) androidx.compose.foundation.BorderStroke(1.dp, CouleurPrepare.copy(alpha = 0.7f)) else null
     ) {
         Column(modifier = Modifier.animateContentSize()) {
             Row(
@@ -4110,13 +4515,20 @@ private fun SpellRow(
                         text = spellName,
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold,
-                        color = if (toujoursPrepare) CouleurToujoursPrepare else SheetTextPrimary,
+                        color = when {
+                            toujoursPrepare -> CouleurToujoursPrepare
+                            prepare == true -> CouleurPrepare
+                            prepare == false -> SheetTextSecondary
+                            else -> SheetTextPrimary
+                        },
                     )
                     val rituel = detail?.let { ArsenalPersonnage.estRituel(it.tempsIncantation) } == true
-                    if (toujoursPrepare || rituel || detail?.niveauSort?.isNotBlank() == true || detail?.typeSort?.isNotBlank() == true) {
+                    if (toujoursPrepare || prepare != null || rituel || detail?.niveauSort?.isNotBlank() == true || detail?.typeSort?.isNotBlank() == true) {
                         Spacer(modifier = Modifier.height(4.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             if (toujoursPrepare) SpellBadge(text = "Toujours préparé", color = CouleurToujoursPrepare)
+                            if (prepare == true) SpellBadge(text = "Préparé", color = CouleurPrepare)
+                            if (prepare == false) SpellBadge(text = "Non préparé", color = SheetTextSecondary)
                             if (rituel) SpellBadge(text = "Rituel", color = MaterialTheme.colorScheme.secondary)
                             badgeSpecial?.let { SpellBadge(text = it, color = CouleurToujoursPrepare) }
                             detail?.niveauSort?.takeIf { it.isNotBlank() }?.let { niveau ->
@@ -4272,6 +4684,9 @@ private fun SpellRow(
 /** Doré des sorts toujours préparés (hors limite de sorts préparés). */
 private val CouleurToujoursPrepare = Color(0xFFFFD778)
 
+/** Vert des sorts préparés (écran Repos) parmi les sorts connus ou du grimoire. */
+private val CouleurPrepare = Color(0xFF7FE0A0)
+
 /** Petite étiquette (niveau, type) affichée sous le nom d'un sort dans [SpellRow]. */
 @Composable
 private fun SpellBadge(text: String, color: Color) {
@@ -4293,6 +4708,7 @@ private fun SpellBadge(text: String, color: Color) {
 @Composable
 private fun NotesTab(character: Character, isMjMode: Boolean) {
     var expandedAppearance by remember { mutableStateOf(false) }
+    var afficherHistoire by remember { mutableStateOf(false) }
 
     val isPnj = character.type == "PNJ"
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -4362,6 +4778,23 @@ private fun NotesTab(character: Character, isMjMode: Boolean) {
             Spacer(modifier = Modifier.height(8.dp))
             DetailRow(label = "Alignement", value = character.alignment.ifBlank { "—" })
             DetailRow(label = "Historique", value = character.background.ifBlank { "—" })
+            Spacer(modifier = Modifier.height(8.dp))
+            // Histoire personnelle : fichier .md (texte et images) rangé à côté de la fiche.
+            OutlinedButton(onClick = { afficherHistoire = true }, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.MenuBook, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    if (character.histoirePersonnelle.isBlank()) "Écrire l'histoire personnelle" else "Histoire personnelle",
+                    color = SheetTextPrimary
+                )
+            }
+        }
+        if (afficherHistoire) {
+            com.jc2.jdrcompagnon.ui.components.HistoirePersonnelleDialog(
+                character = character,
+                editable = true,
+                onDismiss = { afficherHistoire = false }
+            )
         }
 
         SheetCard {

@@ -17,6 +17,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jc2.jdrcompagnon.feature_combat.domain.model.ArsenalPersonnage
+import com.jc2.jdrcompagnon.feature_combat.domain.model.Paladin
+import com.jc2.jdrcompagnon.feature_combat.domain.model.Guerrier
 import com.jc2.jdrcompagnon.ui.Character
 import com.jc2.jdrcompagnon.ui.screens.joueur.hitDieForClass
 import com.jc2.jdrcompagnon.ui.theme.ForcedDarkPalette
@@ -53,6 +55,25 @@ internal fun CarteRessourcesCombat(
         }
         if (ArsenalPersonnage.aChatimentDePaladin(personnage)) {
             add(Ressource("Châtiment gratuit", if (personnage.divineSmiteFreeUsed) "utilisé" else "disponible", !personnage.divineSmiteFreeUsed))
+        }
+        // Guerrier, Roublard : Second souffle, Fougue, dés de Supériorité, Énergie psionique, runes, Coup de chance…
+        com.jc2.jdrcompagnon.feature_combat.domain.model.RessourcesClasse.toutes(personnage).forEach { r ->
+            val reste = com.jc2.jdrcompagnon.feature_combat.domain.model.RessourcesClasse.restantes(personnage, r)
+            add(Ressource(r.nom, "$reste/${r.max}", reste > 0))
+        }
+        Paladin.conduitDivinMax(personnage).takeIf { it > 0 }?.let { max ->
+            val reste = Paladin.conduitDivinRestants(personnage)
+            add(Ressource("Conduit divin", "$reste/$max", reste > 0))
+        }
+        Paladin.aptitude20(personnage)?.let { (nom, _) ->
+            add(Ressource(nom, if (personnage.aptitude20Utilisee) "utilisé" else "disponible", !personnage.aptitude20Utilisee))
+        }
+        if (Paladin.niveauAnciens(personnage) >= 15) {
+            add(Ressource("Sentinelle impérissable", if (personnage.sentinelleUtilisee) "utilisée" else "disponible", !personnage.sentinelleUtilisee))
+        }
+        Paladin.defenseGlorieuseMax(personnage).takeIf { it > 0 }?.let { max ->
+            val reste = Paladin.defenseGlorieuseRestantes(personnage)
+            add(Ressource("Défense glorieuse", "$reste/$max", reste > 0))
         }
         if (ArsenalPersonnage.budgetRestaurationMagique(personnage) > 0) {
             add(Ressource("Restauration magique", if (personnage.arcaneRecoveryUsed) "utilisée" else "disponible", !personnage.arcaneRecoveryUsed))

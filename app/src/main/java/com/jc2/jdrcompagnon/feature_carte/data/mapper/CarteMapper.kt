@@ -36,7 +36,8 @@ fun PointInteretEntity.toDomain(): PointInteret = PointInteret(
     fx = fx,
     fy = fy,
     visibleJoueurs = visibleJoueurs,
-    evenementIds = if (evenementIds.isBlank()) emptyList() else evenementIds.split(",")
+    evenementIds = if (evenementIds.isBlank()) emptyList() else evenementIds.split(","),
+    embleme = embleme
 )
 
 fun PointInteret.toEntity(): PointInteretEntity = PointInteretEntity(
@@ -55,7 +56,8 @@ fun PointInteret.toEntity(): PointInteretEntity = PointInteretEntity(
     fx = fx,
     fy = fy,
     visibleJoueurs = visibleJoueurs,
-    evenementIds = evenementIds.joinToString(",")
+    evenementIds = evenementIds.joinToString(","),
+    embleme = embleme
 )
 
 fun CarteCampagneEntity.toDomain(): CarteCampagne = CarteCampagne(
@@ -119,6 +121,16 @@ fun EvenementAleatoireEntity.versBibliotheque(worldId: String): Evenement {
     )
 }
 
-fun LieuNotableEntity.toDomain(): LieuNotable = LieuNotable(id = id, villeId = villeId, nom = nom, description = description)
+fun LieuNotableEntity.toDomain(): LieuNotable = LieuNotable(
+    id = id, villeId = villeId, nom = nom, description = description,
+    fonction = com.jc2.jdrcompagnon.feature_carte.domain.model.FonctionLieu.depuis(fonction),
+    chancePourcent = chancePourcent, prixPc = prixPc, texte = texte,
+    queteIds = queteIds.split(",").map { it.trim() }.filter { it.isNotEmpty() },
+    visibleJoueurs = visibleJoueurs, dd = dd, valeur = valeur,
+)
 
-fun LieuNotable.toEntity(): LieuNotableEntity = LieuNotableEntity(id = id, villeId = villeId, nom = nom, description = description)
+fun LieuNotable.toEntity(): LieuNotableEntity = LieuNotableEntity(
+    id = id, villeId = villeId, nom = nom, description = description,
+    fonction = fonction.name, chancePourcent = chancePourcent, prixPc = prixPc, texte = texte,
+    queteIds = queteIds.joinToString(","), visibleJoueurs = visibleJoueurs, dd = dd, valeur = valeur,
+)

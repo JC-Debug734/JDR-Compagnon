@@ -1,5 +1,8 @@
 package com.jc2.jdrcompagnon.feature_import
 
+import com.jc2.jdrcompagnon.feature_evenement.domain.model.CategorieEffet
+import com.jc2.jdrcompagnon.feature_evenement.domain.model.NatureIssue
+import com.jc2.jdrcompagnon.feature_evenement.domain.model.TypeEvenement
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -63,11 +66,67 @@ class CampagneArchiveTest {
     }
 
     @Test
+    fun `lit les evenements des lieux et l environnement de campagne`() {
+        val racine = dossier()
+        File(racine, "campagne.json").writeText(
+            """
+            { "titre": "Dragon", "environnement": "Région",
+              "environnements": [ { "nom": "Région", "evenements": [ { "titre": "Où est le dragon ?", "type": "peril",
+                  "monstres": ["Jeune dragon blanc"],
+                  "issues": [ { "nature": "ECHEC", "titre": "Il attaque", "combat": true }, { "nature": "INCONNUE" } ] } ] } ],
+              "lieux": [ { "nom": "Phandalin", "visible": true,
+                           "evenements": [ { "titre": "Rumeur", "type": "RUMEUR_INDICE", "monstres": ["Orc x4"],
+                                             "effets": [ { "categorie": "LIEU", "cible": " Tour des tempêtes " }, { "categorie": "???" } ] } ] },
+                         { "nom": "Tour des tempêtes" } ] }
+            """.trimIndent()
+        )
+        val dto = CampagneArchive.lire(racine)!!.dto
+        assertEquals("Région", dto.environnement)
+        assertEquals(true, dto.lieux[0].visible)
+        assertEquals(false, dto.lieux[1].visible)
+
+        val rumeur = CampagneArchive.evenement(dto.lieux[0].evenements.single(), "camp", "dnd")
+        assertEquals(TypeEvenement.RUMEUR_INDICE, rumeur.type)
+        assertEquals("camp", rumeur.campagneId)
+        assertEquals(CategorieEffet.LIEU, rumeur.effets[0].categorie)
+        assertEquals("Tour des tempêtes", rumeur.effets[0].cible)
+        assertEquals(CategorieEffet.AUTRE, rumeur.effets[1].categorie)
+        assertEquals("Orc" to 4, rumeur.profils.single().let { it.nom to it.quantite })
+
+        val dragon = CampagneArchive.evenement(dto.environnements.single().evenements.single(), "camp", "dnd")
+        assertEquals(TypeEvenement.PERIL, dragon.type)
+        assertEquals(listOf(NatureIssue.ECHEC, NatureIssue.REUSSITE), dragon.issues.map { it.nature })
+        assertEquals(true, dragon.issues[0].declencheCombat)
+        racine.deleteRecursively()
+    }
+
+    @Test
     fun `sans campagne json ou json invalide aucune campagne`() {
         val racine = dossier()
         assertNull(CampagneArchive.lire(racine))
         File(racine, "campagne.json").writeText("{ pas du json")
         assertNull(CampagneArchive.lire(racine))
+        racine.deleteRecursively()
+    }
+
+    @Test
+    fun `lit lieux json avec l image et l icone de chaque lieu`() {
+        val racine = dossier()
+        val sous = File(racine, "Lieux").apply { mkdirs() }
+        File(sous, "camp.webp").writeBytes(byteArrayOf(4, 5))
+        File(sous, "lieux.json").writeText(
+            """
+            { "lieux": [ { "nom": "Camp vistani", "type": "VILLE", "icone": "campement", "image": "camp.webp",
+                           "boutiques": [ { "nom": "Forge", "services": [ { "nom": "Ferrer", "prix": 1 } ] } ] },
+                         { "nom": "" } ] }
+            """.trimIndent()
+        )
+        val contenu = CampagneArchive.lireLieux(racine)!!
+        val lieu = contenu.lieux.single()
+        assertEquals("campement", lieu.icone)
+        assertEquals("Ferrer", lieu.boutiques.single().services.single().nom)
+        assertArrayEquals(byteArrayOf(4, 5), contenu.images["Camp vistani"])
+        assertNull(CampagneArchive.lireLieux(dossier()))
         racine.deleteRecursively()
     }
 }

@@ -40,6 +40,7 @@ import com.jc2.jdrcompagnon.feature_combat.domain.model.SortSrd
 import com.jc2.jdrcompagnon.ui.Character
 import com.jc2.jdrcompagnon.ui.screens.joueur.EmplacementsDeSortResultat
 import com.jc2.jdrcompagnon.ui.screens.joueur.calculerEmplacementsDeSort
+import com.jc2.jdrcompagnon.ui.screens.joueur.sortsDeSousClasse
 import com.jc2.jdrcompagnon.ui.screens.joueur.character.ArmorRules
 import com.jc2.jdrcompagnon.ui.screens.joueur.character.creation.Classe
 import com.jc2.jdrcompagnon.ui.screens.joueur.character.creation.ClasseParser
@@ -117,7 +118,10 @@ internal fun rememberArsenal(character: Character?): ArsenalJoueur? {
         ArsenalJoueur(
             armes = ArsenalPersonnage.armesEnMain(character, donnees.armes),
             capacites = ArsenalPersonnage.capacitesAttaque(character),
-            sorts = ArsenalPersonnage.sortsPrets(character, donnees.sorts, ArsenalPersonnage.effetsCombatClasse(character, donnees.classes)),
+            sorts = ArsenalPersonnage.sortsPrets(
+                character, donnees.sorts, ArsenalPersonnage.effetsCombatClasse(character, donnees.classes),
+                sortsDeSousClasse(character, donnees.classes),
+            ),
             emplacements = donnees.emplacements(character),
             definitions = donnees.definitions,
             mainsNues = ArsenalPersonnage.frappeMainsNues(character),
@@ -329,7 +333,7 @@ internal fun ChoixSort(
                         label = {
                             Text(
                                 "$libelle — sans emplacement" +
-                                    if (sort.lancementGratuit == ArsenalPersonnage.SORT_PREDILECTION && !sort.gratuitDisponible) " (déjà utilisé)" else ""
+                                    if (sort.lancementGratuit != ArsenalPersonnage.SORT_A_VOLONTE && !sort.gratuitDisponible) " (déjà utilisé)" else ""
                             )
                         },
                     )

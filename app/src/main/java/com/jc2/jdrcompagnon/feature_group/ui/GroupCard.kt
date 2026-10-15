@@ -6,17 +6,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Place
-import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -26,9 +22,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -40,21 +33,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.jc2.jdrcompagnon.feature_group.domain.EncounterDifficulty
-import com.jc2.jdrcompagnon.feature_group.domain.model.ReputationScale
-import com.jc2.jdrcompagnon.feature_group.domain.usecase.SuggestBalancedEncounterUseCase
+import com.jc2.jdrcompagnon.ui.components.CollapsibleSectionCard
 import com.jc2.jdrcompagnon.ui.Character
 import com.jc2.jdrcompagnon.ui.GameState
 
 /**
  * Contenu détaillé d'un groupe d'aventuriers — tout ce qui le concerne, localisé : lieu du groupe
- * et trésor commun, répartition par lieu, membres (PJ, PNJ, créatures), PNJ de la campagne,
- * montures et animaux, véhicules, réputation par faction, inventaire commun, biens, et
- * calculateur de rencontre équilibrée. Affiché sur son propre écran (GroupDetailScreen).
+ * et trésor commun, répartition par lieu, membres (PJ, PNJ, créatures), montures et animaux,
+ * véhicules, réputation par faction, inventaire commun et biens. Affiché sur son propre écran
+ * (GroupDetailScreen). Chaque section se replie (flèche, nombre d'entrées en pastille), et cet
+ * état est mémorisé pour chaque groupe.
  *
  * Les quêtes validées alimentent automatiquement trésor, réputation, montures, véhicules,
  * inventaire, biens et PNJ (voir ValiderQueteUseCase) ; tout reste modifiable à la main ici.
- * L'attitude des PNJ envers le groupe est réglée sur leur fiche (onglet PNJ) et récapitulée ici.
+ * L'attitude d'un PNJ envers le groupe se règle sur sa fiche.
  *
  * La mutation des membres repasse par [onMemberToggle] (GroupDetailScreen) ; le reste passe
  * directement par GameState (updateMjGroup, assignMountRider, harnessMount...).
@@ -69,31 +61,26 @@ fun GroupDetailContent(
     onOpenEquipmentDetail: (String) -> Unit,
     modifier: Modifier = Modifier,
     onOpenCharacter: (Character) -> Unit = {},
-    onTablePlayersChange: (List<GameState.TablePlayer>) -> Unit = {},
 ) {
     val members = availableCharacters.filter { it.id in group.memberIds }
-    // Le calculateur de rencontre ne compte que les combattants "du côté" du groupe (PJ et
-    // PNJ compagnons, joueurs sans fiche), pas les créatures qui l'accompagnent.
-    val memberLevels = members.filter { it.type == "PJ" || it.type == "PNJ" }.map { it.level } +
-        group.tablePlayers.map { it.level }
+    val cle = "groupe:${group.id}"
 
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        SubsectionCard { GroupLocationSubsection(group) }
-        SubsectionCard { WhereIsWhatSubsection(group, members) }
-        SubsectionCard { TablePlayersSubsection(group.tablePlayers, onTablePlayersChange) }
+        CollapsibleSectionCard(cle, "Position et trésor") { GroupLocationSubsection(group) }
+        CollapsibleSectionCard(cle, "Où se trouve quoi") { WhereIsWhatSubsection(group, members) }
         MemberCategory.entries.forEach { category ->
-            SubsectionCard {
+            val nombre = availableCharacters.count { it.type in category.types && it.id in group.memberIds }
+            CollapsibleSectionCard(cle, category.title, count = nombre) {
                 MembersSubsection(group, category, availableCharacters, onMemberToggle, onOpenCharacter)
             }
         }
-        SubsectionCard { CampaignPnjsSubsection(group, onOpenCharacter) }
-        SubsectionCard { PnjAttitudesSubsection(group, availableCharacters) }
-        SubsectionCard { MountsSubsection(group, members, onOpenBestiaryDetail) }
-        SubsectionCard { TransportsSubsection(group, onOpenEquipmentDetail) }
-        SubsectionCard { ReputationSubsection(group) }
-        SubsectionCard { InventorySubsection(group, members, onOpenEquipmentDetail) }
-        SubsectionCard { AssetsSubsection(group) }
-        SubsectionCard { EncounterCalculatorSubsection(memberLevels) }
+        CollapsibleSectionCard(cle, "Montures et animaux", count = group.mounts.size) { MountsSubsection(group, members, onOpenBestiaryDetail) }
+        CollapsibleSectionCard(cle, "Véhicules", count = group.transports.size) { TransportsSubsection(group, onOpenEquipmentDetail) }
+        CollapsibleSectionCard(cle, "Réputation", count = group.reputations.size) { ReputationSubsection(group) }
+        CollapsibleSectionCard(cle, "Inventaire du groupe", count = group.inventory.sumOf { it.quantity }) {
+            InventorySubsection(group, members, onOpenEquipmentDetail)
+        }
+        CollapsibleSectionCard(cle, "Biens", count = group.assets.size) { AssetsSubsection(group) }
     }
 }
 
@@ -138,7 +125,7 @@ private fun MembersSubsection(
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.weight(1f)) { SubsectionTitle("${category.title} — ${members.size}") }
+            Spacer(Modifier.weight(1f))
             Box {
                 TextButton(onClick = { showAddMenu = true }, enabled = candidates.isNotEmpty()) {
                     Icon(Icons.Default.Add, contentDescription = null)
@@ -211,191 +198,3 @@ private fun MembersSubsection(
     }
 }
 
-// --- Joueurs sans fiche (personnes jouant sans l'application) ---
-
-@Composable
-private fun TablePlayersSubsection(
-    players: List<GameState.TablePlayer>,
-    onPlayersChange: (List<GameState.TablePlayer>) -> Unit,
-) {
-    var editing by remember { mutableStateOf<GameState.TablePlayer?>(null) }
-
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.weight(1f)) { SubsectionTitle("Joueurs sans fiche — ${players.size}") }
-            TextButton(onClick = {
-                val level = players.lastOrNull()?.level ?: 1
-                onPlayersChange(
-                    players + GameState.TablePlayer(
-                        name = "Joueur ${players.size + 1}",
-                        level = level,
-                        maxHitPoints = GameState.TablePlayer.estimatedHitPoints(level),
-                    )
-                )
-            }) {
-                Icon(Icons.Default.Add, contentDescription = null)
-                Text("Ajouter")
-            }
-        }
-        if (players.isEmpty()) {
-            Text(
-                "Pour jouer avec des personnes sans l'application : ajoutez-les ici avec leur niveau.",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color.White
-            )
-        }
-        players.forEach { player ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { editing = player },
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(player.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = Color.White)
-                    Text(
-                        "niv.${player.level} • CA ${player.armorClass} • PV ${player.maxHitPoints}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.8f)
-                    )
-                }
-                IconButton(onClick = { onPlayersChange(players.filterNot { it.id == player.id }) }) {
-                    Icon(Icons.Default.Close, contentDescription = "Retirer du groupe", tint = MaterialTheme.colorScheme.error)
-                }
-            }
-        }
-    }
-
-    editing?.let { player ->
-        var name by remember(player.id) { mutableStateOf(player.name) }
-        var level by remember(player.id) { mutableStateOf(player.level) }
-        var armorClass by remember(player.id) { mutableStateOf(player.armorClass) }
-        var hitPoints by remember(player.id) { mutableStateOf(player.maxHitPoints) }
-        AlertDialog(
-            onDismissRequest = { editing = null },
-            title = { Text("Joueur sans fiche") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = name,
-                        onValueChange = { name = it },
-                        label = { Text("Nom") },
-                        singleLine = true,
-                    )
-                    NumberStepper("Niveau", level, 1..20) { newLevel ->
-                        // PV encore à l'estimation par défaut : on les suit le niveau.
-                        if (hitPoints == GameState.TablePlayer.estimatedHitPoints(level)) {
-                            hitPoints = GameState.TablePlayer.estimatedHitPoints(newLevel)
-                        }
-                        level = newLevel
-                    }
-                    NumberStepper("CA", armorClass, 1..30) { armorClass = it }
-                    NumberStepper("PV max", hitPoints, 1..400) { hitPoints = it }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = name.isNotBlank(),
-                    onClick = {
-                        val updated = player.copy(name = name.trim(), level = level, armorClass = armorClass, maxHitPoints = hitPoints)
-                        onPlayersChange(players.map { if (it.id == player.id) updated else it })
-                        editing = null
-                    }
-                ) { Text("Enregistrer") }
-            },
-            dismissButton = { TextButton(onClick = { editing = null }) { Text("Annuler") } }
-        )
-    }
-}
-
-/** Sélecteur numérique compact (− valeur +), utilisé pour le nombre et le niveau des joueurs. */
-@Composable
-internal fun NumberStepper(
-    label: String,
-    value: Int,
-    range: IntRange,
-    onValueChange: (Int) -> Unit,
-) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-        IconButton(onClick = { onValueChange((value - 1).coerceIn(range)) }, enabled = value > range.first) {
-            Icon(Icons.Default.Remove, contentDescription = "Diminuer")
-        }
-        Text("$value", fontWeight = FontWeight.Bold, modifier = Modifier.widthIn(min = 28.dp), textAlign = TextAlign.Center)
-        IconButton(onClick = { onValueChange((value + 1).coerceIn(range)) }, enabled = value < range.last) {
-            Icon(Icons.Default.Add, contentDescription = "Augmenter")
-        }
-    }
-}
-
-// --- Attitude des PNJ envers le groupe (réglée dans l'onglet PNJ de leur fiche) ---
-
-@Composable
-private fun PnjAttitudesSubsection(group: GameState.MjGroup, availableCharacters: List<Character>) {
-    val attitudes = availableCharacters
-        .filter { it.type == "PNJ" && group.id in it.groupReputations }
-        .sortedByDescending { it.groupReputations[group.id] }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        SubsectionTitle("Attitude des PNJ envers le groupe")
-        if (attitudes.isEmpty()) {
-            Text(
-                "Aucun PNJ n'a d'avis sur ce groupe (à régler dans l'onglet PNJ de leur fiche).",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color.White
-            )
-        }
-        attitudes.forEach { pnj ->
-            val score = pnj.groupReputations[group.id] ?: 0
-            Text("${pnj.name} — ${ReputationScale.labelFor(score)} ($score)", color = Color.White)
-        }
-    }
-}
-
-// --- Calculateur de rencontre ---
-
-@Composable
-private fun EncounterCalculatorSubsection(memberLevels: List<Int>) {
-    var selectedDifficulty by remember { mutableStateOf(EncounterDifficulty.MOYENNE) }
-    val suggestBalancedEncounter = remember { SuggestBalancedEncounterUseCase() }
-
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SubsectionTitle("Rencontre équilibrée")
-        if (memberLevels.isEmpty()) {
-            Text(
-                "Ajoutez des PJ/PNJ ou des joueurs sans fiche ci-dessus pour calculer une rencontre.",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color.White
-            )
-            return
-        }
-
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-            EncounterDifficulty.entries.forEachIndexed { index, difficulty ->
-                SegmentedButton(
-                    selected = selectedDifficulty == difficulty,
-                    onClick = { selectedDifficulty = difficulty },
-                    shape = SegmentedButtonDefaults.itemShape(index, EncounterDifficulty.entries.size),
-                    colors = SegmentedButtonDefaults.colors(
-                        activeContainerColor = MaterialTheme.colorScheme.primary,
-                        activeContentColor = MaterialTheme.colorScheme.onPrimary,
-                        activeBorderColor = MaterialTheme.colorScheme.primary
-                    )
-                ) { Text(difficulty.label) }
-            }
-        }
-
-        val suggestion = suggestBalancedEncounter(memberLevels, selectedDifficulty)
-        Text(
-            "Budget d'XP recommandé : ${suggestion.totalXpBudget}",
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Bold,
-            color = Color.White
-        )
-        Text(
-            "Nombre de monstres conseillé : ${suggestion.recommendedMonsterCount.first} " +
-                    "à ${suggestion.recommendedMonsterCount.last}",
-            style = MaterialTheme.typography.bodySmall,
-            color = Color.White
-        )
-    }
-}

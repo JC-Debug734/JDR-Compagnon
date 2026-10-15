@@ -27,6 +27,9 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.layout.ContentScale
+import coil3.compose.AsyncImage
 import com.mikepenz.markdown.m3.Markdown
 import com.mikepenz.markdown.m3.markdownColor
 
@@ -39,6 +42,9 @@ import com.mikepenz.markdown.m3.markdownColor
  *   aptitudes gagnées en titre, autres colonnes en puces ; les valeurs qui changent par
  *   rapport au niveau précédent sont mises en évidence.
  * - Autre table : une carte par ligne, 1re cellule en titre, puis « En-tête : valeur ».
+ *
+ * Une ligne faite uniquement d'images `![légende](chemin)` (chemin absolu d'un fichier, voir
+ * CustomBookImages.resolveRegles) les affiche côte à côte, ex. les cartes d'un tirage.
  */
 @Composable
 fun SrdMarkdownAvecTables(markdown: String, modifier: Modifier = Modifier) {
@@ -49,6 +55,7 @@ fun SrdMarkdownAvecTables(markdown: String, modifier: Modifier = Modifier) {
                 is BlocMd.Texte -> Markdown(content = bloc.contenu, colors = markdownColor(text = Color.White))
                 is BlocMd.Table ->
                     if (bloc.estProgression()) TableProgression(bloc) else TableEnCartes(bloc)
+                is BlocMd.Images -> LigneImages(bloc)
             }
         }
     }
@@ -57,6 +64,50 @@ fun SrdMarkdownAvecTables(markdown: String, modifier: Modifier = Modifier) {
 private sealed interface BlocMd {
     data class Texte(val contenu: String) : BlocMd
     data class Table(val entetes: List<String>, val lignes: List<List<String>>) : BlocMd
+    // (légende, chemin) de chaque image de la ligne.
+    data class Images(val images: List<Pair<String, String>>) : BlocMd
+}
+
+private val imageMd = Regex("""!\[([^\]]*)]\(([^)]+)\)""")
+
+/** Images d'une ligne faite uniquement d'images markdown, sinon null. */
+private fun imagesSeules(ligne: String): List<Pair<String, String>>? {
+    val trouvees = imageMd.findAll(ligne).toList()
+    if (trouvees.isEmpty() || imageMd.replace(ligne, "").isNotBlank()) return null
+    return trouvees.map { it.groupValues[1].trim() to it.groupValues[2].trim() }
+}
+
+/** Images côte à côte (une seule : largeur limitée, centrée), légende dessous ; fichiers absents ignorés. */
+@Composable
+private fun LigneImages(bloc: BlocMd.Images) {
+    val presentes = remember(bloc) { bloc.images.filter { java.io.File(it.second).isFile } }
+    if (presentes.isEmpty()) return
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+    ) {
+        presentes.forEach { (legende, chemin) ->
+            Column(
+                modifier = if (presentes.size == 1) Modifier.widthIn(max = 260.dp) else Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                AsyncImage(
+                    model = java.io.File(chemin),
+                    contentDescription = legende.ifBlank { null },
+                    contentScale = ContentScale.FillWidth,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (legende.isNotBlank() && presentes.size > 1) {
+                    Text(
+                        text = legende,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.8f),
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+            }
+        }
+    }
 }
 
 private val separateurTable = Regex("""^\|?[\s:|-]+\|?$""")
@@ -76,6 +127,13 @@ private fun decouperBlocs(markdown: String): List<BlocMd> {
     var i = 0
     while (i < lignes.size) {
         val ligne = lignes[i]
+        val images = imagesSeules(ligne)
+        if (images != null) {
+            viderTexte()
+            blocs += BlocMd.Images(images)
+            i++
+            continue
+        }
         val estTable = ligne.trim().startsWith("|") &&
             lignes.getOrNull(i + 1)?.trim()?.let { it.startsWith("|") && separateurTable.matches(it) } == true
         if (!estTable) {

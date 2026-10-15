@@ -28,4 +28,5 @@ class FakeEvenementRepository : EvenementRepository {
     }
 
     override suspend fun compterPourMonde(worldId: String) = evenements.value.values.count { it.worldId == worldId }
+    override suspend fun idsDeCampagne(campagneId: String) = evenements.value.values.filter { it.campagneId == campagneId }.map { it.id }
 }

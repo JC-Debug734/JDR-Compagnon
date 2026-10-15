@@ -1,6 +1,5 @@
 package com.jc2.jdrcompagnon.feature_carte.ui
 
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,8 +7,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -28,15 +28,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.jc2.jdrcompagnon.di.CarteDependencies
 import com.jc2.jdrcompagnon.di.EnvironmentDependencies
 import com.jc2.jdrcompagnon.di.EvenementDependencies
-import com.jc2.jdrcompagnon.feature_evenement.domain.model.TypeEvenement
 import com.jc2.jdrcompagnon.feature_evenement.ui.EventResultDialog
 import com.jc2.jdrcompagnon.feature_evenement.ui.TypeEvenementBadge
 import com.jc2.jdrcompagnon.feature_evenement.ui.couleur
 import com.jc2.jdrcompagnon.feature_evenement.ui.effetLabel
-import com.jc2.jdrcompagnon.feature_evenement.ui.icone
 import com.jc2.jdrcompagnon.feature_evenement.domain.model.Evenement
 import com.jc2.jdrcompagnon.feature_environnement.domain.model.Environnement
 import com.jc2.jdrcompagnon.network.NetworkSessionManager
@@ -49,10 +46,10 @@ import kotlinx.coroutines.flow.first
 private data class EvenementPropose(val source: String, val evenement: Evenement)
 
 /**
- * Événement proposé au MJ pendant un trajet (à une halte ou à l'arrivée). Tiré en priorité dans
- * l'environnement de la campagne (ses événements liés, voir MjCampaign.environnementId, modifiable
- * ici), sinon dans la bibliothèque d'événements : ceux de la campagne et les communs du monde.
- * Filtrable par type (ex. ne tirer qu'un Péril pendant une tempête).
+ * Événement proposé au MJ pendant un trajet (à une halte ou à l'arrivée), affiché directement.
+ * Tiré dans l'environnement de la campagne (ses événements liés, voir MjCampaign.environnementId)
+ * quand il en a, sinon dans la bibliothèque d'événements : ceux de la campagne et les communs du
+ * monde. Un petit bouton en bas en tire un autre.
  */
 @Composable
 fun EvenementTrajetDialog(campagneId: String, contexte: String, onDismiss: () -> Unit) {
@@ -69,9 +66,7 @@ fun EvenementTrajetDialog(campagneId: String, contexte: String, onDismiss: () ->
         bibliotheque = runCatching { EvenementDependencies.repository.observerEvenements(worldId).first() }.getOrDefault(emptyList())
         charge = true
     }
-    var environnementId by remember { mutableStateOf(campagne?.environnementId) }
-    val environnement = environnements.firstOrNull { it.id == environnementId }
-    var filtreType by remember { mutableStateOf<TypeEvenement?>(null) }
+    val environnement = environnements.firstOrNull { it.id == campagne?.environnementId }
     var tirage by remember { mutableStateOf<EvenementPropose?>(null) }
     var afficherEffets by remember { mutableStateOf(false) }
 
@@ -79,15 +74,17 @@ fun EvenementTrajetDialog(campagneId: String, contexte: String, onDismiss: () ->
         val parId = bibliotheque.associateBy { it.id }
         val deLEnvironnement = environnement?.let { env ->
             env.evenementIds.mapNotNull { parId[it] }.map { EvenementPropose("Environnement · ${env.nom}", it) }
-        }.orEmpty().filter { filtreType == null || it.evenement.type == filtreType }
+        }.orEmpty()
         val autres = bibliotheque
-            .filter { (it.campagneId == null || it.campagneId == campagneId) && (filtreType == null || it.type == filtreType) }
+            .filter { it.campagneId == null || it.campagneId == campagneId }
             .map { EvenementPropose(if (it.campagneId != null) "Événement de campagne" else "Bibliothèque", it) }
-        // L'environnement choisi l'emporte 7 fois sur 10 quand il a de quoi proposer.
-        val pool = if (deLEnvironnement.isNotEmpty() && (autres.isEmpty() || Math.random() < 0.7)) deLEnvironnement else autres
-        tirage = pool.randomOrNull()
+        // L'environnement de la campagne l'emporte quand il a de quoi proposer : ses événements
+        // ont lieu à chaque étape (ex. les apparitions du dragon d'une campagne).
+        val pool = deLEnvironnement.ifEmpty { autres }
+        // Un nouveau tirage évite de reproposer le même événement quand c'est possible.
+        tirage = (pool.filter { it.evenement.id != tirage?.evenement?.id }.ifEmpty { pool }).randomOrNull()
     }
-    LaunchedEffect(charge, environnementId, filtreType) { if (charge) tirer() }
+    LaunchedEffect(charge) { if (charge) tirer() }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -95,27 +92,6 @@ fun EvenementTrajetDialog(campagneId: String, contexte: String, onDismiss: () ->
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(contexte, style = MaterialTheme.typography.bodySmall)
-                if (environnements.isNotEmpty()) {
-                    Text("Environnement", style = MaterialTheme.typography.labelLarge)
-                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        FilterChip(selected = environnementId == null, onClick = { environnementId = null }, label = { Text("Aucun") })
-                        environnements.forEach { env ->
-                            FilterChip(selected = environnementId == env.id, onClick = { environnementId = env.id }, label = { Text(env.nom) })
-                        }
-                    }
-                }
-                Text("Type", style = MaterialTheme.typography.labelLarge)
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FilterChip(selected = filtreType == null, onClick = { filtreType = null }, label = { Text("Tous") })
-                    TypeEvenement.entries.forEach { type ->
-                        FilterChip(
-                            selected = filtreType == type,
-                            onClick = { filtreType = if (filtreType == type) null else type },
-                            label = { Text(type.label) },
-                            leadingIcon = { Icon(type.icone, contentDescription = null, tint = type.couleur, modifier = Modifier.size(18.dp)) }
-                        )
-                    }
-                }
                 HorizontalDivider()
                 val t = tirage
                 if (t == null) {
@@ -129,7 +105,7 @@ fun EvenementTrajetDialog(campagneId: String, contexte: String, onDismiss: () ->
                             Text(t.evenement.type.label, style = MaterialTheme.typography.labelSmall, color = t.evenement.type.couleur)
                         }
                     }
-                    if (t.evenement.description.isNotBlank()) Text(t.evenement.description)
+                    if (t.evenement.description.isNotBlank()) com.jc2.jdrcompagnon.feature_evenement.ui.DescriptionEvenement(t.evenement.description)
                     t.evenement.effets.forEach { effet ->
                         Text(effetLabel(effet), style = MaterialTheme.typography.bodySmall)
                     }
@@ -144,8 +120,13 @@ fun EvenementTrajetDialog(campagneId: String, contexte: String, onDismiss: () ->
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { tirer() }) { Text("Autre tirage") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Fermer") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Fermer") } },
+        dismissButton = {
+            TextButton(onClick = { tirer() }, enabled = charge) {
+                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                Text(" Autre événement", style = MaterialTheme.typography.labelSmall)
+            }
+        },
     )
 
     if (afficherEffets) {
@@ -172,6 +153,8 @@ fun ReposGroupeDialog(lieu: String, onDismiss: () -> Unit) {
     val membres = characters.filter { group != null && it.id in group.memberIds && (it.type == "PJ" || it.type == "PNJ") }
     val directs = membres.filter { it.id !in incarnes }
     var fait by remember { mutableStateOf(false) }
+    // Membres dont le repos long est refusé (moins de 24 h depuis le précédent, 0 PV).
+    var refuses by remember { mutableStateOf<List<String>>(emptyList()) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -180,7 +163,9 @@ fun ReposGroupeDialog(lieu: String, onDismiss: () -> Unit) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (fait) {
                     Text("Repos long lancé : horloge avancée de 8 h.")
-                    if (directs.isNotEmpty()) Text("Reposés : ${directs.joinToString { it.name }}.")
+                    val reposes = directs.filter { it.name !in refuses }
+                    if (reposes.isNotEmpty()) Text("Reposés : ${reposes.joinToString { it.name }}.")
+                    if (refuses.isNotEmpty()) Text("Sans effet (un seul repos long par 24 h, 1 PV minimum) : ${refuses.joinToString()}.", color = MaterialTheme.colorScheme.error)
                     if (incarnes.isNotEmpty()) Text("Les joueurs connectés ont reçu la proposition.")
                 } else {
                     Text("Halte : $lieu. Le groupe se repose 8 heures.")
@@ -197,7 +182,7 @@ fun ReposGroupeDialog(lieu: String, onDismiss: () -> Unit) {
             } else {
                 TextButton(onClick = {
                     ScenarioClockState.advanceManually(8L * 60)
-                    directs.forEach { effectuerReposLong(context, scope, it, avancerHorloge = false) }
+                    refuses = directs.filterNot { effectuerReposLong(context, scope, it, avancerHorloge = false) }.map { it.name }
                     NetworkSessionManager.proposerReposLong("Le groupe fait halte ($lieu) pour la nuit.")
                     fait = true
                 }) { Text("Lancer le repos") }

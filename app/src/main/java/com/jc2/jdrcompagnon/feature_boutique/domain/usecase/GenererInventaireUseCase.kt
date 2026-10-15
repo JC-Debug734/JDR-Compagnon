@@ -20,7 +20,7 @@ class GenererInventaireUseCase(
     private val calculerPrixArticle: CalculerPrixArticleUseCase
 ) {
     private companion object {
-        const val SEUIL_COUT_ELEVE_PO = 500
+        const val SEUIL_COUT_ELEVE_PC = 500 * 100 // 500 po
         const val NB_ARTICLES_PAR_DEFAUT = 8
         const val POIDS_CONSOMMABLE = 3.0
         const val POIDS_STANDARD = 1.0
@@ -38,7 +38,7 @@ class GenererInventaireUseCase(
 
         val equipementsAccessibles = when (standing) {
             StandingBoutique.MODESTE, StandingBoutique.CORRECT ->
-                tousLesEquipements.filter { it.coutBaseEnPo < SEUIL_COUT_ELEVE_PO }
+                tousLesEquipements.filter { it.coutBaseEnPc < SEUIL_COUT_ELEVE_PC }
             StandingBoutique.PROSPERE ->
                 tousLesEquipements
             StandingBoutique.LUXUEUX ->
@@ -56,7 +56,7 @@ class GenererInventaireUseCase(
             .map { equipement ->
                 ArticleEnVente(
                     equipement = equipement,
-                    prixApplique = calculerPrixArticle(equipement.coutBaseEnPo, standing),
+                    prixEnPc = calculerPrixArticle(equipement.coutBaseEnPc, standing),
                     quantiteStock = random.nextInt(1, 6)
                 )
             }

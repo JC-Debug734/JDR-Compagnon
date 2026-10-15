@@ -19,6 +19,8 @@ import com.jc2.jdrcompagnon.feature_combat.presentation.cleDistance
 import com.jc2.jdrcompagnon.feature_combat.presentation.DeclarationAction
 import com.jc2.jdrcompagnon.feature_combat.presentation.JetCombat
 import com.jc2.jdrcompagnon.feature_combat.presentation.PhaseCombat
+import com.jc2.jdrcompagnon.feature_combat.presentation.TypeRecit
+import com.jc2.jdrcompagnon.feature_combat.presentation.ResultatTable
 import com.jc2.jdrcompagnon.network.versJoueur
 import com.jc2.jdrcompagnon.ui.screens.mj.library.srd.MonsterParser
 import org.junit.After
@@ -130,28 +132,31 @@ class RoundCombatTest {
     }
 
     @Test
-    fun `round complet declaration puis resolution puis nouveau round`() {
+    fun `tour par tour - l'IA decide a son tour, les joueurs au leur, puis nouveau round`() {
         CombatSession.aleatoire = Random(3)
         CombatSession.demarrer("Test", listOf(pj("Aldric"), pj("Brune"), monstre("Loup", ProfilIA.BRUTE)))
         CombatSession.commencer()
         var etat = CombatSession.etat.value!!
-        assertEquals(PhaseCombat.DECLARATION, etat.phase)
-        // Le monstre a déjà décidé, les joueurs non.
+        assertEquals(PhaseCombat.EN_COURS, etat.phase)
+        // Le loup (initiative 15) joue d'abord : l'IA a décidé, les joueurs pas encore.
+        assertEquals("Loup", etat.actif?.id)
         assertNotNull(etat.declarations["Loup"])
-        assertEquals(setOf("Aldric", "Brune"), etat.enAttente.map { it.id }.toSet())
-        assertNull(etat.actif)
+        assertNull(etat.declarations["Aldric"])
+        assertEquals("Aldric", etat.prochain?.id)
+        assertTrue(etat.recit.any { it.type == TypeRecit.ROUND })
 
+        CombatSession.tourSuivant()
+        assertEquals("Aldric", CombatSession.etat.value!!.actif?.id)
         CombatSession.declarer(DeclarationAction("Aldric", "Attaquer", actionId = "attaquer", cibleId = "Loup", cibleNom = "Loup"))
-        assertEquals(PhaseCombat.DECLARATION, CombatSession.etat.value!!.phase)
-        CombatSession.declarer(DeclarationAction("Brune", "Esquiver", actionId = "dodge"))
-        etat = CombatSession.etat.value!!
-        assertEquals(PhaseCombat.RESOLUTION, etat.phase)
-        assertEquals(etat.combattants.first().id, etat.actif?.id)
+        assertTrue(CombatSession.etat.value!!.recit.last().texte.contains("Aldric"))
+        CombatSession.tourSuivant()
+        assertEquals("Brune", CombatSession.etat.value!!.actif?.id)
+        assertTrue(CombatSession.etat.value!!.dernierDuRound)
 
-        repeat(etat.combattants.size) { CombatSession.tourSuivant() }
+        CombatSession.tourSuivant()
         etat = CombatSession.etat.value!!
         assertEquals(2, etat.round)
-        assertEquals(PhaseCombat.DECLARATION, etat.phase)
+        assertEquals("Loup", etat.actif?.id)
         assertEquals(setOf("Loup"), etat.declarations.keys)
     }
 
@@ -163,7 +168,10 @@ class RoundCombatTest {
         val vueBrune = CombatSession.etat.value!!.versJoueur("c-Brune")
         assertNull(vueBrune.maDeclaration)
         assertEquals("Brune", vueBrune.monCombattantId)
-        assertEquals(2, vueBrune.nbDeclares)
+        assertEquals("Loup", vueBrune.actifId)
+        assertEquals("Aldric", vueBrune.prochainId)
+        // Le récit est partagé avec toute la table.
+        assertTrue(vueBrune.recit.isNotEmpty())
         val vueAldric = CombatSession.etat.value!!.versJoueur("c-Aldric")
         assertEquals("Attaquer", vueAldric.maDeclaration?.libelle)
         // Les PV exacts des monstres ne sont pas transmis.
@@ -327,17 +335,18 @@ class RoundCombatTest {
     }
 
     @Test
-    fun `un PNJ allie avec un profil declare seul contre les monstres`() {
-        val pnj = pj("Garde").copy(profilIA = ProfilIA.BRUTE, attaques = listOf(cimeterre))
+    fun `un PNJ allie avec un profil decide seul a son tour contre les monstres`() {
+        val pnj = pj("Garde").copy(profilIA = ProfilIA.BRUTE, attaques = listOf(cimeterre), initiative = 20)
         CombatSession.demarrer("Test", listOf(pj("Aldric"), pnj, monstre("Loup", ProfilIA.BRUTE)))
         CombatSession.commencer()
         val etat = CombatSession.etat.value!!
+        assertEquals("Garde", etat.actif?.id)
         assertEquals("Loup", etat.declarations["Garde"]?.cibleNom)
         assertTrue(etat.declarations["Garde"]!!.parIa)
-        assertEquals(setOf("Aldric"), etat.enAttente.map { it.id }.toSet())
-        // Rendu au MJ : sa décision disparaît, il est de nouveau attendu.
+        assertNull(etat.declarations["Aldric"])
+        // Rendu au MJ : sa décision disparaît, le MJ choisit pour lui.
         CombatSession.changerProfilIA("Garde", null)
-        assertEquals(setOf("Aldric", "Garde"), CombatSession.etat.value!!.enAttente.map { it.id }.toSet())
+        assertNull(CombatSession.etat.value!!.declarations["Garde"])
     }
 
     @Test
@@ -347,6 +356,8 @@ class RoundCombatTest {
         val vue = CombatSession.etat.value!!.versJoueur("c-Aldric")
         val traitre = vue.ordre.first { it.id == "Traitre" }
         assertNull(traitre.pv)
+        // À son tour, l'IA le fait viser le seul personnage.
+        CombatSession.tourSuivant()
         assertEquals("Aldric", CombatSession.etat.value!!.declarations["Traitre"]?.cibleNom)
     }
 
@@ -455,12 +466,68 @@ class RoundCombatTest {
     }
 
     @Test
-    fun `un monstre vaincu pendant la declaration n'est plus attendu`() {
-        CombatSession.demarrer("Test", listOf(pj("Aldric"), monstre("Loup", ProfilIA.BRUTE)))
+    fun `un monstre vaincu ne joue plus son tour et le recit raconte sa chute`() {
+        CombatSession.demarrer("Test", listOf(pj("Aldric"), monstre("Loup", ProfilIA.BRUTE), monstre("Loup2", ProfilIA.BRUTE, init = 5)))
         CombatSession.commencer()
-        CombatSession.appliquerPv("Loup", 50)
-        CombatSession.declarer(DeclarationAction("Aldric", "Se précipiter"))
-        assertEquals(PhaseCombat.RESOLUTION, CombatSession.etat.value!!.phase)
+        CombatSession.tourSuivant()
         assertEquals("Aldric", CombatSession.etat.value!!.actif?.id)
+        CombatSession.appliquerPv("Loup2", 50)
+        val etat = CombatSession.etat.value!!
+        assertTrue(etat.recit.any { it.type == TypeRecit.KO && it.cibleId == "Loup2" })
+        // Plus personne après Aldric ce round : retour au loup encore debout.
+        assertTrue(etat.dernierDuRound)
+        CombatSession.tourSuivant()
+        assertEquals("Loup", CombatSession.etat.value!!.actif?.id)
+    }
+
+    @Test
+    fun `le recit d'une attaque de monstre ne devoile pas ses PV`() {
+        CombatSession.aleatoire = Random(7)
+        CombatSession.demarrer("Test", listOf(pj("Aldric", ca = 1), monstre("Orque", ProfilIA.BRUTE, listOf(cimeterre), init = 30)))
+        CombatSession.definirDistance("Orque", "Aldric", Distance.CONTACT)
+        CombatSession.commencer()
+        CombatSession.appliquerJets("Orque")
+        val recit = CombatSession.etat.value!!.recit
+        assertTrue(recit.any { it.type == TypeRecit.TOUCHE || it.type == TypeRecit.CRITIQUE })
+        assertTrue(recit.any { it.type == TypeRecit.DEGATS && it.cibleId == "Aldric" && it.texte.contains("/20 PV") })
+        CombatSession.appliquerPv("Orque", 5)
+        val subi = CombatSession.etat.value!!.recit.last { it.type == TypeRecit.DEGATS }
+        assertTrue(!subi.texte.contains("/20"))
+    }
+
+    @Test
+    fun `le nom du combat suit les adversaires presents`() {
+        CombatSession.demarrer("Nécronte x2", listOf(pj("Aldric"), monstre("Nécronte 1", ProfilIA.BRUTE).copy(monstreNom = "Nécronte"), monstre("Nécronte 2", ProfilIA.BRUTE).copy(monstreNom = "Nécronte")))
+        assertEquals("Nécronte x2", CombatSession.etat.value!!.nomCombat)
+        CombatSession.retirer("Nécronte 2")
+        assertEquals("Nécronte", CombatSession.etat.value!!.nomCombat)
+        assertEquals("Nécronte", CombatSession.etat.value!!.versJoueur(null).titre)
+    }
+
+    @Test
+    fun `la table ne voit que les faits - attaque reussie et degats`() {
+        CombatSession.aleatoire = Random(7)
+        CombatSession.demarrer("Test", listOf(pj("Aldric", ca = 1), monstre("Orque", ProfilIA.BRUTE, listOf(cimeterre), init = 30)))
+        CombatSession.definirDistance("Orque", "Aldric", Distance.CONTACT)
+        CombatSession.commencer()
+        CombatSession.appliquerJets("Orque")
+        val table = CombatSession.etat.value!!.versJoueur("c-Aldric").recit.filter { it.texte.isNotEmpty() }.map { it.texte }
+        assertTrue(table.toString(), table.any { it.startsWith("Orque attaque Aldric : ") && it.contains("dégât") })
+        // Pas de phrase racontée (« s'abat », « fait mouche »…) côté joueurs.
+        assertTrue(table.toString(), table.none { "mouche" in it || "faille" in it || "encaisse" in it || "contact" in it })
+    }
+
+    @Test
+    fun `joueur a la table - le MJ note seulement touche et degats`() {
+        CombatSession.demarrer("Test", listOf(pj("Aldric").copy(initiative = 20), monstre("Loup", ProfilIA.BRUTE)))
+        CombatSession.commencer()
+        assertEquals("Aldric", CombatSession.etat.value!!.actif?.id)
+        CombatSession.resultatTable("Aldric", "Loup", ResultatTable.TOUCHE, 7)
+        CombatSession.resultatTable("Aldric", "Loup", ResultatTable.RATE)
+        val etat = CombatSession.etat.value!!
+        assertEquals(13, etat.combattants.first { it.id == "Loup" }.pv)
+        val table = etat.versJoueur(null).recit.map { it.texte }
+        assertTrue(table.toString(), table.contains("Aldric attaque Loup : réussie, 7 dégâts"))
+        assertTrue(table.toString(), table.contains("Aldric attaque Loup : ratée"))
     }
 }

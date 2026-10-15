@@ -16,6 +16,7 @@ import kotlin.random.Random
  * - Utilisation ([utiliser]) : depuis l'onglet Combat de la fiche, tant que l'objet est équipé
  *   (et harmonisé s'il l'exige, voir Harmonisation) ; 1 charge dépensée. Dépenser la dernière fait lancer un d20 si l'objet a un seuil de
  *   **Destruction** : sur ce résultat ou moins, l'objet est détruit (retiré de l'inventaire).
+ * - Charme ([estCharme]) : utilisable sans être équipé, retiré à sa dernière utilisation.
  * - Recharge ([rechargerAuReposLong]) : à chaque repos long, pour tous les objets portés (sac
  *   compris), la formule **Recharge** est lancée et les charges ajoutées, sans dépasser le maximum.
  */
@@ -30,6 +31,14 @@ object ObjetsACharges {
     fun objetsPortes(character: Character): List<String> =
         (character.equippedSlots.values + character.equippedItems + character.backpackItems +
             character.backpackExteriorSlots.values).distinct()
+
+    /**
+     * Charme magique (charme de tempête...) : capacité accordée par un lieu ou une créature, rangée
+     * comme un objet de catégorie « charmes » avec ses **Charges** (utilisations). Il s'utilise sans
+     * être équipé et quitte le personnage à sa dernière utilisation, sans jet de destruction.
+     */
+    fun estCharme(item: EquipmentItem): Boolean =
+        item.category.contains("charme", ignoreCase = true) || item.rawMarkdown.contains("**Type** Charme", ignoreCase = true)
 
     fun estEquipe(character: Character, nom: String): Boolean =
         nom in character.equippedSlots.values || nom in character.equippedItems
@@ -72,6 +81,10 @@ object ObjetsACharges {
         }
         val avant = restantes(character, item)
         if (avant <= 0) return "${item.name} n'a plus de charge."
+        if (estCharme(item) && avant == 1) {
+            GameState.removeItemCompletely(character.id, item.name)
+            return "${item.name} : dernière utilisation, le charme vous quitte."
+        }
         val resultat = depenser(avant, item.destruction, aleatoire)
         return if (resultat.detruit) {
             GameState.removeItemCompletely(character.id, item.name)

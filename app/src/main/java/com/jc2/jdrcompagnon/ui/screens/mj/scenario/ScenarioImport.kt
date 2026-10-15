@@ -26,8 +26,8 @@ import com.jc2.jdrcompagnon.ui.calculateProficiencyBonus
  *   Une case couverte par plusieurs zones appartient à la plus petite (voir casesExclusives).
  * - `{mchapitre: numero=3; titre=Quand la maison brûle; scenario=2}` : chapitre et numéro du
  *   scénario, qui rangent les listes de scénarios dans l'ordre de jeu (voir ChapitresScenarios).
- * - `{mevenement: titre=...; type=RENCONTRE; ...}`, dans une scène : événement de la
- *   bibliothèque créé à l'import et rattaché à la scène (voir ScenarioEvenements).
+ * Les événements ne sont pas décrits dans le scénario : ils viennent de l'outil ÉVÉNEMENTS
+ * (import par campagne.json, voir CampagneArchive) et la scène les appelle par `#evenement:[Titre]`.
  *
  * Valeurs échappées comme {mdiscussion:} (\; \} \n \\), cf. GameState.metaLineFields.
  */
@@ -178,8 +178,7 @@ object ScenarioImport {
     /**
      * Construit le scénario (images déjà copiées dans le stockage de l'app) et les fiches PNJ à
      * créer (celles dont le nom n'existe pas encore dans le monde), sans enregistrer scénario ni
-     * fiches — pour GameState.syncScenariosFromDisk, qui enregistre ses scénarios en lot. Seuls les
-     * événements {mevenement:} sont enregistrés ici (ids stables : sans doublon d'une fois à l'autre).
+     * fiches — pour GameState.syncScenariosFromDisk, qui enregistre ses scénarios en lot.
      */
     fun preparer(
         context: Context,
@@ -210,17 +209,6 @@ object ScenarioImport {
             nom to fichier
         }.toMap()
 
-        // Événements {mevenement:} des scènes : enregistrés dans la bibliothèque d'événements (ids
-        // stables, une resynchronisation met à jour les mêmes) et rattachés à leur scène.
-        val (scenesAvecEvenements, evenements) = ScenarioEvenements.extraire(scenes, scenarioId, worldId)
-        if (evenements.isNotEmpty()) {
-            runCatching {
-                kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
-                    com.jc2.jdrcompagnon.di.EvenementDependencies.repository.sauvegarderTous(evenements)
-                }
-            }.onFailure { android.util.Log.e("ScenarioImport", "Événements non enregistrés", it) }
-        }
-
         val chapitre = ChapitresScenarios.lire(markdown)
         val scenario = GameState.MjScenario(
             id = scenarioId,
@@ -230,7 +218,7 @@ object ScenarioImport {
             numero = chapitre?.scenario,
             description = GameState.preambuleScenario(markdown),
             worldId = worldId,
-            scenes = scenesAvecEvenements.map { it.copy(markdownContent = remplacerImages(it.markdownContent, fichiers)) },
+            scenes = scenes.map { it.copy(markdownContent = remplacerImages(it.markdownContent, fichiers)) },
             createdBy = "MJ",
             lieuNom = extras.lieuNom.orEmpty(),
             lieuImageFileName = extras.lieuImage?.let { fichiers[it] },

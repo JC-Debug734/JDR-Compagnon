@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -93,6 +94,7 @@ fun PlayerGroupScreen(onOpenMenu: () -> Unit) {
                         listOf(m.type, m.detail, "VIT ${m.speed} m").filter { it.isNotBlank() }.joinToString(" • "),
                         color = Hint, style = MaterialTheme.typography.bodySmall,
                     )
+                    PvEtMembre(m.pv, m.pvMax, m.pvTemp, m.etat)
                 }
             }
             if (groupe.montures.isNotEmpty()) {
@@ -115,6 +117,7 @@ fun PlayerGroupScreen(onOpenMenu: () -> Unit) {
                                     .joinToString(" • "),
                                 color = Hint, style = MaterialTheme.typography.bodySmall,
                             )
+                            PvEtMembre(m.pv, m.pvMax, 0, m.etat)
                         }
                     }
                 }
@@ -226,5 +229,33 @@ private fun LigneObjet(objet: String, quantite: Int, action: String, actif: Bool
     ) {
         Text(objet + if (quantite > 1) " ×$quantite" else "", modifier = Modifier.weight(1f))
         androidx.compose.material3.TextButton(onClick = onClick, enabled = actif) { Text(action) }
+    }
+}
+
+/** Points de vie (barre colorée) et état d'un membre ou d'une monture ; rien s'ils sont inconnus. */
+@Composable
+private fun PvEtMembre(pv: Int?, pvMax: Int?, pvTemp: Int, etat: String) {
+    if (pv != null && pvMax != null && pvMax > 0) {
+        val ratio = (pv.toFloat() / pvMax).coerceIn(0f, 1f)
+        val couleur = when {
+            ratio > 0.5f -> Color(0xFF66BB6A)
+            ratio > 0.25f -> Color(0xFFFFA726)
+            else -> Color(0xFFEF5350)
+        }
+        androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "❤ PV $pv/$pvMax" + if (pvTemp > 0) " (+$pvTemp)" else "",
+                color = Color.White, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold,
+            )
+            androidx.compose.material3.LinearProgressIndicator(
+                progress = { ratio },
+                color = couleur,
+                trackColor = Color.White.copy(alpha = 0.2f),
+                modifier = Modifier.padding(start = 8.dp).weight(1f).height(5.dp),
+            )
+        }
+    }
+    if (etat.isNotBlank()) {
+        Text("⚠ $etat", color = Color(0xFFFFD778), style = MaterialTheme.typography.bodySmall)
     }
 }

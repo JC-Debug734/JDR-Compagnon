@@ -8,6 +8,7 @@ import com.jc2.jdrcompagnon.feature_carte.data.ConversionEvenementsCarte
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import com.jc2.jdrcompagnon.feature_carte.domain.usecase.AjouterVilleACampagneUseCase
 import com.jc2.jdrcompagnon.feature_carte.domain.usecase.CalculerTempsTrajetUseCase
 import com.jc2.jdrcompagnon.feature_carte.domain.usecase.CreerPointInteretUseCase
 import com.jc2.jdrcompagnon.feature_carte.domain.usecase.DelierBoutiqueUseCase
@@ -18,6 +19,7 @@ import com.jc2.jdrcompagnon.feature_carte.presentation.CarteCampagneViewModel
 import com.jc2.jdrcompagnon.feature_carte.presentation.EvenementsViewModel
 import com.jc2.jdrcompagnon.feature_carte.presentation.VilleDetailViewModel
 import com.jc2.jdrcompagnon.feature_carte.presentation.VillesListViewModel
+import com.jc2.jdrcompagnon.feature_carte.presentation.VillesOutilViewModel
 import com.jc2.jdrcompagnon.ui.GameState
 
 /**
@@ -37,6 +39,9 @@ object CarteDependencies {
     private val lierBoutiqueAVille by lazy { LierBoutiqueAVilleUseCase(BoutiqueDependencies.repository, repository) }
     private val delierBoutique by lazy { DelierBoutiqueUseCase(BoutiqueDependencies.repository, repository) }
     private val calculerTempsTrajet = CalculerTempsTrajetUseCase()
+
+    /** Ajout d'une ville existante (outil VILLES) à une campagne, depuis l'éditeur de campagne. */
+    val ajouterVilleACampagne by lazy { AjouterVilleACampagneUseCase(repository, BoutiqueDependencies.repository) }
 
     fun newCarteViewModel(campagneId: String, carteId: String? = null): CarteCampagneViewModel = CarteCampagneViewModel(
         campagneId = campagneId,
@@ -72,6 +77,13 @@ object CarteDependencies {
         }
     }
 
+    fun newVillesOutilViewModel(): VillesOutilViewModel = VillesOutilViewModel(
+        repository = repository,
+        creerPointInteret = creerPointInteret,
+        supprimerPointInteret = supprimerPointInteret,
+        mondeActif = { GameState.currentWorldId() }
+    )
+
     fun newVillesListViewModel(campagneId: String): VillesListViewModel = VillesListViewModel(
         campagneId = campagneId,
         repository = repository,
@@ -100,6 +112,13 @@ class EvenementsViewModelFactory(private val campagneId: String) : ViewModelProv
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         @Suppress("UNCHECKED_CAST")
         return CarteDependencies.newEvenementsViewModel(campagneId) as T
+    }
+}
+
+class VillesOutilViewModelFactory : ViewModelProvider.Factory {
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        @Suppress("UNCHECKED_CAST")
+        return CarteDependencies.newVillesOutilViewModel() as T
     }
 }
 

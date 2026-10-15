@@ -1,11 +1,15 @@
 package com.jc2.jdrcompagnon.ui.screens.joueur.character.creation
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.res.painterResource
+import com.jc2.jdrcompagnon.ui.screens.joueur.skillIconRes
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -143,6 +147,14 @@ fun ChoixBaliseCarte(
                         RadioButton(selected = choisie, onClick = { basculer() }, enabled = !bloquee)
                     } else {
                         Checkbox(checked = choisie, onCheckedChange = { basculer() }, enabled = !bloquee)
+                    }
+                    // Icône illustrée quand l'option est une compétence (Compétent, Doué...).
+                    skillIconRes(option)?.let { res ->
+                        Image(
+                            painter = painterResource(res),
+                            contentDescription = null,
+                            modifier = Modifier.padding(top = 4.dp, end = 8.dp).size(40.dp)
+                        )
                     }
                     Column(modifier = Modifier.padding(top = 12.dp).weight(1f)) {
                         Text(

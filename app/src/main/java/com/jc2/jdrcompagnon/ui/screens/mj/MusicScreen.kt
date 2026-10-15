@@ -103,6 +103,8 @@ fun MusicScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            currentTrack?.let { track -> MusicProgressCard(track, isPlaying) }
+
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -117,10 +119,14 @@ fun MusicScreen(
                         valueRange = 0f..1f
                     )
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                        OutlinedButton(onClick = { MusicManager.pauseByUser() }) {
-                            Icon(Icons.Default.Pause, null)
+                        // Pause garde la position : « Reprendre » relance la piste au même endroit.
+                        OutlinedButton(
+                            onClick = { if (isPlaying) MusicManager.pauseByUser() else MusicManager.resume() },
+                            enabled = currentTrack != null,
+                        ) {
+                            Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, null)
                             Spacer(Modifier.width(4.dp))
-                            Text("Pause")
+                            Text(if (isPlaying) "Pause" else "Reprendre")
                         }
                         OutlinedButton(onClick = { MusicManager.stopByUser() }) {
                             Icon(Icons.Default.Stop, null)
@@ -131,21 +137,13 @@ fun MusicScreen(
                 }
             }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "Playlists d'ambiance",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.weight(1f)
-                )
-                // Import d'un fichier audio : via l'outil IMPORT (renommage possible ici ensuite).
-                Button(onClick = { com.jc2.jdrcompagnon.feature_import.ImportNavigation.ouvrir() }) {
-                    Icon(Icons.Default.LibraryMusic, contentDescription = null)
-                    Spacer(Modifier.width(6.dp))
-                    Text("Importer")
-                }
-            }
+            // L'import de fichiers audio passe par l'outil IMPORT (renommage possible ici ensuite).
+            Text(
+                text = "Playlists d'ambiance",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
 
             musicTracks.forEach { track ->
                 val selected = selectedTrack == track.displayName
@@ -242,4 +240,70 @@ fun MusicScreen(
             dismissButton = { TextButton(onClick = { trackToDelete = null }) { Text("Annuler") } }
         )
     }
+}
+/**
+ * Progression de la piste en cours : position / durée, rafraîchies deux fois par seconde, et
+ * curseur pour se déplacer dans la piste. Une piste YouTube (lecture externe, durée inconnue)
+ * n'affiche que son nom.
+ */
+@Composable
+private fun MusicProgressCard(trackName: String, isPlaying: Boolean) {
+    var position by remember { mutableStateOf(MusicManager.positionMs()) }
+    var duration by remember { mutableStateOf(MusicManager.durationMs()) }
+    // Position choisie au curseur, tant que le doigt n'est pas relevé (sinon le rafraîchissement
+    // ramènerait le curseur en arrière pendant le geste).
+    var seeking by remember { mutableStateOf<Float?>(null) }
+
+    LaunchedEffect(trackName, isPlaying) {
+        while (true) {
+            position = MusicManager.positionMs()
+            duration = MusicManager.durationMs()
+            if (!isPlaying) break
+            delay(500)
+        }
+    }
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    if (isPlaying) Icons.Default.MusicNote else Icons.Default.Pause,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(trackName, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text(
+                    if (isPlaying) "EN LECTURE" else "EN PAUSE",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            if (duration > 0) {
+                val shown = seeking ?: (position.toFloat() / duration).coerceIn(0f, 1f)
+                Slider(
+                    value = shown,
+                    onValueChange = { seeking = it },
+                    onValueChangeFinished = {
+                        seeking?.let { fraction ->
+                            val target = (fraction * duration).toInt()
+                            MusicManager.seekTo(target)
+                            position = target
+                        }
+                        seeking = null
+                    },
+                    valueRange = 0f..1f,
+                )
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(formatMusicTime((shown * duration).toInt()), style = MaterialTheme.typography.bodySmall)
+                    Text(formatMusicTime(duration), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+    }
+}
+
+private fun formatMusicTime(ms: Int): String {
+    val totalSeconds = ms / 1000
+    return "%d:%02d".format(totalSeconds / 60, totalSeconds % 60)
 }

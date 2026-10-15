@@ -26,7 +26,13 @@ import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import com.jc2.jdrcompagnon.feature_environnement.data.EnvironmentImageStore
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -58,7 +64,8 @@ import kotlinx.coroutines.launch
 
 /**
  * Liste des environnements du monde courant : même logique que GroupsScreen — carte cliquable
- * pour ouvrir le détail, menu "..." pour modifier/supprimer, FAB pour créer.
+ * (aperçu de l'image à gauche du nom) pour ouvrir le détail, menu "..." pour modifier/supprimer,
+ * « + » à droite du titre pour créer.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -91,17 +98,13 @@ fun EnvironmentListScreen(
                         Icon(Icons.Default.Menu, contentDescription = "Menu")
                     }
                 },
+                actions = {
+                    IconButton(onClick = { showCreateDialog = true }) {
+                        Icon(Icons.Default.Add, contentDescription = "Nouvel environnement", tint = ForcedDarkPalette.AccentGold)
+                    }
+                },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showCreateDialog = true },
-                containerColor = ForcedDarkPalette.AccentGold,
-                contentColor = ForcedDarkPalette.Background
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Nouvel environnement")
-            }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = Color.Transparent
@@ -208,12 +211,7 @@ private fun EnvironmentListItem(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Terrain,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(40.dp)
-                )
+                ApercuImage(environnement.imageFileName)
                 Column(modifier = Modifier.weight(1f)) {
                     Text(text = environnement.nom, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
                     val resume = listOfNotNull(
@@ -260,10 +258,37 @@ private fun EmptyEnvironmentsState() {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
-                text = "Appuyez sur + pour en créer un.",
+                text = "Appuyez sur + en haut à droite pour en créer un.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )
+        }
+    }
+}
+
+/** Aperçu de l'image de l'environnement (miniature arrondie), icône de terrain sans image. */
+@Composable
+private fun ApercuImage(imageFileName: String?) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val bitmap = imageFileName?.let { fileName ->
+        remember(fileName) {
+            runCatching {
+                val file = EnvironmentImageStore.fichier(context, fileName)
+                if (!file.exists()) return@runCatching null
+                // Miniature : image réduite au décodage pour ne pas charger la pleine résolution.
+                val options = android.graphics.BitmapFactory.Options().apply { inSampleSize = 4 }
+                android.graphics.BitmapFactory.decodeFile(file.absolutePath, options)?.asImageBitmap()
+            }.getOrNull()
+        }
+    }
+    Box(
+        modifier = Modifier.size(56.dp).clip(RoundedCornerShape(10.dp)).background(Color.Black.copy(alpha = 0.3f)),
+        contentAlignment = Alignment.Center
+    ) {
+        if (bitmap != null) {
+            Image(bitmap = bitmap, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        } else {
+            Icon(Icons.Default.Terrain, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(36.dp))
         }
     }
 }

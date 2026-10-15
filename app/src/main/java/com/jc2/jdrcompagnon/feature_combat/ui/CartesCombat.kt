@@ -153,10 +153,10 @@ internal fun utiliserArme(personnage: Character, arme: ArmeEnMain, lancer: Boole
     return "Attaque avec ${arme.nom}."
 }
 
-/** Jet d'attaque d'une arme : d20 + toucher, puis dégâts (dés doublés sur un 20 naturel). */
+/** Jet d'attaque d'une arme : d20 + toucher, puis dégâts (dés doublés sur un critique : 20, ou 19-18 pour le Champion). */
 internal fun jetArme(arme: ArmeEnMain): String {
     val d20 = kotlin.random.Random.nextInt(1, 21)
-    val critique = d20 == 20
+    val critique = d20 >= arme.seuilCritique
     val toucher = "Toucher ${d20 + arme.bonusToucher} (d20 $d20 ${signeTexte(arme.bonusToucher)})" + when {
         critique -> " CRITIQUE"
         d20 == 1 -> " échec automatique"

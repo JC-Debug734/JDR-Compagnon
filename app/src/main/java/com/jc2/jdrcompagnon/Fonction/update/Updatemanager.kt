@@ -67,6 +67,19 @@ object UpdateManager {
         _state.value = UpdateUiState.Idle
     }
 
+    /**
+     * Force la mise à jour : ouvre la page de téléchargement de l'APK sans
+     * tenir compte de la comparaison de versions (réinstallation, version
+     * distante pas encore visible à cause du cache, etc.).
+     */
+    fun forceUpdate(context: Context) {
+        val release = ReleaseInfo(
+            versionName = _lastRemoteVersion.value ?: BuildConfig.VERSION_NAME,
+            downloadUrl = UpdateChecker.APK_URL,
+        )
+        openDownloadPage(context, release)
+    }
+
     /** Utilisé par UpdateCheckWorker (arrière-plan) : renvoie la release si plus récente, sinon null. */
     suspend fun checkInBackground(context: Context): ReleaseInfo? {
         val release = UpdateChecker.getLatestRelease() ?: return null

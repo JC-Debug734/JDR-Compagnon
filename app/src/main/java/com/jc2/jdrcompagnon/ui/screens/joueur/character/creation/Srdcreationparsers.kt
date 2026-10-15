@@ -318,9 +318,12 @@ object EffetBalise {
     const val NOTE = "note"
     // Compétence ou outil selon la valeur choisie (don Doué).
     const val COMPETENCES_OU_OUTILS = "competences-ou-outils"
+    // Expertise dans des compétences déjà maîtrisées (Roublard niveau 1, à la création).
+    const val EXPERTISE = "expertise"
 
     /** Libellé affiché sur la fiche devant la valeur choisie (ex. "Maîtrise choisie : Perception"). */
     fun libelleChoix(effet: String): String = when (effet) {
+        EXPERTISE -> "Expertise"
         COMPETENCES -> "Maîtrise choisie"
         DON -> "Don choisi"
         TAILLE -> "Taille choisie"
@@ -384,6 +387,23 @@ private fun balisesDe(texte: String): List<Map<String, String>> =
 
 private fun sansBalises(texte: String): String =
     texte.replace(REGEX_BALISE, "").replace(Regex("""\n{3,}"""), "\n\n").trim()
+
+/**
+ * Texte markdown d'une fiche (don...) rendu lisible en texte brut pour une description d'option :
+ * sans titres, gras/italique ni séparateurs, puces « - » en « • », lignes vides regroupées.
+ */
+internal fun markdownEnTexte(texte: String): String =
+    sansBalises(texte).lineSequence()
+        .map { it.trim() }
+        .filterNot { it.startsWith("#") || it == "---" }
+        .map { ligne ->
+            ligne.replace(Regex("""\*\*(.+?)\*\*"""), "$1")
+                .replace(Regex("""(?<![\w*])[*_](\S(?:.*?\S)?)[*_](?![\w*])"""), "$1")
+                .replace(Regex("""^[-*]\s+"""), "• ")
+        }
+        .joinToString("\n")
+        .replace(Regex("""\n{3,}"""), "\n\n")
+        .trim()
 
 /** Clé d'une valeur dans une balise "options-<valeur>" : minuscules, sans accents ni espaces. */
 private fun cleOption(valeur: String): String =
@@ -529,7 +549,7 @@ fun construireChoix(
                 o.nom to listOf(o.description, resumeEffets(o.effets)).filter { it.isNotBlank() }.joinToString("\n")
             }
         spec.equals("dons-origines", ignoreCase = true) ->
-            ctx.donsOrigines.map { it.nom } to ctx.donsOrigines.associate { it.nom to it.description }
+            ctx.donsOrigines.map { it.nom } to ctx.donsOrigines.associate { it.nom to markdownEnTexte(it.description) }
         spec.equals("langues", ignoreCase = true) -> ctx.langues to emptyMap()
         else -> {
             // Plusieurs sources séparées par "|" : "toutes", "equipement: X", ou une liste "A, B".
@@ -741,16 +761,20 @@ private fun parserAptitude(section: SectionMd): AptitudeClasse {
     val options = REGEX_OPTION_APTITUDE.findAll(corpsSansMeta).map { m ->
         OptionAptitude(id = m.groupValues[2].ifBlank { null }, nom = m.groupValues[1].trim(), description = m.groupValues[3].trim())
     }.toList()
-    // Description sans les lignes d'options (ne garde que l'intro, ex. "Choix entre deux ordres :").
+    val type = meta?.groupValues?.get(2) ?: "automatique"
+    // Aptitude à choix : description sans les lignes d'options (ne garde que l'intro, ex. "Choix
+    // entre deux ordres :"). Les autres gardent leurs listes « - **Nom** : … », qui décrivent
+    // des effets et non des options (ex. Puissance des géants, Nimbe sacré).
     val description = sansBalises(
-        corpsSansMeta.lineSequence()
+        if (type != "choix-effet") corpsSansMeta
+        else corpsSansMeta.lineSequence()
             .filterNot { REGEX_OPTION_APTITUDE.matches(it) }
             .joinToString("\n")
     )
     return AptitudeClasse(
         niveaux = niveaux,
         id = meta?.groupValues?.get(1),
-        type = meta?.groupValues?.get(2) ?: "automatique",
+        type = type,
         nom = nom,
         description = description,
         options = options,
@@ -840,6 +864,73 @@ data class Classe(
         return if (estChoix) caracteristiquePrincipale.any { valeurCaracteristique(it) >= 13 }
         else caracteristiquePrincipale.all { valeurCaracteristique(it) >= 13 }
     }
+}
+
+/**
+ * Incantation qu'une sous-classe donne à une classe sans incantation (lanceur « tiers », règles
+ * 2024) : liste de sorts d'une autre classe, caractéristique d'incantation, et nombre de sorts
+ * mineurs / préparés par niveau de classe (index 0 = niveau 1). Emplacements : ceux d'un lanceur
+ * complet de niveau (niveau de classe + 2) / 3 à partir du niveau 3.
+ */
+data class IncantationDeSousClasse(
+    val classe: String,
+    val sousClasse: String,
+    val listeSorts: String,
+    val caracteristique: String,
+    val sortsMineurs: List<Int>,
+    val sortsPrepares: List<Int>,
+)
+
+val INCANTATIONS_DE_SOUS_CLASSE = listOf(
+    IncantationDeSousClasse(
+        classe = "Guerrier", sousClasse = "Chevalier occulte", listeSorts = "Magicien", caracteristique = "Intelligence",
+        sortsMineurs = (1..20).map { n -> if (n >= 10) 3 else if (n >= 3) 2 else 0 },
+        sortsPrepares = listOf(0, 0, 3, 4, 4, 4, 5, 6, 6, 7, 8, 8, 9, 10, 10, 11, 11, 11, 12, 13),
+    ),
+    // Main du mage + deux sorts mineurs, un de plus au niveau 10.
+    IncantationDeSousClasse(
+        classe = "Roublard", sousClasse = "Arnaqueur arcanique", listeSorts = "Magicien", caracteristique = "Intelligence",
+        sortsMineurs = (1..20).map { n -> if (n >= 10) 4 else if (n >= 3) 3 else 0 },
+        sortsPrepares = listOf(0, 0, 3, 4, 4, 4, 5, 6, 6, 7, 8, 8, 9, 10, 10, 11, 11, 11, 12, 13),
+    ),
+)
+
+/** Sous-classe du personnage dans [classe] (principale : champ subclass ; secondaire : « Sous-classe (X) : Y »). */
+fun sousClasseDuPersonnage(c: com.jc2.jdrcompagnon.ui.Character, classe: String): String =
+    if (c.characterClass.equals(classe, ignoreCase = true)) c.subclass.trim()
+    else Regex("""Sous-classe \(${Regex.escape(classe)}\) : (.+)""").find(c.classFeatures)?.groupValues?.get(1)?.trim().orEmpty()
+
+/** Incantation donnée au personnage par sa sous-classe de [classe] (Chevalier occulte…), null sinon. */
+fun incantationDeSousClasse(c: com.jc2.jdrcompagnon.ui.Character, classe: String): IncantationDeSousClasse? {
+    val sousClasse = sousClasseDuPersonnage(c, classe).takeIf { it.isNotBlank() } ?: return null
+    return INCANTATIONS_DE_SOUS_CLASSE.firstOrNull { it.classe.equals(classe, ignoreCase = true) && it.sousClasse.equals(sousClasse, ignoreCase = true) }
+}
+
+/** Liste de sorts suivie par [classe] : la sienne, ou celle de l'incantation de sous-classe (Guerrier → Magicien). */
+fun listeSortsDeClasse(classe: String): String =
+    INCANTATIONS_DE_SOUS_CLASSE.firstOrNull { it.classe.equals(classe, ignoreCase = true) }?.listeSorts ?: classe
+
+/** Niveau de lanceur complet équivalent d'un lanceur « tiers » (Chevalier occulte niv. 3 → 1, niv. 7 → 3). */
+fun niveauLanceurTiers(niveauClasse: Int): Int = if (niveauClasse >= 3) (niveauClasse + 2) / 3 else 0
+
+/**
+ * La classe telle qu'elle s'applique au personnage : une classe sans incantation devient lanceur
+ * « tiers » si sa sous-classe en donne une (typeIncantation "tiers", colonnes « Sorts mineurs » et
+ * « Sorts préparés » ajoutées à sa table de progression).
+ */
+fun Classe.pourPersonnage(c: com.jc2.jdrcompagnon.ui.Character): Classe {
+    if (typeIncantation != "aucun") return this
+    val incantation = incantationDeSousClasse(c, nom) ?: return this
+    val base = tableProgression ?: TableMd(listOf("Niveau"), (1..20).map { listOf("$it") })
+    val idxNiveau = base.entetes.indexOf("Niveau").takeIf { it >= 0 } ?: return this
+    val table = TableMd(
+        base.entetes + listOf("Sorts mineurs", "Sorts préparés"),
+        base.lignes.map { ligne ->
+            val n = ligne.getOrNull(idxNiveau)?.toIntOrNull() ?: 0
+            ligne + listOf("${incantation.sortsMineurs.getOrElse(n - 1) { 0 }}", "${incantation.sortsPrepares.getOrElse(n - 1) { 0 }}")
+        },
+    )
+    return copy(typeIncantation = "tiers", tableProgression = table)
 }
 
 /**
@@ -984,7 +1075,11 @@ data class Historique(
     val equipementA: String,
     val equipementB: String,
     // Balises de choix (ex. type de boîte de jeux du Soldat), cf. construireChoix.
-    val balises: List<Map<String, String>> = emptyList()
+    val balises: List<Map<String, String>> = emptyList(),
+    // Historique importé (livre .zip) : chemin absolu de son illustration (champ "- Image :", résolu
+    // par CustomBookImages.resolveHistoriques) et courte présentation (champ "- Description :").
+    val image: String? = null,
+    val description: String = "",
 ) {
     fun versOption() = OptionChoisie(id = id ?: nom.lowercase(), label = nom)
 
@@ -1012,7 +1107,9 @@ object HistoriqueParser {
                 maitriseOutils = champs["Maîtrise d'outils"].orEmpty(),
                 equipementA = REGEX_EQUIP_A.find(section.corps)?.groupValues?.get(1)?.trim().orEmpty(),
                 equipementB = REGEX_EQUIP_B.find(section.corps)?.groupValues?.get(1)?.trim().orEmpty(),
-                balises = balisesDe(section.corps).filter { it.size > 1 && it.containsKey("id") }
+                balises = balisesDe(section.corps).filter { it.size > 1 && it.containsKey("id") },
+                image = champs["Image"]?.ifBlank { null },
+                description = champs["Description"].orEmpty(),
             )
         }
 }
@@ -1117,6 +1214,9 @@ data class Don(
     val categorie: String,
     val description: String,
     val balises: List<Map<String, String>> = emptyList(),
+    // Effets automatiques du don (balises sans « choix: », ex. « pv-par-niveau: 2 » de Robuste,
+    // « formation: Armes de guerre »), appliqués à son obtention, cf. effetsDon (EffetsDons.kt).
+    val effets: List<Map<String, String>> = emptyList(),
 )
 
 object DonParser {
@@ -1135,6 +1235,7 @@ object DonParser {
             categorie = balises.firstNotNullOfOrNull { it["categorie"] }.orEmpty(),
             description = sansBalises(contenu),
             balises = balises.filter { it.containsKey("choix") },
+            effets = balises.filter { !it.containsKey("choix") && !it.containsKey("categorie") && it.size > 1 },
         )
     }
 

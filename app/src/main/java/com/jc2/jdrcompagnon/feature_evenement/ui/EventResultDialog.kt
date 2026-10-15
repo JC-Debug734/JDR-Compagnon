@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -16,6 +18,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.SportsMartialArts
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.OutlinedButton
@@ -32,13 +36,16 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -46,6 +53,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.jc2.jdrcompagnon.di.CarteDependencies
+import com.jc2.jdrcompagnon.network.NetworkSessionManager
+import com.jc2.jdrcompagnon.feature_evenement.data.EvenementImageStore
+import com.jc2.jdrcompagnon.ui.components.FilePortraits
 import com.jc2.jdrcompagnon.feature_evenement.domain.model.CategorieEffet
 import com.jc2.jdrcompagnon.feature_evenement.domain.model.EffetEvenement
 import com.jc2.jdrcompagnon.feature_evenement.domain.model.Evenement
@@ -61,6 +72,8 @@ import com.jc2.jdrcompagnon.ui.screens.mj.scenario.InternalLinkDetailDialog
 import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.components.SendItemToCharacterDialog
 import com.jc2.jdrcompagnon.ui.components.SendItemToGroupDialog
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 
 /**
  * Résolution d'un événement : description, ce qui est attendu des joueurs, effets immédiats,
@@ -76,14 +89,22 @@ fun EventResultDialog(
     worldId: String?,
     onDismiss: () -> Unit,
 ) {
-    var envoyerObjetPersonnage by remember { mutableStateOf<String?>(null) }
-    var envoyerObjetGroupe by remember { mutableStateOf<String?>(null) }
+    // Objet en cours d'envoi : son effet (marqué donné une fois remis) et son libellé.
+    var envoyerObjetPersonnage by remember { mutableStateOf<EffetEvenement?>(null) }
+    var envoyerObjetGroupe by remember { mutableStateOf<EffetEvenement?>(null) }
+    val effetsDonnes by EffetsObjetsDonnes.ids.collectAsState()
     var appliquerXpOr by remember { mutableStateOf<EffetEvenement?>(null) }
     var appliquerReputation by remember { mutableStateOf<EffetEvenement?>(null) }
     var issueChoisie by remember(evenement?.id) { mutableStateOf<IssueEvenement?>(null) }
     var monstreEnDetail by remember { mutableStateOf<String?>(null) }
     // Composition (format CompositionCombat) et difficulté visée, ajustée au niveau du groupe.
     var combatALancer by remember { mutableStateOf<Pair<String, EncounterDifficulty>?>(null) }
+    // Lieux de la campagne en cours, pour les effets « Révéler un lieu ».
+    val scope = rememberCoroutineScope()
+    val campagneId by GameState.currentCampaignId.collectAsState()
+    val pointsCampagne by remember(campagneId) {
+        campagneId?.let { CarteDependencies.repository.observerPoints(it) } ?: flowOf(emptyList())
+    }.collectAsState(initial = emptyList())
 
     @Composable
     fun BoutonCombat(evenement: Evenement, issue: IssueEvenement? = null) {
@@ -104,14 +125,28 @@ fun EventResultDialog(
 
     @Composable
     fun LigneEffet(effet: EffetEvenement) {
+        // Objet déjà donné (à un personnage ou proposé au groupe) : barré, plus d'envoi possible.
+        val donne = effet.categorie == CategorieEffet.OBJET && EffetsObjetsDonnes.cle(evenement, effet) in effetsDonnes
+        val lieu = if (effet.categorie == CategorieEffet.LIEU) pointsCampagne.firstOrNull { memeNomDeLieu(it.nom, effet.cible) } else null
+        val etatLieu = when {
+            effet.categorie != CategorieEffet.LIEU -> ""
+            lieu == null -> " (lieu introuvable dans la campagne)"
+            lieu.visibleJoueurs -> " (révélé)"
+            else -> ""
+        }
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(effetLabel(effet), modifier = Modifier.weight(1f))
+            Text(
+                effetLabel(effet) + (if (donne) " (donné)" else "") + etatLieu,
+                modifier = Modifier.weight(1f),
+                textDecoration = if (donne) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
+                color = if (donne) MaterialTheme.colorScheme.onSurfaceVariant else androidx.compose.ui.graphics.Color.Unspecified,
+            )
             when {
                 effet.categorie == CategorieEffet.OBJET && effet.gain -> {
-                    IconButton(onClick = { envoyerObjetPersonnage = "${effet.quantite}x ${effet.cible}" }) {
+                    IconButton(onClick = { envoyerObjetPersonnage = effet }, enabled = !donne) {
                         Icon(Icons.Default.Person, contentDescription = "Envoyer à un personnage")
                     }
-                    IconButton(onClick = { envoyerObjetGroupe = "${effet.quantite}x ${effet.cible}" }) {
+                    IconButton(onClick = { envoyerObjetGroupe = effet }, enabled = !donne) {
                         Icon(Icons.Default.Group, contentDescription = "Proposer à un groupe")
                     }
                 }
@@ -125,8 +160,35 @@ fun EventResultDialog(
                         Icon(Icons.Default.Group, contentDescription = "Appliquer à un groupe")
                     }
                 }
+                effet.categorie == CategorieEffet.LIEU -> {
+                    // Montre le lieu (et ses scénarios) aux joueurs sur la carte d'exploration.
+                    IconButton(
+                        onClick = { lieu?.let { p -> scope.launch { CarteDependencies.repository.definirVisibiliteJoueurs(p.id, true) } } },
+                        enabled = lieu != null && !lieu.visibleJoueurs
+                    ) {
+                        Icon(
+                            if (lieu?.visibleJoueurs == true) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                            contentDescription = "Révéler le lieu aux joueurs"
+                        )
+                    }
+                }
             }
         }
+    }
+
+    // Illustration de l'événement : envoyée sur la page d'affichage table dès qu'il est joué,
+    // retirée en refermant la fenêtre (la table revient à l'image de la scène).
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val fichierImage = remember(evenement?.imageFileName) {
+        evenement?.imageFileName?.let { EvenementImageStore.fichier(context, it) }?.takeIf { it.isFile }
+    }
+    val apercuImage = remember(fichierImage) { fichierImage?.let { FilePortraits.bitmap(FilePortraits.idFor(it)) } }
+    var imageSurTable by remember(evenement?.id) { mutableStateOf(false) }
+    DisposableEffect(evenement?.id, fichierImage) {
+        if (fichierImage != null && evenement != null && NetworkSessionManager.isTableDisplayOnline) {
+            imageSurTable = NetworkSessionManager.sendImageFileToWeb(fichierImage, evenement.titre)
+        }
+        onDispose { if (imageSurTable) NetworkSessionManager.clearWebMedia() }
     }
 
     AlertDialog(
@@ -145,8 +207,26 @@ fun EventResultDialog(
                     Text("Aucun événement disponible.")
                 } else {
                     Text(evenement.type.label, style = MaterialTheme.typography.labelMedium, color = evenement.type.couleur)
+                    if (apercuImage != null) {
+                        androidx.compose.foundation.Image(
+                            bitmap = apercuImage,
+                            contentDescription = evenement.titre,
+                            contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 200.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                        )
+                        Text(
+                            if (imageSurTable) "📺 Image affichée sur la table" else "Écran de table hors ligne : image visible ici seulement",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     if (evenement.description.isNotBlank()) {
-                        Text(evenement.description)
+                        // Texte à lire aux joueurs ({lire}…{/lire}) : même bloc vert, avec lecture à voix
+                        // haute, que dans le scénario.
+                        DescriptionEvenement(evenement.description)
                     }
                     if (evenement.profils.isNotEmpty()) {
                         // Profils impliqués : monstre = fiche du bestiaire en fenêtre, PNJ = sa
@@ -218,7 +298,7 @@ fun EventResultDialog(
                             ) {
                                 Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     Text(choisie.nature.label, style = MaterialTheme.typography.labelMedium, color = choisie.nature.couleur)
-                                    if (choisie.description.isNotBlank()) Text(choisie.description)
+                                    if (choisie.description.isNotBlank()) DescriptionEvenement(choisie.description)
                                     choisie.effets.forEach { LigneEffet(it) }
                                     // L'issue qui mène au combat le lance avec les profils de l'événement.
                                     if (choisie.declencheCombat && evenement.profils.isNotEmpty()) {
@@ -241,11 +321,23 @@ fun EventResultDialog(
         }
     )
 
-    envoyerObjetPersonnage?.let { itemName ->
-        SendItemToCharacterDialog(itemName = itemName, worldId = worldId, onDismiss = { envoyerObjetPersonnage = null })
+    envoyerObjetPersonnage?.let { effet ->
+        SendItemToCharacterDialog(
+            itemName = "${effet.quantite}x ${effet.cible}",
+            worldId = worldId,
+            onDismiss = { envoyerObjetPersonnage = null },
+            onSent = { EffetsObjetsDonnes.marquer(evenement, effet) },
+            // Seuls les personnages joueurs du groupe en cours reçoivent le butin d'un événement.
+            seulementPjDuGroupe = true,
+        )
     }
-    envoyerObjetGroupe?.let { itemName ->
-        SendItemToGroupDialog(itemName = itemName, worldId = worldId, onDismiss = { envoyerObjetGroupe = null })
+    envoyerObjetGroupe?.let { effet ->
+        SendItemToGroupDialog(
+            itemName = "${effet.quantite}x ${effet.cible}",
+            worldId = worldId,
+            onDismiss = { envoyerObjetGroupe = null },
+            onSent = { EffetsObjetsDonnes.marquer(evenement, effet) },
+        )
     }
     appliquerXpOr?.let { effet ->
         ApplyXpOrDialog(effet = effet, worldId = worldId, onDismiss = { appliquerXpOr = null })
@@ -271,6 +363,13 @@ fun EventResultDialog(
     }
 }
 
+
+/** Noms de lieux égaux sans tenir compte de la casse, des accents ni des espaces autour. */
+internal fun memeNomDeLieu(a: String, b: String): Boolean {
+    fun normaliser(s: String) = java.text.Normalizer.normalize(s.trim().lowercase(), java.text.Normalizer.Form.NFD)
+        .replace(Regex("\\p{M}+"), "")
+    return normaliser(a) == normaliser(b)
+}
 
 /** Applique un effet XP/or à un personnage choisi (délta signé selon [EffetEvenement.gain]). */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -420,4 +519,19 @@ internal fun difficulteDuCombat(issue: IssueEvenement?): EncounterDifficulty {
     val normale = EncounterDifficulty.MOYENNE
     if (issue?.nature != NatureIssue.ECHEC) return normale
     return EncounterDifficulty.entries.getOrElse(normale.ordinal + 1) { normale }
+}
+
+/**
+ * Objets d'événement déjà donnés pendant la session (événement + effet) : ils restent barrés quand
+ * l'événement est rouvert, pour ne pas distribuer deux fois le même butin.
+ */
+internal object EffetsObjetsDonnes {
+    private val _ids = kotlinx.coroutines.flow.MutableStateFlow<Set<String>>(emptySet())
+    val ids: kotlinx.coroutines.flow.StateFlow<Set<String>> = _ids
+
+    fun cle(evenement: Evenement?, effet: EffetEvenement): String = "${evenement?.id}/${effet.id}"
+
+    fun marquer(evenement: Evenement?, effet: EffetEvenement) {
+        _ids.value = _ids.value + cle(evenement, effet)
+    }
 }

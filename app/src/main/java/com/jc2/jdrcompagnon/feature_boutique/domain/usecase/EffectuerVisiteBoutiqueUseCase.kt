@@ -19,7 +19,7 @@ class EffectuerVisiteBoutiqueUseCase(
         monde: String,
         random: Random = Random.Default
     ): Boutique {
-        val nouvelInventaire = if (boutique.type == TypeBoutique.MARCHAND) {
+        val nouvelInventaire = if (boutique.type.vendDesObjets) {
             val articlesConserves = boutique.inventaire.filter { it.toujoursDisponible }
             val nbARenouveler = (boutique.inventaire.size - articlesConserves.size).coerceAtLeast(0)
             val nouveauxArticles = genererInventaire(
@@ -43,7 +43,7 @@ class EffectuerVisiteBoutiqueUseCase(
         return boutique.copy(
             inventaire = nouvelInventaire,
             services = nouveauxServices,
-            argentDisponibleEnPo = determinerBudgetAchat(boutique.standing, random)
+            argentDisponibleEnPc = determinerBudgetAchat(boutique.standing, random) * com.jc2.jdrcompagnon.ui.Monnaie.PC_PAR_PO
         )
     }
 }

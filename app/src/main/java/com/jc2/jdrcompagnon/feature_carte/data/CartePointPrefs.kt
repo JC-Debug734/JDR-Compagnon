@@ -26,6 +26,11 @@ object CartePointPrefs {
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
+    private val _version = kotlinx.coroutines.flow.MutableStateFlow(0)
+
+    /** Change à chaque réglage modifié : les écrans de carte se redessinent, le MJ rediffuse la campagne. */
+    val version: kotlinx.coroutines.flow.StateFlow<Int> = _version
+
     fun lire(context: Context, pointId: String): ReglagePoint {
         val p = prefs(context)
         return ReglagePoint(
@@ -39,11 +44,13 @@ object CartePointPrefs {
     }
 
     fun ecrire(context: Context, pointId: String, reglage: ReglagePoint) {
+        if (lire(context, pointId) == reglage) return
         prefs(context).edit()
             .putFloat("taille_$pointId", reglage.taille)
             .putBoolean("verrouille_$pointId", reglage.verrouille)
             .putBoolean("texte_$pointId", reglage.afficherTexte)
             .putString("position_texte_$pointId", reglage.positionTexte.name)
             .apply()
+        _version.value++
     }
 }

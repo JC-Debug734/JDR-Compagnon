@@ -378,6 +378,25 @@ internal fun CombatActionsScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
+                // Occultiste — Pacte de la lame : invoquer ou lier l'arme de pacte (action Bonus).
+                if (personnage != null && aPacteDeLaLame(personnage)) {
+                    ActionPacteDeLaLame(personnage)
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+                // Occultiste — aptitudes de protecteur (hors combat en réseau : soins appliqués aux fiches).
+                if (personnage != null && onChoisirAction == null && aAptitudesOccultiste(personnage)) {
+                    CarteAptitudesOccultiste(
+                        personnage,
+                        cibles = listOf(CibleContact(personnage.id, personnage.name + " (vous)")) +
+                            personnages.filter { it.id != personnage.id && it.worldId == personnage.worldId }.map { CibleContact(it.id, it.name) },
+                        onSoin = { cible, pv, detail ->
+                            GameState.soignerOuGuerirPoison(cible.id, pv, false)
+                            "$detail : ${cible.nom} récupère $pv PV."
+                        },
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
                 // Actions bonus de classe (Paladin) du personnage sélectionné, hors combat en réseau :
                 // effet appliqué directement aux fiches (en réseau, elles sont sur l'écran de combat).
                 if (personnage != null && onChoisirAction == null && aActionsBonusClasse(personnage)) {
@@ -386,11 +405,64 @@ internal fun CombatActionsScreen(
                         cibles = listOf(CibleContact(personnage.id, personnage.name + " (vous)")) +
                             personnages.filter { it.id != personnage.id && it.worldId == personnage.worldId }.map { CibleContact(it.id, it.name) },
                         emplacementsRestants = arsenal?.restants(personnage).orEmpty(),
-                        onImposition = { cible, pv, poison ->
-                            GameState.soignerOuGuerirPoison(cible.id, pv, poison)
-                            if (poison) "Empoisonné retiré de ${cible.nom}." else "${cible.nom} récupère $pv PV."
+                        onImposition = { cible, pv, etats ->
+                            val texte = if (etats.isNotEmpty()) {
+                                GameState.retirerEtats(cible.id, etats)
+                                "${etats.joinToString()} retiré(s) de ${cible.nom}."
+                            } else {
+                                GameState.soignerOuGuerirPoison(cible.id, pv, false)
+                                "${cible.nom} récupère $pv PV."
+                            }
+                            texte + noteCombat(personnage.id, "Imposition des mains", texte)
                         },
-                        onChatiment = { des, formule -> "Châtiment divin : ${des.sum()} dégâts radiants (${des.joinToString("+")}) — $formule." },
+                        onChatiment = { des, formule ->
+                            "Châtiment divin : ${des.sum()} dégâts radiants (${des.joinToString("+")}) — $formule." +
+                                noteCombat(personnage.id, "Dégâts (Châtiment divin)", formule, des)
+                        },
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+                // Guerrier — Second souffle, Fougue, Inflexible, ressources de sous-classe (hors combat en réseau).
+                if (personnage != null && onChoisirAction == null && com.jc2.jdrcompagnon.feature_combat.domain.model.Guerrier.niveau(personnage) > 0) {
+                    CarteAptitudesGuerrier(
+                        personnage,
+                        onAnnonce = { libelle, texte -> "$libelle : $texte." + noteCombat(personnage.id, libelle, texte) },
+                        onDegats = { libelle, des, formule -> "${des.sum()} dégâts — $formule." + noteCombat(personnage.id, libelle, formule, des) },
+                        onSoin = { pv, detail ->
+                            GameState.soignerOuGuerirPoison(personnage.id, pv, false)
+                            "$detail : ${personnage.name} récupère $pv PV." + noteCombat(personnage.id, detail, "$pv PV récupérés")
+                        },
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+                // Roublard — Attaque sournoise, Frappe malicieuse, ressources de sous-classe (hors combat en réseau).
+                if (personnage != null && onChoisirAction == null && com.jc2.jdrcompagnon.feature_combat.domain.model.Roublard.niveau(personnage) > 0) {
+                    CarteAptitudesRoublard(
+                        personnage,
+                        onAnnonce = { libelle, texte -> "$libelle : $texte." + noteCombat(personnage.id, libelle, texte) },
+                        onDegats = { libelle, des, formule -> "${des.sum()} dégâts — $formule." + noteCombat(personnage.id, libelle, formule, des) },
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+                // Dons — Points de chance, Regain de vitalité, sorts gratuits (hors combat en réseau).
+                if (personnage != null && onChoisirAction == null && com.jc2.jdrcompagnon.feature_combat.domain.model.Dons.ressources(personnage).isNotEmpty()) {
+                    CarteRessourcesDons(
+                        personnage,
+                        onAnnonce = { libelle, texte -> "$libelle : $texte" + noteCombat(personnage.id, libelle, texte) },
+                        onSoin = { pv, detail ->
+                            GameState.soignerOuGuerirPoison(personnage.id, pv, false)
+                            "$detail : ${personnage.name} récupère $pv PV." + noteCombat(personnage.id, detail, "$pv PV récupérés")
+                        },
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+                // Paladin niv. 3+ — Conduit divin, Frappes radiantes, Nimbe sacré (hors combat en réseau).
+                if (personnage != null && onChoisirAction == null && com.jc2.jdrcompagnon.feature_combat.domain.model.Paladin.aAptitudes(personnage)) {
+                    CarteAptitudesPaladin(
+                        personnage,
+                        emplacementsRestants = arsenal?.restants(personnage).orEmpty(),
+                        onAnnonce = { libelle, texte -> "$libelle : $texte." + noteCombat(personnage.id, libelle, texte) },
+                        onDegats = { libelle, des, formule -> "${des.sum()} dégâts radiants (${des.joinToString("+")}) — $formule." + noteCombat(personnage.id, libelle, formule, des) },
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                 }
@@ -489,4 +561,27 @@ private fun BoutonActionPrincipale(action: ActionCombat, onClick: () -> Unit, mo
             )
         }
     }
+}
+
+/**
+ * Aptitude utilisée par le MJ pour un personnage qui est dans le combat en cours : notée sur sa
+ * carte et au journal (jet de dégâts à appliquer depuis la carte, ou simple annonce), comme les
+ * annonces envoyées par un joueur. Renvoie le complément du message affiché, vide hors combat.
+ */
+private fun noteCombat(personnageId: String, libelle: String, formule: String, des: List<Int> = emptyList()): String {
+    val etat = com.jc2.jdrcompagnon.feature_combat.presentation.CombatSession.etat.value ?: return ""
+    val combattant = etat.combattants.firstOrNull { it.characterId == personnageId } ?: return ""
+    com.jc2.jdrcompagnon.feature_combat.presentation.CombatSession.enregistrerJet(
+        com.jc2.jdrcompagnon.feature_combat.presentation.JetCombat(
+            combattantId = combattant.id,
+            round = 0,
+            libelle = libelle,
+            formule = formule,
+            des = des,
+            bonus = 0,
+            total = des.sum(),
+            manuel = false,
+        )
+    )
+    return " (noté dans le combat)"
 }

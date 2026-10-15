@@ -3,6 +3,7 @@ package com.jc2.jdrcompagnon.di
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import com.jc2.jdrcompagnon.feature_evenement.data.EvenementImageStore
 import com.jc2.jdrcompagnon.feature_evenement.data.EvenementRepository
 import com.jc2.jdrcompagnon.feature_evenement.data.EvenementRepositoryImpl
 import com.jc2.jdrcompagnon.feature_evenement.domain.model.EffetEvenement
@@ -78,6 +79,32 @@ object EvenementDependencies {
         if (prefs.getInt(cleVersion, 1) < VERSION_EXEMPLES) {
             completerExemplesExistants(worldId)
             prefs.edit().putInt(cleVersion, VERSION_EXEMPLES).apply()
+        }
+        affecterImagesExemples(context, worldId)
+    }
+
+    // Illustration des événements d'exemple (assets/dnd/evenements), par titre.
+    private val IMAGES_EXEMPLES = mapOf(
+        "Autel oublié" to "dnd/evenements/autel_oublie.webp",
+        "Camp abandonné" to "dnd/evenements/camp_abandonne.webp",
+    )
+
+    /**
+     * Donne leur illustration aux événements d'exemple de [worldId] qui n'en ont pas, une seule fois
+     * par monde et par titre (une image retirée par le MJ ne revient pas). Un titre absent de la
+     * bibliothèque (exemples des tables pas encore créés) sera traité au prochain appel.
+     */
+    suspend fun affecterImagesExemples(context: Context, worldId: String) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val aFaire = IMAGES_EXEMPLES.keys.filterNot { prefs.getBoolean("image_${worldId}_$it", false) }
+        if (aFaire.isEmpty()) return
+        val parTitre = repository.observerEvenements(worldId).first().filter { it.titre in aFaire }.groupBy { it.titre }
+        parTitre.forEach { (titre, evenements) ->
+            evenements.filter { it.imageFileName == null }.forEach { e ->
+                EvenementImageStore.copierAsset(context, IMAGES_EXEMPLES.getValue(titre), e.id)
+                    ?.let { repository.sauvegarder(e.copy(imageFileName = it)) }
+            }
+            prefs.edit().putBoolean("image_${worldId}_$titre", true).apply()
         }
     }
 

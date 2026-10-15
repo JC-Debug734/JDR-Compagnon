@@ -31,6 +31,8 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Hiking
+import androidx.compose.material.icons.filled.SportsMartialArts
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -42,8 +44,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -64,12 +64,16 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jc2.jdrcompagnon.feature_epreuve.domain.model.DifficulteEpreuve
+import com.jc2.jdrcompagnon.feature_epreuve.domain.model.Epreuve
 import com.jc2.jdrcompagnon.feature_epreuve.domain.model.ReglesEpreuve
 import com.jc2.jdrcompagnon.feature_epreuve.presentation.EpreuveActive
 import com.jc2.jdrcompagnon.feature_epreuve.presentation.EpreuveOutilSession
 import com.jc2.jdrcompagnon.feature_epreuve.presentation.TentativeEpreuve
 import com.jc2.jdrcompagnon.ui.GameState
 import com.jc2.jdrcompagnon.ui.theme.ForcedDarkPalette
+import com.jc2.jdrcompagnon.feature_combat.ui.LancerCombatDialog
+import com.jc2.jdrcompagnon.feature_group.domain.EncounterDifficulty
+import com.jc2.jdrcompagnon.ui.navigation.DemandesLienInterne
 
 private val VertReussite = Color(0xFF43A047)
 private val RougeEchec = Color(0xFFC62828)
@@ -78,8 +82,8 @@ private val RougeEchec = Color(0xFFC62828)
 private var musiqueLanceePour: String? = null
 
 /**
- * Résolution MJ de l'épreuve active (EpreuveOutilSession) : chaque joueur annonce son action,
- * le MJ note une réussite (le compteur avance) ou un échec (une complication est tirée). L'état
+ * Résolution MJ de l'épreuve active (EpreuveOutilSession) : le MJ choisit qui agit (son niveau
+ * fixe DD et dégâts) et note une réussite (le compteur avance) ou un échec (une complication est tirée). L'état
  * est affiché en direct sur la page table (MjWebServer, /api/epreuve).
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -89,18 +93,7 @@ fun EpreuveResolutionScreen(
     onOpenMenu: () -> Unit = {},
 ) {
     val etat by EpreuveOutilSession.etat.collectAsState()
-    val context = androidx.compose.ui.platform.LocalContext.current
-    // Musique de l'épreuve : lancée une seule fois par épreuve démarrée (revenir sur l'écran ne la
-    // relance pas si le MJ l'a coupée entre-temps).
-    androidx.compose.runtime.LaunchedEffect(etat?.lancement) {
-        val epreuve = etat?.epreuve ?: return@LaunchedEffect
-        val lancement = "${epreuve.id}:${etat?.lancement}"
-        if (musiqueLanceePour == lancement) return@LaunchedEffect
-        musiqueLanceePour = lancement
-        val piste = com.jc2.jdrcompagnon.ui.availableLoopTracks.firstOrNull { it.id.equals(epreuve.musicTrackId, ignoreCase = true) }
-            ?: return@LaunchedEffect
-        com.jc2.jdrcompagnon.ui.MusicManager.play(context, piste)
-    }
+    EffetsEpreuveActive(etat)
 
     Scaffold(
         topBar = {
@@ -134,33 +127,118 @@ fun EpreuveResolutionScreen(
                 Text("Aucune épreuve en cours. Lancez-en une depuis l'outil Épreuves.", color = Color.White)
             }
         } else {
-            ContenuResolution(courant, Modifier.fillMaxSize().padding(innerPadding))
+            // Le combat final s'ouvre par navigation (DemandesLienInterne) : l'épreuve est close.
+            ContenuResolution(courant, Modifier.fillMaxSize().padding(innerPadding), onCombatLance = { EpreuveOutilSession.fermer() })
         }
     }
 }
 
+/**
+ * Effets liés à l'épreuve active, communs à l'écran et à la fenêtre de résolution :
+ * - musique lancée une seule fois par épreuve démarrée (revenir dessus ne la relance pas si le MJ
+ *   l'a coupée entre-temps), et coupée à la fermeture de l'épreuve (EpreuveOutilSession.fermer) ;
+ * - joueurs et niveau qui suivent le groupe sélectionné (EpreuveOutilSession.suivreGroupe).
+ */
+@Composable
+private fun EffetsEpreuveActive(etat: EpreuveActive?) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    androidx.compose.runtime.LaunchedEffect(etat?.lancement) {
+        val epreuve = etat?.epreuve ?: return@LaunchedEffect
+        val lancement = "${epreuve.id}:${etat.lancement}"
+        if (musiqueLanceePour == lancement) return@LaunchedEffect
+        musiqueLanceePour = lancement
+        val piste = com.jc2.jdrcompagnon.ui.availableLoopTracks.firstOrNull { it.id.equals(epreuve.musicTrackId, ignoreCase = true) }
+            ?: return@LaunchedEffect
+        com.jc2.jdrcompagnon.ui.MusicManager.play(context, piste)
+        EpreuveOutilSession.musiqueLancee(piste.displayName)
+    }
+    val groupeId by GameState.currentGroupId.collectAsState()
+    val groupes by GameState.mjGroups.collectAsState()
+    val personnages by GameState.characters.collectAsState()
+    androidx.compose.runtime.LaunchedEffect(etat != null, groupeId, groupes, personnages) {
+        if (etat != null) EpreuveOutilSession.suivreGroupe()
+    }
+}
+
+/** Couleur des épreuves environnementales (comme les liens #epreuve: du scénario). */
+private val CouleurEpreuve = Color(0xFFFFAA5C)
+
+/**
+ * Résolution de l'épreuve active présentée comme un événement (EventResultDialog) : pastille,
+ * titre centré, description à lire aux joueurs, puis compteur et notation des tentatives.
+ * « Fermer » termine l'épreuve et coupe sa musique ; [onDismiss] masque seulement la fenêtre.
+ */
+@Composable
+fun EpreuveResolutionDialog(onDismiss: () -> Unit) {
+    val etat by EpreuveOutilSession.etat.collectAsState()
+    EffetsEpreuveActive(etat)
+    val courant = etat
+    if (courant == null) {
+        androidx.compose.runtime.LaunchedEffect(Unit) { onDismiss() }
+        return
+    }
+    fun fermer() {
+        EpreuveOutilSession.fermer()
+        onDismiss()
+    }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = { fermer() },
+        // Un toucher à côté ne doit pas faire perdre l'épreuve en cours.
+        properties = androidx.compose.ui.window.DialogProperties(dismissOnClickOutside = false),
+        // Pastille et titre sont dans le contenu : ils défilent avec le reste.
+        text ={ ContenuResolution(courant, Modifier, dansDialogue = true, onCombatLance = { fermer() }) },
+        confirmButton = { TextButton(onClick = { fermer() }) { Text("Fermer") } },
+        dismissButton = {
+            if (!courant.terminee) TextButton(onClick = { EpreuveOutilSession.terminer() }) { Text("Interrompre") }
+        },
+    )
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ContenuResolution(etat: EpreuveActive, modifier: Modifier) {
+private fun ContenuResolution(etat: EpreuveActive, modifier: Modifier, dansDialogue: Boolean = false, onCombatLance: () -> Unit) {
     val epreuve = etat.epreuve
-    var joueur by remember { mutableStateOf<String?>(null) }
-    var action by remember { mutableStateOf("") }
     val participants = participantsDuGroupe()
 
     fun noter(reussite: Boolean) {
-        if (reussite) EpreuveOutilSession.reussite(joueur, action) else EpreuveOutilSession.echec(joueur, action)
-        joueur = null
-        action = ""
+        if (reussite) EpreuveOutilSession.reussite(etat.acteur, null) else EpreuveOutilSession.echec(etat.acteur, null)
     }
 
     Column(
-        modifier = modifier.verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        modifier = modifier.verticalScroll(rememberScrollState()).padding(if (dansDialogue) 0.dp else 16.dp),
+        verticalArrangement = Arrangement.spacedBy(if (dansDialogue) 8.dp else 14.dp),
     ) {
-        EnTete(etat)
+        if (dansDialogue) {
+            // Comme un événement : pastille, titre (qui défile avec le reste), type, image
+            // éventuelle, puis texte à lire aux joueurs.
+            Box(
+                modifier = Modifier.size(36.dp).background(CouleurEpreuve.copy(alpha = 0.22f), CircleShape).align(Alignment.CenterHorizontally),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Default.Hiking, contentDescription = "Épreuve environnementale", tint = CouleurEpreuve, modifier = Modifier.size(22.dp))
+            }
+            Text(
+                epreuve.nom,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text("Épreuve environnementale", style = MaterialTheme.typography.labelMedium, color = CouleurEpreuve)
+            rememberImageEpreuve(epreuve.imageFileName, echantillonnage = 2)?.let { image ->
+                Image(
+                    bitmap = image,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxWidth().height(140.dp).clip(RoundedCornerShape(12.dp)),
+                )
+            }
+        } else {
+            EnTete(etat)
+        }
 
         if (epreuve.description.isNotBlank()) {
-            Text(epreuve.description, color = Color.White, fontStyle = FontStyle.Italic)
+            com.jc2.jdrcompagnon.feature_evenement.ui.DescriptionEvenement(epreuve.description)
         }
 
         Compteur(etat)
@@ -168,32 +246,20 @@ private fun ContenuResolution(etat: EpreuveActive, modifier: Modifier) {
         if (!etat.terminee) ReglageGroupe(etat)
 
         when {
-            etat.terminee -> Issue(etat)
+            etat.terminee -> Issue(etat, onCombatLance)
             else -> {
                 if (participants.isNotEmpty()) {
                     Text("Qui agit ?", style = MaterialTheme.typography.labelLarge, color = Color.White, fontWeight = FontWeight.Bold)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        participants.forEach { nom ->
+                        participants.forEach { (nom, niveau) ->
                             FilterChip(
-                                selected = joueur == nom,
-                                onClick = { joueur = if (joueur == nom) null else nom },
-                                label = { Text(nom) },
+                                selected = etat.acteur == nom,
+                                onClick = { EpreuveOutilSession.choisirActeur(nom) },
+                                label = { Text("$nom · niv.$niveau") },
                             )
                         }
                     }
                 }
-                OutlinedTextField(
-                    value = action,
-                    onValueChange = { action = it },
-                    label = { Text("Action annoncée (facultatif)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        focusedLabelColor = Color.White,
-                        unfocusedLabelColor = Color.White.copy(alpha = 0.8f),
-                    ),
-                )
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(
                         onClick = { noter(true) },
@@ -228,7 +294,7 @@ private fun ContenuResolution(etat: EpreuveActive, modifier: Modifier) {
                 Spacer(Modifier.width(6.dp))
                 Text("Annuler la dernière tentative", color = Color.White)
             }
-            Journal(etat.tentatives)
+            Journal(etat.tentatives, etat.echouee)
         }
     }
 }
@@ -244,8 +310,9 @@ private fun ReglageGroupe(etat: EpreuveActive) {
     Card(colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.35f), contentColor = Color.White)) {
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
             Text(
-                (etat.source.difficulte?.let { "Difficulté ${it.libelle.lowercase()}" } ?: "Réussites fixes") +
-                    " · DD ${ReglesEpreuve.ddPour(difficulte, groupe.niveau)} · dégâts ${ReglesEpreuve.degatsPour(difficulte.gravite, groupe.niveau)}" +
+                (etat.source.difficulte?.let { "Difficulté ${it.libelle.lowercase()}" } ?: "Seuils fixes") +
+                    " · perdue à ${etat.epreuve.echecsMax} échec${if (etat.epreuve.echecsMax > 1) "s" else ""}" +
+                    " · DD ${ReglesEpreuve.ddPour(difficulte, groupe.niveau, etat.variationDd)} · dégâts ${ReglesEpreuve.degatsPour(difficulte.gravite, groupe.niveau)}" +
                     if (groupe.parDefaut) "\nAucun groupe détecté : ajustez joueurs et niveau." else "",
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -320,24 +387,92 @@ private fun Compteur(etat: EpreuveActive) {
                     )
                 }
             }
-            Text("Échecs : ${etat.echecs}", style = MaterialTheme.typography.bodyMedium, color = Color.White)
+            Text(
+                "Échecs : ${etat.echecs} / ${etat.epreuve.echecsMax}",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+            )
+            // Une pastille rouge par échec toléré : la dernière remplie, l'épreuve est perdue.
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                repeat(etat.epreuve.echecsMax) { index ->
+                    val subi = index < etat.echecs
+                    Box(
+                        modifier = Modifier
+                            .size(26.dp)
+                            .clip(CircleShape)
+                            .background(if (subi) RougeEchec else Color.Transparent)
+                            .border(2.dp, RougeEchec, CircleShape),
+                    )
+                }
+            }
         }
     }
 }
 
+/**
+ * Fin de l'épreuve : issue de réussite, issue d'échec (trop d'échecs) avec son éventuel combat
+ * final, ou interruption par le MJ.
+ */
 @Composable
-private fun Issue(etat: EpreuveActive) {
-    val couleur = if (etat.reussie) VertReussite else ForcedDarkPalette.Content
+private fun Issue(etat: EpreuveActive, onCombatLance: () -> Unit) {
+    val epreuve = etat.epreuve
+    val couleur = when {
+        etat.reussie -> VertReussite
+        etat.echouee -> RougeEchec
+        else -> ForcedDarkPalette.Content
+    }
+    var combatOuvert by remember { mutableStateOf(false) }
     Card(
         colors = CardDefaults.cardColors(containerColor = couleur.copy(alpha = 0.25f)),
         border = BorderStroke(2.dp, couleur),
     ) {
-        Text(
-            if (etat.reussie) "Épreuve surmontée !" else "Épreuve interrompue",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Black,
-            color = Color.White,
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                when {
+                    etat.reussie -> "Épreuve surmontée !"
+                    etat.echouee -> "Épreuve perdue"
+                    else -> "Épreuve interrompue"
+                },
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Black,
+                color = Color.White,
+            )
+            val texte = when {
+                etat.reussie -> epreuve.issueReussite
+                etat.echouee -> epreuve.issueEchec
+                else -> ""
+            }
+            if (texte.isNotBlank()) com.jc2.jdrcompagnon.feature_evenement.ui.DescriptionEvenement(texte)
+            else if (etat.reussie || etat.echouee) {
+                Text("Aucune issue définie pour cette épreuve : à vous de raconter la suite.", color = Color.White, fontStyle = FontStyle.Italic)
+            }
+            if (etat.echouee && epreuve.combatEchec.isNotBlank()) {
+                Button(
+                    onClick = { combatOuvert = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = RougeEchec, contentColor = Color.White),
+                ) {
+                    Icon(Icons.Default.SportsMartialArts, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Lancer le combat : ${epreuve.combatEchec}")
+                }
+            }
+        }
+    }
+    if (combatOuvert) {
+        // Difficulté du combat calée sur celle de l'épreuve (quantités du texte si réussites fixes).
+        val difficulte = etat.source.difficulte?.let { d -> EncounterDifficulty.entries.firstOrNull { it.name == d.name } }
+        LancerCombatDialog(
+            composition = epreuve.combatEchec,
+            worldId = epreuve.worldId.ifBlank { null },
+            onDismiss = { combatOuvert = false },
+            onLance = {
+                combatOuvert = false
+                DemandesLienInterne.ouvrir("combat", epreuve.combatEchec)
+                onCombatLance()
+            },
+            difficulteInitiale = difficulte,
         )
     }
 }
@@ -373,15 +508,16 @@ private fun ComplicationCarte(tentative: TentativeEpreuve, peutRelancer: Boolean
 }
 
 @Composable
-private fun Journal(tentatives: List<TentativeEpreuve>) {
+private fun Journal(tentatives: List<TentativeEpreuve>, echouee: Boolean) {
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f))) {
         Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("Journal", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Black, color = Color.White)
             tentatives.withIndex().reversed().forEach { (index, t) ->
                 val qui = listOfNotNull(t.joueur, t.action?.let { "« $it »" }).joinToString(" — ").ifEmpty { "Tentative" }
                 val resultat = if (t.reussite) "réussite" else "échec" + (t.complication?.let { " → ${it.titre}" } ?: "")
+                val finale = if (!t.reussite && t.complication == null && index == tentatives.lastIndex && echouee) " → épreuve perdue" else ""
                 Text(
-                    "${index + 1}. $qui : $resultat",
+                    "${index + 1}. $qui : $resultat$finale",
                     style = MaterialTheme.typography.bodySmall,
                     color = if (t.reussite) Color.White else Color(0xFFFFCDD2),
                 )
@@ -390,14 +526,68 @@ private fun Journal(tentatives: List<TentativeEpreuve>) {
     }
 }
 
-/** Personnages du groupe sélectionné (fiches puis joueurs sans fiche), pour noter qui agit. */
+/** Participants (nom, niveau) de l'épreuve (EpreuveOutilSession.participants), pour choisir qui agit. */
 @Composable
-private fun participantsDuGroupe(): List<String> {
+private fun participantsDuGroupe(): List<Pair<String, Int>> {
     val groupeId by GameState.currentGroupId.collectAsState()
     val groupes by GameState.mjGroups.collectAsState()
     val personnages by GameState.characters.collectAsState()
-    val groupe = groupes.firstOrNull { it.id == groupeId } ?: return emptyList()
-    return (groupe.memberIds.mapNotNull { id -> personnages.firstOrNull { it.id == id }?.name } + groupe.tablePlayers.map { it.name })
-        .filter { it.isNotBlank() }
-        .distinct()
+    return remember(groupeId, groupes, personnages) { EpreuveOutilSession.participants() }
+}
+
+/**
+ * Choix de la difficulté au lancement d'une épreuve adaptative (difficulté réglée), proposée
+ * par défaut sur celle de l'épreuve. Une épreuve à réussites fixes (difficulté null) se lance
+ * sans passer par ici (voir [DemandeDifficulteEpreuve]).
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun ChoixDifficulteEpreuveDialog(epreuve: Epreuve, onLancer: (Epreuve) -> Unit, onDismiss: () -> Unit) {
+    var choix by remember(epreuve.id) { mutableStateOf(epreuve.difficulte ?: DifficulteEpreuve.MOYENNE) }
+    val groupe = remember(epreuve.id) { EpreuveOutilSession.groupeCourant(EpreuveOutilSession.participants().firstOrNull()?.first) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(epreuve.nom, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Difficulté de l'épreuve", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    DifficulteEpreuve.entries.forEach { d ->
+                        FilterChip(selected = choix == d, onClick = { choix = d }, label = { Text(d.libelle) })
+                    }
+                }
+                Text(
+                    "${ReglesEpreuve.reussitesPour(choix, groupe.joueurs)} réussites avant ${ReglesEpreuve.echecsPour(choix, groupe.joueurs)} échecs · DD ~${ReglesEpreuve.ddPour(choix, groupe.niveau)}" +
+                        " · dégâts ${ReglesEpreuve.degatsPour(choix.gravite, groupe.niveau)}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = { onLancer(epreuve.copy(difficulte = choix)) }) { Text("Lancer") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } },
+    )
+}
+
+/**
+ * Lance une épreuve : directement si ses réussites sont fixes, sinon après le choix de la
+ * difficulté par le MJ ([ChoixDifficulteEpreuveDialog]). [demande] = épreuve en attente de choix.
+ */
+@Composable
+fun DemandeDifficulteEpreuve(demande: Epreuve?, onLancee: () -> Unit, onDismiss: () -> Unit) {
+    val epreuve = demande ?: return
+    if (epreuve.difficulte == null) {
+        androidx.compose.runtime.LaunchedEffect(epreuve) {
+            EpreuveOutilSession.demarrer(epreuve)
+            onLancee()
+        }
+    } else {
+        ChoixDifficulteEpreuveDialog(
+            epreuve = epreuve,
+            onLancer = {
+                EpreuveOutilSession.demarrer(it)
+                onLancee()
+            },
+            onDismiss = onDismiss,
+        )
+    }
 }

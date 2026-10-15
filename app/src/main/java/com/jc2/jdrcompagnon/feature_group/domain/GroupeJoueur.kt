@@ -19,6 +19,13 @@ object GroupeJoueur {
     /** Vitesse (m) d'un joueur sans fiche : celle d'un humanoïde de taille moyenne. */
     private const val VITESSE_SANS_FICHE = 9
 
+    /** État d'un membre pour la vue du groupe : à terre, états de la fiche, épuisement. */
+    fun etatDe(c: Character): String = listOfNotNull(
+        "À terre".takeIf { c.maxHitPoints > 0 && c.currentHitPoints <= 0 },
+        c.condition.trim().ifBlank { null },
+        c.exhaustionLevel.takeIf { it > 0 }?.let { "Épuisement $it" },
+    ).joinToString(" · ")
+
     fun depuis(group: GameState.MjGroup, characters: List<Character>): GroupeJoueurData {
         val membres = characters.filter { it.id in group.memberIds }
         val nomDe = { id: String? -> id?.let { i -> membres.firstOrNull { it.id == i }?.name ?: characters.firstOrNull { it.id == i }?.name } }
@@ -52,6 +59,10 @@ object GroupeJoueur {
                     location = c.location,
                     detail = listOf(c.race, c.characterClass, "niv.${c.level}".takeIf { c.type == "PJ" }.orEmpty())
                         .filter { it.isNotBlank() }.joinToString(" • "),
+                    pv = c.currentHitPoints,
+                    pvMax = c.maxHitPoints,
+                    pvTemp = c.temporaryHitPoints,
+                    etat = etatDe(c),
                 )
             } + group.tablePlayers.map { MembreJoueurData(id = it.id, name = it.name, type = "PJ", speed = VITESSE_SANS_FICHE, detail = "niv.${it.level} (sans fiche)") },
             montures = group.mounts.map { m ->
@@ -64,6 +75,9 @@ object GroupeJoueur {
                     location = m.location,
                     id = m.id,
                     bagages = m.bagages,
+                    pv = m.pv ?: m.pvMax,
+                    pvMax = m.pvMax,
+                    etat = listOfNotNull("À terre".takeIf { m.pv != null && m.pv <= 0 }, m.etat.trim().ifBlank { null }).joinToString(" · "),
                 )
             },
             vehicules = group.transports.map { t ->

@@ -2,8 +2,10 @@ package com.jc2.jdrcompagnon.ui
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.jc2.jdrcompagnon.ui.screens.joueur.character.creation.avecEffetsDon
 import com.jc2.jdrcompagnon.ui.screens.joueur.character.ArmorRules
 import com.jc2.jdrcompagnon.ui.screens.joueur.character.Focaliseurs
+import com.jc2.jdrcompagnon.ui.screens.joueur.character.Malediction
 import com.jc2.jdrcompagnon.ui.screens.joueur.character.ObjetsACharges
 import com.jc2.jdrcompagnon.ui.screens.joueur.character.creation.separerObjetsCombines
 import kotlinx.coroutines.CoroutineScope
@@ -318,6 +320,13 @@ object GameState {
         // Environnement (feature_environnement) par défaut de la campagne : sert aux événements
         // proposés au MJ pendant les trajets (événements liés à cet environnement).
         val environnementId: String? = null,
+        // Ancien emplacement des notes de préparation, lu une seule fois pour les migrer vers le
+        // carnet du monde (CarnetMj.init), puis vidé : ces notes ne dépendent plus d'une campagne.
+        val secrets: List<com.jc2.jdrcompagnon.feature_preparation.domain.model.SecretIndice> = emptyList(),
+        val fils: List<com.jc2.jdrcompagnon.feature_preparation.domain.model.FilEnSuspens> = emptyList(),
+        val preparation: com.jc2.jdrcompagnon.feature_preparation.domain.model.PreparationSeance =
+            com.jc2.jdrcompagnon.feature_preparation.domain.model.PreparationSeance(),
+        val seances: List<com.jc2.jdrcompagnon.feature_preparation.domain.model.SeanceJouee> = emptyList(),
     ) {
         fun toCampaignData(): CampaignData = CampaignData(
             id = id,
@@ -360,8 +369,15 @@ object GameState {
         loadPlayerName()
         importDefaultScenarioIfNeeded(context)
         syncScenariosFromDisk(context)
+        // Comportements de combat (outil COMPORTEMENT) et grille par classe.
+        com.jc2.jdrcompagnon.feature_combat.domain.model.Comportements.init(context)
+        // Boss (outil BOSS) : intégrés modifiés et boss créés par le MJ.
+        com.jc2.jdrcompagnon.feature_combat.domain.model.BossCatalogue.init(context)
         com.jc2.jdrcompagnon.di.BoutiqueDependencies.init(context)
         com.jc2.jdrcompagnon.di.BoutiqueDependencies.initEquipementSource(context)
+        com.jc2.jdrcompagnon.di.BoutiqueDependencies.reparerPrixAZero()
+        // Après BoutiqueDependencies.init : la réécriture des fiches lit leur historique en base.
+        rangerFichiersPersonnages()
         com.jc2.jdrcompagnon.di.CarteDependencies.convertirAnciensEvenements()
         // Exemples de la bibliothèque d'événements du monde courant : ajout et mise à jour
         // (attendu, issues, profils) dès le lancement, sans attendre l'ouverture d'un outil.
@@ -462,7 +478,7 @@ object GameState {
                 scenes += MjScene(
                     title = currentTitle,
                     markdownContent = currentContent.toString().trim(),
-                    musicTrackId = currentMusic?.takeIf { it.isNotBlank() },
+                    musicTrackId = currentMusic?.trim()?.takeIf { it.isNotBlank() }?.let(::idMusiqueScene),
                     environmentId = currentEnvironment?.takeIf { it.isNotBlank() },
                     tableAleatoireId = currentTable?.takeIf { it.isNotBlank() },
                     tableLootId = currentLoot?.takeIf { it.isNotBlank() },
@@ -508,6 +524,9 @@ object GameState {
             // Images embarquées, lieu et fiches PNJ : lus à l'import (ScenarioImport), jamais
             // affichés dans le texte d'une scène.
             if (ScenarioImportBalises.any { line.trimStart().startsWith("{$it:") }) continue
+            // Commentaire HTML sur une ligne (« <!-- Images embarquées… --> ») : note de fichier,
+            // jamais affichée au MJ pendant la lecture.
+            if (line.trim().let { it.startsWith("<!--") && it.endsWith("-->") }) continue
             currentContent.appendLine(line)
         }
         flushScene()
@@ -517,6 +536,17 @@ object GameState {
         }
         return title to scenes
     }
+
+    /**
+     * Musique d'une scène ({mscenemeta: music=...}) : id d'une piste, ou nom d'une piste importée
+     * (les musiques livrées dans le dossier Musique/ d'une archive reçoivent un id aléatoire, les
+     * scénarios de l'archive les désignent donc par leur nom). Valeur gardée telle quelle si
+     * aucune piste ne correspond.
+     */
+    private fun idMusiqueScene(valeur: String): String =
+        availableLoopTracks.firstOrNull { it.id == valeur }?.id
+            ?: availableLoopTracks.firstOrNull { it.displayName.equals(valeur, ignoreCase = true) }?.id
+            ?: valeur
 
     /**
      * Emplacement public des fichiers .md des scénarios : Téléchargements/JDRCompagnon/Scenarios/.
@@ -861,6 +891,12 @@ object GameState {
     fun effectiveArmorClass(character: Character): Int = armorClassBreakdown(character).total
 
     /**
+     * CA utilisée en combat : celle calculée depuis l'équipement porté (armure, bouclier, style
+     * Défense), sans descendre sous la CA saisie sur la fiche (PNJ créé par le MJ sans équipement).
+     */
+    fun caCombat(character: Character): Int = maxOf(character.armorClass, effectiveArmorClass(character))
+
+    /**
      * Charge max (Force × 7,5).
      */
     fun maxCarryWeight(character: Character): Double {
@@ -892,8 +928,8 @@ object GameState {
     /** Capacité d'une bourse à la ceinture, SRD : 6 livres (≈ 2,7 kg), convertie en kg. */
     const val PURSE_CAPACITY_KG = 6.0 / 2.20462
 
-    /** Poids (kg) des pièces d'or de la bourse, SRD : 50 pièces par livre. */
-    fun purseWeight(character: Character): Double = (character.gold / 50.0) / 2.20462
+    /** Poids (kg) des pièces de la bourse, toutes sortes confondues, SRD : 50 pièces par livre. */
+    fun purseWeight(character: Character): Double = (Monnaie.nombreDePieces(character) / 50.0) / 2.20462
 
     private fun saveCharacters(list: List<Character>) {
         prefs?.edit()?.apply {
@@ -1314,7 +1350,74 @@ object GameState {
         val newList = _characters.value.map { if (it.id == characterId) updated else it }
         _characters.value = newList
         saveCharacters(newList)
-        logEtExporter(updated, diffEntries(current, updated))
+        val entrees = diffEntries(current, updated)
+        // Nom ou type changé : les fichiers changent de nom/dossier. Histoire modifiée : son .md
+        // est réécrit. (Les autres changements notables réécrivent déjà le .json via logEtExporter.)
+        val fichiersDeplaces = PersonnageFichiers.dossier(current) != PersonnageFichiers.dossier(updated) ||
+            PersonnageFichiers.nomBase(current) != PersonnageFichiers.nomBase(updated)
+        if (fichiersDeplaces || (entrees.isEmpty() && current.histoirePersonnelle != updated.histoirePersonnelle)) {
+            historiqueScope.launch {
+                appContext?.let { context ->
+                    if (fichiersDeplaces) PersonnageFichiers.deplacer(context, current, updated)
+                    if (entrees.isEmpty()) writeCharacterFile(context, updated)
+                }
+            }
+        }
+        logEtExporter(updated, entrees)
+    }
+
+    /**
+     * Fiches en double : identiques en tout sauf l'id (même univers, même nom, même contenu),
+     * typiquement le même paquet importé plusieurs fois. Id du doublon -> id de la fiche gardée
+     * (la première de la liste).
+     */
+    fun doublonsPersonnages(): Map<String, String> {
+        val gardees = HashMap<Character, String>()
+        val doublons = LinkedHashMap<String, String>()
+        _characters.value.forEach { c ->
+            val cle = c.copy(id = "", createdBy = "")
+            val gardee = gardees[cle]
+            if (gardee == null) gardees[cle] = c.id else doublons[c.id] = gardee
+        }
+        return doublons
+    }
+
+    /**
+     * Supprime les doublons ([doublonsPersonnages]) avec leurs fichiers ; les groupes qui en
+     * contenaient un pointent vers la fiche gardée. Retourne le nombre de fiches supprimées.
+     */
+    fun supprimerDoublonsPersonnages(): Int {
+        val doublons = doublonsPersonnages()
+        if (doublons.isEmpty()) return 0
+        val groupes = _mjGroups.value.map { g -> g.copy(memberIds = g.memberIds.map { doublons[it] ?: it }.distinct()) }
+        if (groupes != _mjGroups.value) {
+            _mjGroups.value = groupes
+            saveMjGroups(groupes)
+        }
+        doublons.keys.forEach { removeCharacter(it) }
+        return doublons.size
+    }
+
+    /** Histoire personnelle (markdown) du personnage, recopiée dans son fichier .md. */
+    fun updateCharacterHistoire(characterId: String, histoire: String) {
+        applyCharacterUpdate(characterId) { it.copy(histoirePersonnelle = histoire) }
+    }
+
+    /**
+     * Range le dossier Personnages au lancement (voir PersonnageFichiers.ranger) : sous-dossiers
+     * PJ / PNJ / Monstres, suppression des fichiers de fiches qui n'existent plus, puis écriture
+     * des fiches dont le fichier manque. Ne fait rien si la liste est vide (échec de lecture
+     * possible : on ne supprime pas tous les fichiers).
+     */
+    private fun rangerFichiersPersonnages() {
+        val personnages = _characters.value
+        if (personnages.isEmpty()) return
+        historiqueScope.launch {
+            val context = appContext ?: return@launch
+            runCatching { PersonnageFichiers.ranger(context, personnages) }
+                .onSuccess { manquants -> manquants.forEach { runCatching { writeCharacterFile(context, it) } } }
+                .onFailure { android.util.Log.e("GameState", "Rangement du dossier Personnages impossible", it) }
+        }
     }
 
     /** Compare deux versions d'un personnage et retourne les entrées d'historique à journaliser. */
@@ -1355,10 +1458,15 @@ object GameState {
         sortsGagnes.forEach { entrees += EntreeAJournaliser(TypeEvenementHistorique.SORT, "Nouveau sort appris : $it") }
         sortsPerdus.forEach { entrees += EntreeAJournaliser(TypeEvenementHistorique.SORT, "Sort oublié : $it") }
 
-        if (old.gold != new.gold) {
-            val diff = new.gold - old.gold
-            val signe = if (diff > 0) "+" else ""
-            entrees += EntreeAJournaliser(TypeEvenementHistorique.OR, "Or : $signe$diff po (total ${new.gold} po)")
+        val bourseAvant = Monnaie.totalPc(old)
+        val bourseApres = Monnaie.totalPc(new)
+        if (bourseAvant != bourseApres) {
+            val diff = bourseApres - bourseAvant
+            val signe = if (diff > 0) "+" else "−"
+            entrees += EntreeAJournaliser(
+                TypeEvenementHistorique.OR,
+                "Bourse : $signe${Monnaie.libelle(kotlin.math.abs(diff))} (total ${Monnaie.libelleBourse(new)})"
+            )
         }
 
         if (old.condition != new.condition && new.condition.isNotBlank()) {
@@ -1394,33 +1502,30 @@ object GameState {
         logEtExporter(character, entrees)
     }
 
-    private const val PERSONNAGES_SUBFOLDER = "Personnages"
-
     /** Chemin (pour affichage à l'utilisateur) du dossier où sont stockés les fichiers de personnages. */
-    fun personnagesDirectoryPath(): String = PublicFilesStore.directoryLabel(PERSONNAGES_SUBFOLDER)
+    fun personnagesDirectoryPath(): String = PublicFilesStore.directoryLabel(PersonnageFichiers.RACINE)
 
-    fun characterFileName(character: Character): String {
-        val shortId = character.id.take(8)
-        return "${slugify(character.name)}-$shortId.json"
-    }
+    fun characterFileName(character: Character): String = PersonnageFichiers.nomJson(character)
 
     /**
-     * Écrit (ou réécrit) le fichier JSON du personnage dans Téléchargements/JDRCompagnon/Personnages/,
-     * avec tout son historique embarqué (voir [CharacterExport]), pour qu'il soit copiable/
-     * partageable et réimportable via [characterFromJson] lors de la création d'un autre
-     * personnage (bouton "Importer depuis un fichier") sans perdre le journal du personnage.
+     * Écrit (ou réécrit) le fichier JSON du personnage dans
+     * Téléchargements/JDRCompagnon/Personnages/<PJ|PNJ|Monstres>/, avec tout son historique
+     * embarqué (voir [CharacterExport]), pour qu'il soit copiable/partageable et réimportable via
+     * [characterFromJson] sans perdre le journal du personnage — et, à côté, le .md de son
+     * histoire personnelle (voir [PersonnageFichiers]).
      */
     private suspend fun writeCharacterFile(context: Context, character: Character) {
         val historique = HistoriqueDependencies.repository.observerHistorique(character.id).first()
             .map { HistoriqueEntreeExport(it.timestamp, it.type, it.description) }
         val export = CharacterExport(character, historique)
-        PublicFilesStore.writeText(
-            context = context,
-            displayName = characterFileName(character),
-            content = json.encodeToString(export),
-            subfolder = PERSONNAGES_SUBFOLDER,
-            mimeType = "application/json"
+        PersonnageFichiers.ecrireFichier(
+            context,
+            PersonnageFichiers.dossier(character),
+            PersonnageFichiers.nomJson(character),
+            json.encodeToString(export).toByteArray(Charsets.UTF_8),
+            "application/json"
         )
+        PersonnageFichiers.ecrireHistoire(context, character)
     }
 
     /**
@@ -1461,11 +1566,20 @@ object GameState {
     }
 
     fun removeCharacter(characterId: String) {
+        val supprime = _characters.value.firstOrNull { it.id == characterId }
         val newList = _characters.value.filter { it.id != characterId }
         _characters.value = newList
         saveCharacters(newList)
         pruneDeletedGroupMembers()
-        historiqueScope.launch { HistoriqueDependencies.repository.supprimerHistoriqueDePersonnage(characterId) }
+        historiqueScope.launch {
+            HistoriqueDependencies.repository.supprimerHistoriqueDePersonnage(characterId)
+            // Ses fichiers (.json, .md, images) partent avec lui : sinon ils restaient dans le
+            // dossier Personnages, en doublon des fiches suivantes.
+            val context = appContext
+            if (supprime != null && context != null) {
+                runCatching { PersonnageFichiers.supprimer(context, supprime, newList) }
+            }
+        }
     }
 
     /**
@@ -1552,6 +1666,7 @@ object GameState {
      */
     fun unequipItem(characterId: String, itemName: String) {
         val target = _characters.value.find { it.id == characterId } ?: return
+        if (Malediction.bloque(target, itemName)) return
         if (itemName in target.equippedSlots.values) return unequipFromSlot(characterId, itemName)
         val updated = target.copy(
             backpackItems = target.backpackItems + itemName,
@@ -1602,6 +1717,8 @@ object GameState {
         // reste du sac, qui peut légitimement contenir plusieurs objets de même nom
         // (pas d'ID unique par objet : deux "Dague" sont deux entrées de liste).
         val displaced = targetSlots.mapNotNull { target.equippedSlots[it] }.distinct()
+        // Un objet maudit déjà porté ne se laisse pas déloger.
+        if (displaced.any { Malediction.bloque(target, it) }) return false
         // Slots libérés : ceux visés, plus l'autre main quand on déloge une arme à 2 mains
         // (une seule entrée physique répartie sur les deux mains).
         val twoHandedDisplaced = targetSlots.any { it in hands } &&
@@ -1714,6 +1831,14 @@ object GameState {
     /** Met fin à l'harmonisation avec [itemName] (repos court volontaire, mort, décision du MJ...). */
     fun rompreHarmonisation(characterId: String, itemName: String) {
         applyCharacterUpdate(characterId) { it.copy(attunedItems = it.attunedItems - itemName) }
+    }
+
+    /** Lève (ou rétablit, [levee] = false) la malédiction de [itemName] pour ce personnage (MJ, voir Malediction). */
+    fun leverMalediction(characterId: String, itemName: String, levee: Boolean = true) {
+        applyCharacterUpdate(characterId) { c ->
+            val autres = c.maledictionsLevees.filterNot { it.equals(itemName, ignoreCase = true) }
+            c.copy(maledictionsLevees = if (levee) autres + itemName else autres)
+        }
     }
 
     /**
@@ -1844,6 +1969,13 @@ object GameState {
      */
     fun removeItemCompletely(characterId: String, itemName: String, slot: EquipmentSlot? = null) {
         val target = _characters.value.find { it.id == characterId } ?: return
+        // Objet maudit porté : seul un exemplaire resté dans le sac peut être jeté.
+        if (Malediction.bloque(target, itemName)) {
+            if (itemName in target.backpackItems && (slot == null || target.equippedSlots[slot] != itemName)) {
+                updateCharacter(target.copy(backpackItems = target.backpackItems - itemName))
+            }
+            return
+        }
         if (slot != null && target.equippedSlots[slot] == itemName && target.stackCount(slot) > 1) {
             updateCharacter(
                 target.copy(
@@ -1873,6 +2005,7 @@ object GameState {
      */
     fun unequipFromSlot(characterId: String, itemName: String, slot: EquipmentSlot? = null) {
         val target = _characters.value.find { it.id == characterId } ?: return
+        if (Malediction.bloque(target, itemName)) return
         val hands = setOf(EquipmentSlot.MAIN_HAND, EquipmentSlot.OFF_HAND)
         val removedSlots = if (slot != null && target.equippedSlots[slot] == itemName) {
             if (slot in hands && ArmorRules.twoHanded(itemName)) hands.filter { target.equippedSlots[it] == itemName }
@@ -1926,6 +2059,26 @@ object GameState {
         applyCharacterUpdate(characterId) {
             it.copy(currentHitPoints = currentHitPoints.coerceIn(0, it.maxHitPoints + it.temporaryHitPoints))
         }
+    }
+
+    /**
+     * Dégâts ([delta] négatif) ou soins ([delta] positif) donnés par le MJ : les dégâts entament
+     * d'abord les PV temporaires, les soins s'arrêtent aux PV max.
+     */
+    fun ajusterPv(characterId: String, delta: Int) {
+        if (delta == 0) return
+        applyCharacterUpdate(characterId) {
+            if (delta > 0) it.copy(currentHitPoints = (it.currentHitPoints + delta).coerceIn(0, maxOf(it.maxHitPoints, it.currentHitPoints)))
+            else {
+                val absorbe = minOf(it.temporaryHitPoints, -delta)
+                it.copy(temporaryHitPoints = it.temporaryHitPoints - absorbe, currentHitPoints = (it.currentHitPoints - (-delta - absorbe)).coerceAtLeast(0))
+            }
+        }
+    }
+
+    /** PV temporaires d'un personnage (fixés par le MJ). */
+    fun definirPvTemporaires(characterId: String, pv: Int) {
+        applyCharacterUpdate(characterId) { it.copy(temporaryHitPoints = pv.coerceIn(0, 999)) }
     }
 
     /** Renomme un personnage D&D. */
@@ -1990,6 +2143,10 @@ object GameState {
         donTexte: String = "",
         // Plafond des caractéristiques augmentées à ce niveau (30 pour une Faveur épique).
         plafondCaracteristiques: Int = 20,
+        // Effets du don pris à ce niveau (PV déjà comptés dans [pvGagnes]) : vitesse, compétences,
+        // expertises, outils, formations, sorts, résistances, maîtrise de JS — cf. effetsDon.
+        effetsDon: com.jc2.jdrcompagnon.ui.screens.joueur.character.creation.EffetsDon? = null,
+        sourceDon: String? = null,
     ) {
         applyCharacterUpdate(characterId) { perso ->
             val newLevel = (perso.level + 1).coerceAtMost(20)
@@ -2046,6 +2203,7 @@ object GameState {
                     else -> mis
                 }
             }
+            effetsDon?.let { e -> mis = mis.avecEffetsDon(e, sourceDon ?: "Don") }
             mis
         }
     }
@@ -2082,9 +2240,16 @@ object GameState {
         applyCharacterUpdate(characterId) { it.copy(experience = (it.experience + amount).coerceAtLeast(0)) }
     }
 
-    /** Ajoute (ou retire, si négatif) de l'or à la bourse d'un personnage. */
+    /**
+     * Ajoute (ou retire, si négatif) [amount] po à la bourse d'un personnage. Un retrait se paie
+     * avec toutes les pièces (Monnaie.payer) ; s'il dépasse la bourse, elle est vidée.
+     */
     fun addGold(characterId: String, amount: Int) {
-        applyCharacterUpdate(characterId) { it.copy(gold = (it.gold + amount).coerceAtLeast(0)) }
+        applyCharacterUpdate(characterId) { c ->
+            if (amount >= 0) c.copy(gold = c.gold + amount)
+            else Monnaie.payer(c, -amount * Monnaie.PC_PAR_PO)
+                ?: c.copy(platinum = 0, gold = 0, electrum = 0, silver = 0, copper = 0)
+        }
     }
 
     /** Définit directement le montant d'or d'un personnage. */
@@ -2100,6 +2265,12 @@ object GameState {
     /** Active/désactive l'Inspiration Héroïque d'un personnage. */
     fun setHeroicInspiration(characterId: String, value: Boolean) {
         applyCharacterUpdate(characterId) { it.copy(heroicInspiration = value) }
+    }
+
+    /** Ville et lieu où se trouve un PJ (menu joueur), lus par le menu latéral du MJ ; "" = hors ville. */
+    fun setLieuVille(characterId: String, lieu: String) {
+        if (_characters.value.firstOrNull { it.id == characterId }?.lieuVille == lieu) return
+        applyCharacterUpdate(characterId) { it.copy(lieuVille = lieu) }
     }
 
     /** Définit la condition/état courant d'un personnage (ex : "Empoisonné", "À terre"). */
@@ -2163,6 +2334,207 @@ object GameState {
             it.copy(
                 spellSlotsUsed = emptyMap(), pactSlotsUsed = 0, layOnHandsUsed = 0, divineSmiteFreeUsed = false,
                 arcaneRecoveryUsed = false, sortsPredilectionUtilises = emptyList(),
+                sortsArcanumUtilises = emptyList(), rouerieMagiqueUtilisee = false,
+                chanceTenebreuxUtilisees = 0, traverseeEnfersUtilisee = false,
+                fouleesFeesUtilisees = 0, lumiereGuerisseuseUtilises = 0, charmantesDefensesUtilisees = false,
+                vengeanceAveuglanteUtilisee = false, combattantClairvoyantUtilise = false,
+                conduitDivinUtilises = 0, aptitude20Utilisee = false, sentinelleUtilisee = false, defenseGlorieuseUtilisees = 0,
+                compteursUtilises = emptyMap(),
+            )
+        }
+    }
+
+    /** Ressource de classe [cle] utilisée [nombre] fois (bornée à [max]). */
+    fun utiliserCompteur(characterId: String, cle: String, max: Int, nombre: Int = 1) {
+        applyCharacterUpdate(characterId) { c ->
+            c.copy(compteursUtilises = c.compteursUtilises + (cle to ((c.compteursUtilises[cle] ?: 0) + nombre).coerceIn(0, max)))
+        }
+    }
+
+    /** Une utilisation de la ressource [cle] rendue (ex. pouvoir récupéré en dépensant un dé). */
+    fun recupererCompteur(characterId: String, cle: String) {
+        applyCharacterUpdate(characterId) { c ->
+            val reste = ((c.compteursUtilises[cle] ?: 0) - 1).coerceAtLeast(0)
+            c.copy(compteursUtilises = if (reste == 0) c.compteursUtilises - cle else c.compteursUtilises + (cle to reste))
+        }
+    }
+
+    /** Guerrier, fin d'un repos court : ressources récupérées selon leur règle. Retourne le texte à afficher. */
+    fun reposCourtGuerrier(characterId: String): String {
+        var texte = ""
+        applyCharacterUpdate(characterId) { c ->
+            val apres = com.jc2.jdrcompagnon.feature_combat.domain.model.Guerrier.apresReposCourt(c)
+            if (apres != c.compteursUtilises) texte = " Ressources de classe récupérées (Second souffle, Fougue, Énergie psionique, Coup de chance…)."
+            c.copy(compteursUtilises = apres)
+        }
+        return texte
+    }
+
+    /** Paladin, fin d'un repos court : une utilisation de Conduit divin récupérée. Retourne le texte à afficher. */
+    fun reposCourtPaladin(characterId: String): String {
+        var texte = ""
+        applyCharacterUpdate(characterId) { c ->
+            if (c.conduitDivinUtilises <= 0) c
+            else {
+                texte = " Conduit divin : 1 utilisation récupérée."
+                c.copy(conduitDivinUtilises = c.conduitDivinUtilises - 1)
+            }
+        }
+        return texte
+    }
+
+    /** Paladin — une utilisation de Conduit divin dépensée (bornée au maximum [max]). */
+    fun utiliserConduitDivin(characterId: String, max: Int) {
+        applyCharacterUpdate(characterId) { it.copy(conduitDivinUtilises = (it.conduitDivinUtilises + 1).coerceAtMost(max)) }
+    }
+
+    /**
+     * Paladin — aptitude de niveau 20 du serment utilisée ([utilisee] = true), ou récupérée en
+     * dépensant un emplacement du 5e niveau ([parEmplacement]).
+     */
+    fun setAptitude20Utilisee(characterId: String, utilisee: Boolean, parEmplacement: Boolean = false) {
+        applyCharacterUpdate(characterId) { c ->
+            c.copy(
+                aptitude20Utilisee = utilisee,
+                spellSlotsUsed = if (parEmplacement) c.spellSlotsUsed + (5 to (c.spellSlotsUsed[5] ?: 0) + 1) else c.spellSlotsUsed,
+            )
+        }
+    }
+
+    /** Anciens — Sentinelle impérissable utilisée (1/repos long). */
+    fun utiliserSentinelle(characterId: String) {
+        applyCharacterUpdate(characterId) { it.copy(sentinelleUtilisee = true) }
+    }
+
+    /** Gloire — une utilisation de Défense glorieuse. */
+    fun utiliserDefenseGlorieuse(characterId: String) {
+        applyCharacterUpdate(characterId) { it.copy(defenseGlorieuseUtilisees = it.defenseGlorieuseUtilisees + 1) }
+    }
+
+    /**
+     * Imposition des mains : retire [etats] (libellés « Empoisonné », « Paralysé »…) du champ
+     * condition de la fiche.
+     */
+    fun retirerEtats(characterId: String, etats: List<String>) {
+        if (etats.isEmpty()) return
+        applyCharacterUpdate(characterId) { c ->
+            c.copy(condition = c.condition.split(",").map { it.trim() }
+                .filterNot { e -> e.isBlank() || com.jc2.jdrcompagnon.feature_combat.domain.model.Etats.reconnaitre(e)?.label in etats }
+                .joinToString(", "))
+        }
+    }
+
+    /**
+     * Occultiste, fin d'un repos court ou long : Combattant clairvoyant (Grand Ancien) récupéré,
+     * PV temporaires de Résilience céleste (Céleste niveau 10). Retourne le texte à afficher.
+     */
+    fun reposOccultiste(characterId: String): String {
+        val occultiste = com.jc2.jdrcompagnon.feature_combat.domain.model.Occultiste
+        var texte = ""
+        applyCharacterUpdate(characterId) { c ->
+            val pvTemp = occultiste.pvResilienceCeleste(c)
+            if (pvTemp > 0) texte = " Résilience céleste : $pvTemp PV temporaires (alliés : ${occultiste.pvResilienceAllies(c)} chacun)."
+            c.copy(
+                combattantClairvoyantUtilise = false,
+                temporaryHitPoints = maxOf(c.temporaryHitPoints, pvTemp),
+            )
+        }
+        return texte
+    }
+
+    /** Archifée — une Foulée des fées (foulée brumeuse sans emplacement). */
+    fun utiliserFouleeFees(characterId: String) {
+        applyCharacterUpdate(characterId) { it.copy(fouleesFeesUtilisees = it.fouleesFeesUtilisees + 1) }
+    }
+
+    /** Céleste — Lumière guérisseuse : [des] d6 dépensés de la réserve. */
+    fun utiliserLumiereGuerisseuse(characterId: String, des: Int) {
+        applyCharacterUpdate(characterId) { it.copy(lumiereGuerisseuseUtilises = it.lumiereGuerisseuseUtilises + des) }
+    }
+
+    /**
+     * Aptitude d'Occultiste à usage unique ([cle] : "charmantes-defenses", "vengeance-aveuglante",
+     * "combattant-clairvoyant") utilisée, ou récupérée en dépensant un emplacement de pacte.
+     */
+    fun aptitudeOccultiste(characterId: String, cle: String, utilisee: Boolean, parEmplacement: Boolean = false) {
+        applyCharacterUpdate(characterId) { c ->
+            val maj = when (cle) {
+                "charmantes-defenses" -> c.copy(charmantesDefensesUtilisees = utilisee)
+                "vengeance-aveuglante" -> c.copy(vengeanceAveuglanteUtilisee = utilisee)
+                "combattant-clairvoyant" -> c.copy(combattantClairvoyantUtilise = utilisee)
+                else -> c
+            }
+            if (parEmplacement) maj.copy(pactSlotsUsed = maj.pactSlotsUsed + 1) else maj
+        }
+    }
+
+    /** Sort d'arcanum (ou Communication avec le protecteur) lancé sans emplacement : plus avant un repos long. */
+    fun utiliserSortArcanum(characterId: String, sort: String) {
+        applyCharacterUpdate(characterId) { it.copy(sortsArcanumUtilises = (it.sortsArcanumUtilises + sort).distinct()) }
+    }
+
+    /**
+     * Occultiste — Rouerie magique (1/repos long) : regagne des emplacements de Magie de pacte,
+     * jusqu'à la moitié du maximum [maximumPacte] (tous au niveau 20, Maître de l'occulte).
+     */
+    fun rouerieMagique(characterId: String, maximumPacte: Int) {
+        applyCharacterUpdate(characterId) { c ->
+            if (!com.jc2.jdrcompagnon.feature_combat.domain.model.Occultiste.rouerieDisponible(c)) c
+            else c.copy(
+                pactSlotsUsed = com.jc2.jdrcompagnon.feature_combat.domain.model.Occultiste.apresRouerie(c, maximumPacte),
+                rouerieMagiqueUtilisee = true,
+                // Céleste niveau 10 — Résilience céleste : PV temporaires aussi à la Rouerie magique.
+                temporaryHitPoints = maxOf(c.temporaryHitPoints, com.jc2.jdrcompagnon.feature_combat.domain.model.Occultiste.pvResilienceCeleste(c)),
+            )
+        }
+    }
+
+    /**
+     * Pacte de la lame (action Bonus) — invoque une arme de corps à corps courante ou de guerre
+     * [arme] : elle apparaît en main principale sous le nom « Arme (arme de pacte) ». Le lien
+     * précédent prend fin (une arme invoquée auparavant disparaît).
+     */
+    fun invoquerArmeDePacte(characterId: String, arme: String) {
+        rompreArmeDePacte(characterId)
+        val nom = "$arme (arme de pacte)"
+        addItemToBackpack(characterId, nom)
+        equipInSlot(characterId, nom, EquipmentSlot.MAIN_HAND)
+        applyCharacterUpdate(characterId) { it.copy(armeDePacte = nom, armeDePacteInvoquee = true) }
+    }
+
+    /** Pacte de la lame — lien avec une arme magique déjà possédée [arme] (le lien précédent prend fin). */
+    fun lierArmeDePacte(characterId: String, arme: String) {
+        rompreArmeDePacte(characterId)
+        applyCharacterUpdate(characterId) { it.copy(armeDePacte = arme, armeDePacteInvoquee = false) }
+    }
+
+    /** Fin du lien du Pacte de la lame : une arme invoquée disparaît, une arme liée redevient ordinaire. */
+    fun rompreArmeDePacte(characterId: String) {
+        val c = _characters.value.find { it.id == characterId } ?: return
+        if (c.armeDePacte.isBlank()) return
+        if (c.armeDePacteInvoquee) removeItemCompletely(characterId, c.armeDePacte)
+        applyCharacterUpdate(characterId) { it.copy(armeDePacte = "", armeDePacteInvoquee = false) }
+    }
+
+    /** Protecteur Fiélon — une utilisation de Chance du ténébreux. */
+    fun utiliserChanceTenebreux(characterId: String) {
+        applyCharacterUpdate(characterId) { it.copy(chanceTenebreuxUtilisees = it.chanceTenebreuxUtilisees + 1) }
+    }
+
+    /** Protecteur Fiélon — type de dégâts de Résistance fiélonne, choisi à la fin d'un repos. */
+    fun choisirResistanceFielonne(characterId: String, type: String) {
+        applyCharacterUpdate(characterId) { it.copy(resistanceFielonne = type) }
+    }
+
+    /**
+     * Protecteur Fiélon — Traversée des enfers utilisée ([utilisee] = true), ou récupérée en
+     * dépensant un emplacement de Magie de pacte ([utilisee] = false, [parEmplacement]).
+     */
+    fun traverseeDesEnfers(characterId: String, utilisee: Boolean, parEmplacement: Boolean = false) {
+        applyCharacterUpdate(characterId) { c ->
+            c.copy(
+                traverseeEnfersUtilisee = utilisee,
+                pactSlotsUsed = if (parEmplacement) c.pactSlotsUsed + 1 else c.pactSlotsUsed,
             )
         }
     }
@@ -2393,11 +2765,11 @@ object GameState {
             calligraphie == null || calligraphie !in inventaire -> return "Choisissez votre matériel de calligraphe."
             encre == null || encre !in inventaire -> return "Choisissez votre encre."
             parchemins.size < pages -> return "Choisissez $pages parchemin(s) (${parchemins.size} choisi(s))."
-            target.gold < cout -> return "Il faut $cout po pour les encres rares (${target.gold} po disponibles)."
+            Monnaie.totalPc(target) < cout * Monnaie.PC_PAR_PO ->
+                return "Il faut $cout po pour les encres rares (bourse : ${Monnaie.libelleBourse(target)})."
         }
         applyCharacterUpdate(characterId) {
-            it.copy(
-                gold = it.gold - cout,
+            (Monnaie.payer(it, cout * Monnaie.PC_PAR_PO) ?: it).copy(
                 spells = it.spells + spellName,
                 spellClasses = it.spellClasses + (spellName to "Magicien"),
                 spellSources = it.spellSources + (spellName to "Recopié dans le grimoire")
@@ -2417,6 +2789,78 @@ object GameState {
     /** Récupère uniquement la Magie de pacte (Occultiste) — repos court ou long. */
     fun resetPactSlots(characterId: String) {
         applyCharacterUpdate(characterId) { it.copy(pactSlotsUsed = 0) }
+    }
+
+    /**
+     * Paie [prixPc] (en pièces de cuivre) avec la bourse du personnage, monnaie rendue (voir
+     * Monnaie.payer). Retourne faux, sans rien retirer, si la bourse ne suffit pas.
+     */
+    fun payer(characterId: String, prixPc: Int): Boolean {
+        var paye = false
+        applyCharacterUpdate(characterId) { c -> Monnaie.payer(c, prixPc)?.also { paye = true } ?: c }
+        return paye
+    }
+
+    /**
+     * Dépose [montantPc] de la bourse dans le coffre de la banque, moins [fraisPourcent] % de
+     * frais. Retourne faux, sans rien changer, si la bourse ne suffit pas.
+     */
+    fun deposerBanque(characterId: String, montantPc: Int, fraisPourcent: Int = 0): Boolean {
+        if (montantPc <= 0) return false
+        var fait = false
+        val net = montantPc - montantPc * fraisPourcent.coerceIn(0, 100) / 100
+        applyCharacterUpdate(characterId) { c ->
+            Monnaie.payer(c, montantPc)?.let { fait = true; it.copy(coffreBanquePc = it.coffreBanquePc + net) } ?: c
+        }
+        return fait
+    }
+
+    /** Retire [montantPc] du coffre de la banque vers la bourse ; faux si le coffre ne suffit pas. */
+    fun retirerBanque(characterId: String, montantPc: Int): Boolean {
+        if (montantPc <= 0) return false
+        var fait = false
+        applyCharacterUpdate(characterId) { c ->
+            if (c.coffreBanquePc < montantPc) c
+            else Monnaie.recevoir(c.copy(coffreBanquePc = c.coffreBanquePc - montantPc), montantPc).also { fait = true }
+        }
+        return fait
+    }
+
+    /** Ajoute [montantPc] (en pièces de cuivre) à la bourse, en po, pa et pc (vente, gain...). */
+    fun recevoirPc(characterId: String, montantPc: Int) {
+        applyCharacterUpdate(characterId) { c -> Monnaie.recevoir(c, montantPc) }
+    }
+
+    /** Ajoute des pièces à la bourse, sorte par sorte (pièces d'un butin données telles quelles). */
+    fun ajouterPieces(characterId: String, pp: Int = 0, po: Int = 0, pe: Int = 0, pa: Int = 0, pc: Int = 0) {
+        applyCharacterUpdate(characterId) {
+            it.copy(
+                platinum = it.platinum + pp, gold = it.gold + po, electrum = it.electrum + pe,
+                silver = it.silver + pa, copper = it.copper + pc,
+            )
+        }
+    }
+
+    /** Fixe la quantité de chaque sorte de pièce (édition MJ de la bourse). */
+    fun setPieces(characterId: String, pp: Int, po: Int, pe: Int, pa: Int, pc: Int) {
+        applyCharacterUpdate(characterId) {
+            it.copy(
+                platinum = pp.coerceAtLeast(0), gold = po.coerceAtLeast(0), electrum = pe.coerceAtLeast(0),
+                silver = pa.coerceAtLeast(0), copper = pc.coerceAtLeast(0),
+            )
+        }
+    }
+
+    /** Un repos court de plus depuis le dernier repos long (voir ReglesRepos.REPOS_COURTS_MAX). */
+    fun enregistrerReposCourt(characterId: String) {
+        applyCharacterUpdate(characterId) { it.copy(reposCourtsPris = it.reposCourtsPris + 1) }
+        // La faim se calcule à chaque repos.
+        syncHunger(characterId)
+    }
+
+    /** Repos long commencé à la minute de scénario [debutMinutes] : remet les repos courts à zéro. */
+    fun enregistrerReposLong(characterId: String, debutMinutes: Long) {
+        applyCharacterUpdate(characterId) { it.copy(reposCourtsPris = 0, dernierReposLongMinutes = debutMinutes) }
     }
 
     /** Nombre de jours qu'un personnage peut tenir sans nourriture : 3 + mod. Constitution (min 1). */
@@ -2439,21 +2883,59 @@ object GameState {
             val rationItem = character.backpackItems.firstOrNull { it.contains("ration", ignoreCase = true) }
             if (rationItem != null) {
                 consumed = true
-                character.copy(
-                    backpackItems = character.backpackItems - rationItem,
-                    lastMealDay = currentDay,
-                    hungerCheckedDay = currentDay,
+                avecFaim(
+                    character.copy(
+                        backpackItems = character.backpackItems - rationItem,
+                        lastMealDay = currentDay,
+                        hungerCheckedDay = currentDay,
+                    ),
+                    affame = false,
                 )
             } else character
         }
         return consumed
     }
 
+    /** Libellé de la condition de faim, inscrite dans Character.condition (mention libre). */
+    const val CONDITION_FAIM = "Affamé"
+
+    /** Le personnage a-t-il la condition de faim ? */
+    fun estAffame(character: Character): Boolean =
+        character.condition.split(",").any { it.trim().equals(CONDITION_FAIM, ignoreCase = true) }
+
+    /** [character] avec la condition « Affamé » ajoutée ([affame]) ou retirée. */
+    private fun avecFaim(character: Character, affame: Boolean): Character {
+        val autres = character.condition.split(",").map { it.trim() }
+            .filter { it.isNotEmpty() && !it.equals(CONDITION_FAIM, ignoreCase = true) }
+        return character.copy(condition = (if (affame) autres + CONDITION_FAIM else autres).joinToString(", "))
+    }
+
     /**
-     * Rattrape l'épuisement dû à la faim en fonction du jour de fiction courant : chaque jour
-     * au-delà de la tolérance ([foodToleranceDays]) et pas encore comptabilisé ajoute un niveau
-     * d'épuisement (règle "Nourriture et eau" du SRD). À appeler avant d'afficher/utiliser
-     * l'état de faim d'un personnage (ex. à l'ouverture de l'écran Repos).
+     * Repas (service d'une auberge, d'un vendeur...) : le personnage a mangé aujourd'hui, son
+     * compteur de jours sans nourriture repart de zéro et la condition « Affamé » est retirée.
+     */
+    fun nourrir(characterId: String) {
+        val currentDay = ScenarioClockState.dayIndex(ScenarioClockState.state.value.scenarioMinutes)
+        applyCharacterUpdate(characterId) { avecFaim(it.copy(lastMealDay = currentDay, hungerCheckedDay = currentDay), affame = false) }
+    }
+
+    /**
+     * Condition « Affamé » donnée par le MJ : le dernier repas est reculé juste au-delà de la
+     * tolérance, pour que le calcul au repos la garde (sans rattraper d'épuisement passé).
+     */
+    fun rendreAffame(characterId: String) {
+        val currentDay = ScenarioClockState.dayIndex(ScenarioClockState.state.value.scenarioMinutes)
+        applyCharacterUpdate(characterId) { c ->
+            val dernierRepas = minOf(c.lastMealDay, currentDay - foodToleranceDays(c) - 1)
+            avecFaim(c.copy(lastMealDay = dernierRepas, hungerCheckedDay = currentDay), affame = true)
+        }
+    }
+
+    /**
+     * Faim, calculée à chaque repos (court ou long) : tolérance = 3 + modificateur de Constitution
+     * jours depuis le dernier repas ([foodToleranceDays]). Au-delà, le personnage a la condition
+     * « Affamé » et chaque jour de dépassement pas encore comptabilisé lui ajoute un niveau
+     * d'épuisement (règle « Nourriture et eau » du SRD) ; sinon la condition est retirée.
      */
     fun syncHunger(characterId: String) {
         val currentDay = ScenarioClockState.dayIndex(ScenarioClockState.state.value.scenarioMinutes)
@@ -2462,14 +2944,11 @@ object GameState {
             val daysOverLimit = (currentDay - character.lastMealDay - tolerance).coerceAtLeast(0)
             val alreadyApplied = (character.hungerCheckedDay - character.lastMealDay - tolerance).coerceAtLeast(0)
             val newDays = (daysOverLimit - alreadyApplied).coerceAtLeast(0).toInt()
-            if (newDays > 0) {
-                character.copy(
-                    exhaustionLevel = (character.exhaustionLevel + newDays).coerceIn(0, 6),
-                    hungerCheckedDay = currentDay,
-                )
-            } else if (character.hungerCheckedDay != currentDay) {
-                character.copy(hungerCheckedDay = currentDay)
-            } else character
+            val maj = character.copy(
+                exhaustionLevel = (character.exhaustionLevel + newDays).coerceIn(0, 6),
+                hungerCheckedDay = currentDay,
+            )
+            avecFaim(maj, affame = daysOverLimit > 0)
         }
     }
 
@@ -2612,6 +3091,8 @@ object GameState {
      */
     fun spellcastingAbility(character: Character): String? =
         com.jc2.jdrcompagnon.ui.screens.joueur.spellcastingAbilityByClass[character.characterClass]
+            // Incantation de sous-classe (Guerrier Chevalier occulte : Intelligence).
+            ?: com.jc2.jdrcompagnon.ui.screens.joueur.character.creation.incantationDeSousClasse(character, character.characterClass)?.caracteristique
 
     /** Modificateur de la caractéristique d'incantation du personnage. */
     fun spellcastingModifier(character: Character): Int? {
@@ -2898,6 +3379,39 @@ object GameState {
             campaign.quests + quest
         }
         updateMjCampaign(campaign.copy(quests = quests))
+    }
+
+    /** Le personnage [nomPersonnage] accepte la quête [questId] (panneau de quêtes), quelle que soit sa campagne. */
+    fun accepterQuete(questId: String, nomPersonnage: String) {
+        val campaign = _mjCampaigns.value.firstOrNull { c -> c.quests.any { it.id == questId } } ?: return
+        val quest = campaign.quests.first { it.id == questId }
+        if (quest.accepteePar.any { it.equals(nomPersonnage, ignoreCase = true) }) return
+        // Reprise d'une quête abandonnée : elle revient dans son journal.
+        upsertQuest(
+            campaign.id,
+            quest.copy(
+                accepteePar = quest.accepteePar + nomPersonnage,
+                abandonneePar = quest.abandonneePar.filterNot { it.equals(nomPersonnage, ignoreCase = true) },
+            ),
+        )
+    }
+
+    /**
+     * Le personnage [nomPersonnage] abandonne la quête [questId] (acceptée sur un panneau ou
+     * confiée par le MJ) : retiré des personnages qui l'ont acceptée, inscrit parmi ceux qui
+     * l'ont abandonnée. La quête reste en cours pour les autres.
+     */
+    fun abandonnerQuete(questId: String, nomPersonnage: String) {
+        val campaign = _mjCampaigns.value.firstOrNull { c -> c.quests.any { it.id == questId } } ?: return
+        val quest = campaign.quests.first { it.id == questId }
+        if (quest.abandonneePar.any { it.equals(nomPersonnage, ignoreCase = true) }) return
+        upsertQuest(
+            campaign.id,
+            quest.copy(
+                accepteePar = quest.accepteePar.filterNot { it.equals(nomPersonnage, ignoreCase = true) },
+                abandonneePar = quest.abandonneePar + nomPersonnage,
+            ),
+        )
     }
 
     fun removeQuest(campaignId: String, questId: String) {
@@ -3356,12 +3870,6 @@ object GameState {
         _diceState.value = newState
         saveDiceState(newState)
     }
-
-    fun setDiceSkin(skin: DiceSkin) {
-        val newState = _diceState.value.copy(diceSkin = skin)
-        _diceState.value = newState
-        saveDiceState(newState)
-    }
 }
 
 /**
@@ -3479,7 +3987,14 @@ data class Character(
     // NiveauClasse). Le niveau dans la classe principale = level - somme de ces niveaux.
     val classesSecondaires: List<NiveauClasse> = emptyList(),
     val experience: Int = 0,
+    // Bourse, une quantité par sorte de pièce (1 pp = 10 po, 1 po = 2 pe = 10 pa = 100 pc), cf. Monnaie.
     val gold: Int = 0,
+    val platinum: Int = 0,
+    val electrum: Int = 0,
+    val silver: Int = 0,
+    val copper: Int = 0,
+    // Or déposé à la banque (lieu de ville « Banque »), en pièces de cuivre.
+    val coffreBanquePc: Int = 0,
     val portrait: String = "",
     val alignment: String = "",
     val background: String = "",
@@ -3515,6 +4030,9 @@ data class Character(
     // au plus Harmonisation.maximum) : un repos court par objet, voir Harmonisation. Un objet
     // qui quitte l'inventaire en sort automatiquement (GameState.releaseLostAttunements).
     val attunedItems: List<String> = emptyList(),
+    // Objets maudits dont le MJ a levé la malédiction (Délivrance des malédictions...) : ils se
+    // retirent de nouveau normalement, voir Malediction.
+    val maledictionsLevees: List<String> = emptyList(),
     // Effets en cours à durée limitée (potion bue, sort lancé...), expirés d'après l'horloge de
     // scénario (voir EffetActif, GameState.purgerEffetsExpires).
     val effetsActifs: List<EffetActif> = emptyList(),
@@ -3589,15 +4107,52 @@ data class Character(
     // Paladin niv. 2+ — Châtiment de paladin : lancement gratuit de Châtiment divin déjà utilisé
     // depuis le dernier repos long.
     val divineSmiteFreeUsed: Boolean = false,
+    // Paladin niv. 3+ — Conduit divin : utilisations dépensées (une récupérée au repos court,
+    // toutes au repos long). Aptitude de niveau 20 du serment (Nimbe sacré, Champion des Anciens,
+    // Légende vivante, Ange vengeur), Sentinelle impérissable (Anciens) et Défense glorieuse
+    // (Gloire) utilisées depuis le dernier repos long (voir Paladin).
+    val conduitDivinUtilises: Int = 0,
+    // Ressources de classe génériques (voir Guerrier.ressources) : clé → utilisations dépensées.
+    // Remises à zéro au repos long ; au repos court selon leur Recuperation (Guerrier.apresReposCourt).
+    val compteursUtilises: Map<String, Int> = emptyMap(),
+    val aptitude20Utilisee: Boolean = false,
+    val sentinelleUtilisee: Boolean = false,
+    val defenseGlorieuseUtilisees: Int = 0,
     // Magicien — Restauration magique : déjà utilisée depuis le dernier repos long (récupération
     // d'emplacements à la fin d'un repos court, cf. RestScreen.ShortRestCard).
     val arcaneRecoveryUsed: Boolean = false,
+    // Repos courts pris depuis le dernier repos long (3 au maximum, cf. ReglesRepos).
+    val reposCourtsPris: Int = 0,
+    // Minute de scénario du début du dernier repos long (null = jamais) : un seul repos long par
+    // période de 24 h (cf. ReglesRepos).
+    val dernierReposLongMinutes: Long? = null,
     // Sorts lançables sans emplacement accordés par une aptitude (balise « sorts-speciaux: » de
     // classes_srd521.md) : nom du sort → mode, « a-volonte » (Maîtrise des sorts du Magicien) ou
     // « predilection » (Sorts de prédilection, une fois par repos court ou long). Toujours préparés.
     val sortsSpeciaux: Map<String, String> = emptyMap(),
     // Sorts de prédilection déjà lancés gratuitement depuis le dernier repos (court ou long).
     val sortsPredilectionUtilises: List<String> = emptyList(),
+    // Occultiste (voir Occultiste) : sorts d'Arcanum mystique / Communication avec le protecteur
+    // déjà lancés sans emplacement depuis le dernier repos long, Rouerie magique utilisée,
+    // Protecteur Fiélon : Chance du ténébreux utilisée N fois, type de Résistance fiélonne choisi,
+    // Traversée des enfers utilisée.
+    val sortsArcanumUtilises: List<String> = emptyList(),
+    // Pacte de la lame : arme de pacte (nom de l'objet dans l'inventaire), invoquée (créée par le
+    // pacte, disparaît quand le lien prend fin) ou liée (arme magique déjà possédée).
+    val armeDePacte: String = "",
+    val armeDePacteInvoquee: Boolean = false,
+    // Protecteurs du livre de sous-classes (voir Occultiste) : Foulée des fées et Lumière
+    // guérisseuse (utilisations / dés dépensés depuis le repos long), Charmantes défenses,
+    // Vengeance aveuglante (1/repos long), Combattant clairvoyant (1/repos court ou long).
+    val fouleesFeesUtilisees: Int = 0,
+    val lumiereGuerisseuseUtilises: Int = 0,
+    val charmantesDefensesUtilisees: Boolean = false,
+    val vengeanceAveuglanteUtilisee: Boolean = false,
+    val combattantClairvoyantUtilise: Boolean = false,
+    val rouerieMagiqueUtilisee: Boolean = false,
+    val chanceTenebreuxUtilisees: Int = 0,
+    val resistanceFielonne: String = "",
+    val traverseeEnfersUtilisee: Boolean = false,
     // Sorts marqués d'une étoile sur la fiche : listés en premier quand il faut choisir un sort.
     val favoriteSpells: List<String> = emptyList(),
     // PNJ : profil de l'IA de combat (nom d'un ProfilIA), réglé par le MJ sur la fiche. null =
@@ -3615,6 +4170,9 @@ data class Character(
     val feats: String = "",
     // Apparence physique du personnage, affichée dans l'onglet Notes sous "Apparence".
     val appearance: String = "",
+    // Histoire personnelle (markdown, images comprises) : recopiée dans un fichier .md du même
+    // nom que la fiche, à côté de son .json (voir PersonnageFichiers).
+    val histoirePersonnelle: String = "",
     val notes: String = "",
     // Langues connues (Commun + langues choisies à la création), affichées dans
     // l'onglet Notes de la fiche.
@@ -3629,6 +4187,12 @@ data class Character(
     // deux) ou est vulnérable (dégâts doublés), affichés dans l'onglet Combat de la fiche.
     val damageResistances: List<String> = emptyList(),
     val damageVulnerabilities: List<String> = emptyList(),
+    // Immunités aux types de dégâts (PNJ importé : « Immunités: poison ») et type de créature
+    // (« Fée », « Humanoïde » si vide), pris en compte en combat (voir TypesCreature).
+    val damageImmunities: List<String> = emptyList(),
+    // États auxquels le personnage est immunisé (PNJ importé : « Immunités: poison ; Charmé »).
+    val immunitesEtats: List<String> = emptyList(),
+    val typeCreature: String = "",
     // Choix d'espèce faits à la création (balises "choix:" de especes_srd521.md) : id du
     // choix -> valeurs retenues. Relu à la montée de niveau (sorts de lignage niveaux 3/5...).
     val speciesChoices: Map<String, List<String>> = emptyMap(),
@@ -3643,6 +4207,9 @@ data class Character(
     val comportement: String = "",
     val intentions: String = "",
     val objectif: String = "",
+    // Réservées aux PNJ : actions à bonus et dégâts fixes, comme un monstre (bloc de stats et
+    // combat). Vide = attaques calculées depuis les armes, comme pour un PJ.
+    val actionsPnj: List<com.jc2.jdrcompagnon.feature_combat.domain.model.ActionPnj> = emptyList(),
     // Réservés aux PNJ : attitude du PNJ envers des factions, et envers des groupes
     // d'aventuriers (clé = MjGroup.id, score -100..100, cf. ReputationScale). Le score d'un
     // groupe s'applique automatiquement à tous ses membres (cf. GameState.pnjReputationToward).
@@ -3650,6 +4217,8 @@ data class Character(
     val groupReputations: Map<String, Int> = emptyMap(),
     // Lieu où se trouve le personnage (ex. « Phandalin »), vide = non précisé / avec son groupe.
     val location: String = "",
+    // Ville et lieu visité par un PJ (« Phandalin · Forge »), écrit depuis le menu joueur ; vide = hors ville.
+    val lieuVille: String = "",
     val createdBy: String = "MJ" // "MJ" ou "Joueur"
 )
 
@@ -3751,9 +4320,6 @@ data class DiceState(
     // Son
     val soundEnabled: Boolean = true,
 
-    // Skin de dé
-    val diceSkin: DiceSkin = DiceSkin.CLASSIC,
-
     // Monde associé
     val worldId: String = ""
 )
@@ -3840,17 +4406,6 @@ enum class AdvantageState {
 enum class AppRole {
     MJ,
     JOUEUR
-}
-
-/**
- * Skins visuels de dé.
- */
-@Serializable
-enum class DiceSkin {
-    CLASSIC,
-    SHADOW,
-    ICE,
-    FIRE
 }
 
 /**

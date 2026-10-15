@@ -8,6 +8,7 @@ import com.jc2.jdrcompagnon.feature_evenement.domain.model.TypeEvenement
 import com.jc2.jdrcompagnon.feature_table_aleatoire.data.TableAleatoireRepository
 import com.jc2.jdrcompagnon.feature_table_aleatoire.domain.model.EntreeEvenement
 import com.jc2.jdrcompagnon.feature_table_aleatoire.domain.model.ResultatLoot
+import com.jc2.jdrcompagnon.feature_table_aleatoire.domain.model.ResultatNom
 import com.jc2.jdrcompagnon.feature_table_aleatoire.domain.model.TableAleatoire
 
 import com.jc2.jdrcompagnon.feature_table_aleatoire.domain.usecase.TirageTableUseCase
@@ -113,5 +114,11 @@ class TableAleatoireDetailViewModel(
         val (tableMiseAJour, resultats) = tirage.tirerLoot(current, n, minutesLecture.value, random)
         if (resultats.isNotEmpty()) mettreAJour(tableMiseAJour)
         return resultats
+    }
+
+    /** Table de noms : un résultat (prénom, nom, pseudo), sans toucher au déclenchement. */
+    fun tirerNom(): ResultatNom? {
+        val current = _table.value ?: return null
+        return tirage.tirerNom(current)
     }
 }
